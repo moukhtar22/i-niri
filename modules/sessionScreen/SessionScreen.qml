@@ -27,7 +27,7 @@ Scope {
             if (matchHypr)
                 return matchHypr;
         }
-        return Quickshell.screens[0];
+        return GlobalStates.primaryScreen;
     }
     readonly property bool packageManagerRunning: SessionWarnings.packageManagerRunning
     readonly property bool downloadRunning: SessionWarnings.downloadRunning
@@ -43,7 +43,7 @@ Scope {
         implicitWidth: descriptionLabelText.implicitWidth + 15 * 2
 
         Behavior on implicitWidth {
-            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+            animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
         }
 
         StyledText {
@@ -56,7 +56,25 @@ Scope {
 
     Loader {
         id: sessionLoader
-        active: GlobalStates.sessionOpen
+        active: GlobalStates.sessionOpen || _sessionClosing
+
+        property bool _sessionClosing: false
+
+        Connections {
+            target: GlobalStates
+            function onSessionOpenChanged() {
+                if (!GlobalStates.sessionOpen) {
+                    sessionLoader._sessionClosing = true
+                    _sessionCloseTimer.restart()
+                }
+            }
+        }
+
+        Timer {
+            id: _sessionCloseTimer
+            interval: 250
+            onTriggered: sessionLoader._sessionClosing = false
+        }
         onActiveChanged: {
             if (sessionLoader.active) SessionWarnings.refresh();
         }
@@ -92,11 +110,26 @@ Scope {
                 right: true
             }
 
+            // Resolve wallpaper path: use thumbnail for video/gif
+            readonly property string _wallpaperSource: Config.options?.background?.wallpaperPath ?? ""
+            readonly property string _wallpaperPath: {
+                const path = _wallpaperSource;
+                if (!path) return "";
+                const lowerPath = path.toLowerCase();
+                const isVideo = lowerPath.endsWith(".mp4") || lowerPath.endsWith(".webm") || lowerPath.endsWith(".mkv") || lowerPath.endsWith(".avi") || lowerPath.endsWith(".mov");
+                const isGif = lowerPath.endsWith(".gif");
+                if (isVideo || isGif) {
+                    const thumbnail = Config.options?.background?.thumbnailPath ?? "";
+                    return thumbnail || path;
+                }
+                return path;
+            }
+            
             // Background wallpaper with blur (like lock screen)
             Image {
                 id: backgroundWallpaper
                 anchors.fill: parent
-                source: Config.options?.background?.wallpaperPath ?? ""
+                source: sessionRoot._wallpaperPath
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 
@@ -143,10 +176,10 @@ Scope {
                 scale: GlobalStates.sessionOpen ? 1.0 : 0.97
                 opacity: GlobalStates.sessionOpen ? 1.0 : 0.0
                 Behavior on scale {
-                    animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
+                    animation: NumberAnimation { duration: Appearance.animation.elementMoveEnter.duration; easing.type: Appearance.animation.elementMoveEnter.type; easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve }
                 }
                 Behavior on opacity {
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                 }
 
                 Keys.onPressed: (event) => {

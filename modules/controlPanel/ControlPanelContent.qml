@@ -22,13 +22,15 @@ Item {
     implicitHeight: background.implicitHeight
     
     readonly property bool inirEverywhere: Appearance.inirEverywhere
+    readonly property bool angelEverywhere: Appearance.angelEverywhere
     readonly property bool auroraEverywhere: Appearance.auroraEverywhere
     
     readonly property string wallpaperUrl: Wallpapers.effectiveWallpaperUrl
+    readonly property bool useWallpaperBackdrop: root.auroraEverywhere && !root.inirEverywhere && !Appearance.gameModeMinimal && root.wallpaperUrl.length > 0
     
     ColorQuantizer {
         id: wallpaperColorQuantizer
-        source: root.wallpaperUrl
+        source: (Appearance.auroraEverywhere || Appearance.angelEverywhere) ? root.wallpaperUrl : ""
         depth: 0
         rescaleSize: 10
     }
@@ -41,7 +43,7 @@ Item {
     // Shadow
     StyledRectangularShadow {
         target: background
-        visible: !root.inirEverywhere && !root.auroraEverywhere && !Appearance.gameModeMinimal
+        visible: (Appearance.angelEverywhere || (!root.inirEverywhere && !root.auroraEverywhere)) && !Appearance.gameModeMinimal
     }
 
     Rectangle {
@@ -55,16 +57,19 @@ Item {
              : root.auroraEverywhere ? ColorUtils.applyAlpha((root.blendedColors?.colLayer0 ?? Appearance.colors.colLayer0), 1)
              : Appearance.colors.colLayer0
         
-        radius: root.inirEverywhere ? Appearance.inir.roundingLarge : Appearance.rounding.large
+        radius: root.angelEverywhere ? Appearance.angel.roundingLarge
+            : root.inirEverywhere ? Appearance.inir.roundingLarge
+            : Appearance.rounding.large
         
         border.width: root.inirEverywhere ? 1 : (root.auroraEverywhere ? 1 : 1)
-        border.color: root.inirEverywhere ? Appearance.inir.colBorder 
+        border.color: root.angelEverywhere ? Appearance.angel.colBorder
+                    : root.inirEverywhere ? Appearance.inir.colBorder 
                     : root.auroraEverywhere ? Appearance.aurora.colTooltipBorder 
                     : Appearance.colors.colLayer0Border
         
         clip: true
 
-        layer.enabled: root.auroraEverywhere && !root.inirEverywhere && !Appearance.gameModeMinimal
+        layer.enabled: root.useWallpaperBackdrop
         layer.effect: GE.OpacityMask {
             maskSource: Rectangle {
                 width: background.width
@@ -79,21 +84,43 @@ Item {
             anchors.centerIn: parent
             width: root.screenWidth
             height: root.screenHeight
-            visible: root.auroraEverywhere && !root.inirEverywhere && !Appearance.gameModeMinimal
-            source: root.wallpaperUrl
+            visible: root.useWallpaperBackdrop
+            source: root.useWallpaperBackdrop ? root.wallpaperUrl : ""
             fillMode: Image.PreserveAspectCrop
             cache: true
+            sourceSize.width: root.screenWidth
+            sourceSize.height: root.screenHeight
             asynchronous: true
 
-            layer.enabled: Appearance.effectsEnabled
-            layer.effect: StyledBlurEffect {
+            layer.enabled: Appearance.effectsEnabled && root.auroraEverywhere && !root.inirEverywhere
+            layer.effect: MultiEffect {
                 source: blurredWallpaper
+                anchors.fill: source
+                saturation: root.angelEverywhere
+                    ? Appearance.angel.blurSaturation
+                    : (Appearance.effectsEnabled ? 0.2 : 0)
+                blurEnabled: Appearance.effectsEnabled
+                blurMax: 64
+                blur: Appearance.effectsEnabled ? 1 : 0
             }
 
             Rectangle {
                 anchors.fill: parent
-                color: ColorUtils.transparentize((root.blendedColors?.colLayer0 ?? Appearance.colors.colLayer0Base), Appearance.aurora.overlayTransparentize)
+                color: root.angelEverywhere
+                    ? ColorUtils.transparentize((root.blendedColors?.colLayer0 ?? Appearance.colors.colLayer0Base), Appearance.angel.overlayOpacity)
+                    : ColorUtils.transparentize((root.blendedColors?.colLayer0 ?? Appearance.colors.colLayer0Base), Appearance.aurora.overlayTransparentize)
             }
+        }
+
+        // Angel inset glow — top edge
+        Rectangle {
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: Appearance.angel.insetGlowHeight
+            visible: root.angelEverywhere
+            color: Appearance.angel.colInsetGlow
+            z: 10
         }
 
         // Content

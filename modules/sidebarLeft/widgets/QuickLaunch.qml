@@ -82,11 +82,13 @@ Item {
                     colBackground: Appearance.inirEverywhere 
                         ? "transparent" 
                         : (isRunning ? Appearance.colors.colPrimaryContainer : "transparent")
-                    colBackgroundHover: Appearance.inirEverywhere 
+                    colBackgroundHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
+                        : Appearance.inirEverywhere 
                         ? Appearance.inir.colLayer1Hover 
                         : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
                         : (isRunning ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colLayer1Hover)
-                    colRipple: Appearance.inirEverywhere 
+                    colRipple: Appearance.angelEverywhere ? Appearance.angel.colGlassCardActive
+                        : Appearance.inirEverywhere 
                         ? Appearance.inir.colLayer1Active 
                         : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceActive
                         : (isRunning ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colLayer1Active)
@@ -113,7 +115,7 @@ Item {
 
                             Behavior on color {
                                 enabled: Appearance.animationsEnabled
-                                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                                animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                             }
                         }
                     }
@@ -142,7 +144,7 @@ Item {
                     }
                     Behavior on opacity {
                         enabled: Appearance.animationsEnabled
-                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                     }
                 }
 

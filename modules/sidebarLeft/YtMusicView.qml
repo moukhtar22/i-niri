@@ -34,14 +34,14 @@ Item {
     readonly property color colText: Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer0
     readonly property color colTextSecondary: Appearance.inirEverywhere ? Appearance.inir.colTextSecondary : Appearance.colors.colSubtext
     readonly property color colPrimary: Appearance.inirEverywhere ? Appearance.inir.colPrimary : Appearance.colors.colPrimary
-    readonly property color colSurface: Appearance.inirEverywhere ? Appearance.inir.colLayer1 : Appearance.auroraEverywhere ? "transparent" : Appearance.colors.colLayer1
-    readonly property color colSurfaceHover: Appearance.inirEverywhere ? Appearance.inir.colLayer1Hover : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface : Appearance.colors.colLayer1Hover
-    readonly property color colLayer2: Appearance.inirEverywhere ? Appearance.inir.colLayer2 : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface : Appearance.colors.colLayer2
-    readonly property color colLayer2Hover: Appearance.inirEverywhere ? Appearance.inir.colLayer2Hover : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover : Appearance.colors.colLayer2Hover
-    readonly property color colBorder: Appearance.inirEverywhere ? Appearance.inir.colBorder : "transparent"
-    readonly property int borderWidth: Appearance.inirEverywhere ? 1 : 0
-    readonly property real radiusSmall: Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.small
-    readonly property real radiusNormal: Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
+    readonly property color colSurface: Appearance.angelEverywhere ? Appearance.angel.colGlassCard : Appearance.inirEverywhere ? Appearance.inir.colLayer1 : Appearance.auroraEverywhere ? "transparent" : Appearance.colors.colLayer1
+    readonly property color colSurfaceHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover : Appearance.inirEverywhere ? Appearance.inir.colLayer1Hover : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface : Appearance.colors.colLayer1Hover
+    readonly property color colLayer2: Appearance.angelEverywhere ? Appearance.angel.colGlassElevated : Appearance.inirEverywhere ? Appearance.inir.colLayer2 : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface : Appearance.colors.colLayer2
+    readonly property color colLayer2Hover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover : Appearance.inirEverywhere ? Appearance.inir.colLayer2Hover : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover : Appearance.colors.colLayer2Hover
+    readonly property color colBorder: Appearance.angelEverywhere ? Appearance.angel.colCardBorder : Appearance.inirEverywhere ? Appearance.inir.colBorder : "transparent"
+    readonly property int borderWidth: Appearance.angelEverywhere ? Appearance.angel.cardBorderWidth : Appearance.inirEverywhere ? 1 : 0
+    readonly property real radiusSmall: Appearance.angelEverywhere ? Appearance.angel.roundingSmall : Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.small
+    readonly property real radiusNormal: Appearance.angelEverywhere ? Appearance.angel.roundingNormal : Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
 
     ColumnLayout {
         anchors.fill: parent
@@ -106,43 +106,30 @@ Item {
             sourceComponent: ColumnLayout {
                 spacing: 8
 
-                // Tab navigation with proper theming
+                // Tab navigation - adaptive, subtle colors
                 ButtonGroup {
                     Layout.alignment: Qt.AlignHCenter
                     spacing: 2
-                    property int clickIndex: -1
 
                     GroupButton {
                         toggled: root.currentView === "search"
                         bounce: true
-                        colBackground: Appearance.inirEverywhere ? Appearance.inir.colLayer2
-                            : Appearance.auroraEverywhere ? "transparent"
-                            : Appearance.colors.colLayer1
-                        colBackgroundHover: Appearance.inirEverywhere ? Appearance.inir.colLayer2Hover
-                            : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
-                            : Appearance.colors.colLayer1Hover
-                        colBackgroundToggled: Appearance.inirEverywhere ? Appearance.inir.colSecondaryContainer
-                            : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
-                            : Appearance.colors.colSecondaryContainer
-                        colBackgroundToggledHover: Appearance.inirEverywhere ? Appearance.inir.colPrimaryContainerHover
-                            : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover
-                            : Appearance.colors.colSecondaryContainerHover
+                        colBackground: root.colSurface
+                        colBackgroundHover: root.colSurfaceHover
+                        colBackgroundToggled: root.colLayer2
+                        colBackgroundToggledHover: root.colLayer2Hover
                         onClicked: root.currentView = "search"
                         contentItem: RowLayout {
                             spacing: 4
                             MaterialSymbol {
                                 text: "search"
                                 iconSize: 18
-                                color: root.currentView === "search"
-                                    ? (Appearance.inirEverywhere ? Appearance.inir.colOnSecondaryContainer : Appearance.colors.colOnSecondaryContainer)
-                                    : root.colTextSecondary
+                                color: root.currentView === "search" ? root.colPrimary : root.colTextSecondary
                             }
                             StyledText {
                                 text: Translation.tr("Search")
                                 font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: root.currentView === "search"
-                                    ? (Appearance.inirEverywhere ? Appearance.inir.colOnSecondaryContainer : Appearance.colors.colOnSecondaryContainer)
-                                    : root.colText
+                                color: root.currentView === "search" ? root.colPrimary : root.colText
                             }
                         }
                     }
@@ -150,34 +137,22 @@ Item {
                     GroupButton {
                         toggled: root.currentView === "playlists"
                         bounce: true
-                        colBackground: Appearance.inirEverywhere ? Appearance.inir.colLayer2
-                            : Appearance.auroraEverywhere ? "transparent"
-                            : Appearance.colors.colLayer1
-                        colBackgroundHover: Appearance.inirEverywhere ? Appearance.inir.colLayer2Hover
-                            : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
-                            : Appearance.colors.colLayer1Hover
-                        colBackgroundToggled: Appearance.inirEverywhere ? Appearance.inir.colSecondaryContainer
-                            : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
-                            : Appearance.colors.colSecondaryContainer
-                        colBackgroundToggledHover: Appearance.inirEverywhere ? Appearance.inir.colPrimaryContainerHover
-                            : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover
-                            : Appearance.colors.colSecondaryContainerHover
+                        colBackground: root.colSurface
+                        colBackgroundHover: root.colSurfaceHover
+                        colBackgroundToggled: root.colLayer2
+                        colBackgroundToggledHover: root.colLayer2Hover
                         onClicked: root.currentView = "playlists"
                         contentItem: RowLayout {
                             spacing: 4
                             MaterialSymbol {
                                 text: "library_music"
                                 iconSize: 18
-                                color: root.currentView === "playlists"
-                                    ? (Appearance.inirEverywhere ? Appearance.inir.colOnSecondaryContainer : Appearance.colors.colOnSecondaryContainer)
-                                    : root.colTextSecondary
+                                color: root.currentView === "playlists" ? root.colPrimary : root.colTextSecondary
                             }
                             StyledText {
                                 text: Translation.tr("Library")
                                 font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: root.currentView === "playlists"
-                                    ? (Appearance.inirEverywhere ? Appearance.inir.colOnSecondaryContainer : Appearance.colors.colOnSecondaryContainer)
-                                    : root.colText
+                                color: root.currentView === "playlists" ? root.colPrimary : root.colText
                             }
                         }
                     }
@@ -185,35 +160,23 @@ Item {
                     GroupButton {
                         toggled: root.currentView === "queue"
                         bounce: true
-                        colBackground: Appearance.inirEverywhere ? Appearance.inir.colLayer2
-                            : Appearance.auroraEverywhere ? "transparent"
-                            : Appearance.colors.colLayer1
-                        colBackgroundHover: Appearance.inirEverywhere ? Appearance.inir.colLayer2Hover
-                            : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
-                            : Appearance.colors.colLayer1Hover
-                        colBackgroundToggled: Appearance.inirEverywhere ? Appearance.inir.colSecondaryContainer
-                            : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
-                            : Appearance.colors.colSecondaryContainer
-                        colBackgroundToggledHover: Appearance.inirEverywhere ? Appearance.inir.colPrimaryContainerHover
-                            : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover
-                            : Appearance.colors.colSecondaryContainerHover
+                        colBackground: root.colSurface
+                        colBackgroundHover: root.colSurfaceHover
+                        colBackgroundToggled: root.colLayer2
+                        colBackgroundToggledHover: root.colLayer2Hover
                         onClicked: root.currentView = "queue"
                         contentItem: RowLayout {
                             spacing: 4
                             MaterialSymbol {
                                 text: "queue_music"
                                 iconSize: 18
-                                color: root.currentView === "queue"
-                                    ? (Appearance.inirEverywhere ? Appearance.inir.colOnSecondaryContainer : Appearance.colors.colOnSecondaryContainer)
-                                    : root.colTextSecondary
+                                color: root.currentView === "queue" ? root.colPrimary : root.colTextSecondary
                             }
                             StyledText {
                                 visible: root.hasQueue
                                 text: `${YtMusic.queue.length}`
                                 font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: root.currentView === "queue"
-                                    ? (Appearance.inirEverywhere ? Appearance.inir.colOnSecondaryContainer : Appearance.colors.colOnSecondaryContainer)
-                                    : root.colText
+                                color: root.currentView === "queue" ? root.colPrimary : root.colText
                             }
                         }
                     }
@@ -255,17 +218,339 @@ Item {
                                     text: "close"
                                     iconSize: 16
                                     color: Appearance.colors.colOnErrorContainer 
-                                } 
+            }
+
+            // ── YouTube Like OAuth ─────────────────────────────
+            Rectangle { Layout.fillWidth: true; Layout.topMargin: 4; height: 1; color: root.colBorder }
+
+            StyledText {
+                text: Translation.tr("YouTube Like/Unlike")
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.weight: Font.DemiBold
+                color: root.colText
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: oauthStatusCol.implicitHeight + 16
+                radius: root.radiusSmall
+                color: YtMusic.oauthConfigured
+                    ? ColorUtils.transparentize(Appearance.colors.colPrimary, 0.92)
+                    : ColorUtils.transparentize(root.colTextSecondary, 0.95)
+
+                ColumnLayout {
+                    id: oauthStatusCol
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 6
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        MaterialSymbol {
+                            text: YtMusic.oauthConfigured ? "check_circle" : "info"
+                            iconSize: 18
+                            color: YtMusic.oauthConfigured ? Appearance.colors.colPrimary : root.colTextSecondary
+                        }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: YtMusic.oauthConfigured
+                                ? (YtMusic.oauthChannel || Translation.tr("OAuth Connected"))
+                                : Translation.tr("Not configured — likes are local only")
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: root.colText
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        RippleButton {
+                            visible: !YtMusic.oauthConfigured
+                            implicitWidth: 80; implicitHeight: 28; buttonRadius: 14
+                            colBackground: root.colPrimary
+                            onClicked: { advancedOptionsPopup.close(); oauthSetupPopup.open() }
+                            contentItem: StyledText { anchors.centerIn: parent; text: Translation.tr("Setup"); font.pixelSize: Appearance.font.pixelSize.smaller; color: Appearance.colors.colOnPrimary }
+                        }
+                        RippleButton {
+                            visible: YtMusic.oauthConfigured
+                            implicitWidth: 100; implicitHeight: 28; buttonRadius: 14
+                            colBackground: ColorUtils.transparentize(Appearance.colors.colError, 0.9)
+                            colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colError, 0.8)
+                            onClicked: { YtMusic.disconnectOAuth(); advancedOptionsPopup.close() }
+                            contentItem: RowLayout {
+                                anchors.centerIn: parent; spacing: 4
+                                MaterialSymbol { text: "link_off"; iconSize: 14; color: Appearance.colors.colError }
+                                StyledText { text: Translation.tr("Remove"); color: Appearance.colors.colError; font.pixelSize: Appearance.font.pixelSize.smaller }
                             }
                         }
                     }
                 }
-
-                // Connection Banner - shows when not connected
-                ConnectionBanner {
-                    Layout.fillWidth: true
+            }
+        }
+    }
+                    }
                 }
 
+                // Connection Banner - shows on non-library tabs when not connected
+                ConnectionBanner {
+                    Layout.fillWidth: true
+                    extraHidden: root.currentView === "playlists"
+                }
+
+    Popup {
+        id: advancedOptionsPopup
+        anchors.centerIn: parent
+        width: 300
+        height: Math.min(500, advancedContent.implicitHeight + 40)
+        padding: 16
+        modal: true
+        dim: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        background: Rectangle {
+            color: Appearance.inirEverywhere ? Appearance.inir.colLayer2
+                 : Appearance.auroraEverywhere ? Appearance.colors.colLayer1Base
+                 : Appearance.colors.colLayer1
+            radius: root.radiusNormal
+            border.width: root.borderWidth
+            border.color: root.colBorder
+        }
+
+        contentItem: ColumnLayout {
+            id: advancedContent
+            spacing: 12
+
+            RowLayout {
+                Layout.fillWidth: true
+                StyledText {
+                    text: Translation.tr("Connection Options")
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.weight: Font.Bold
+                    color: root.colText
+                }
+                Item { Layout.fillWidth: true }
+                RippleButton {
+                    implicitWidth: 24
+                    implicitHeight: 24
+                    buttonRadius: 12
+                    colBackground: "transparent"
+                    colBackgroundHover: root.colLayer2Hover
+                    onClicked: advancedOptionsPopup.close()
+                    contentItem: MaterialSymbol { anchors.centerIn: parent; text: "close"; iconSize: 18; color: root.colTextSecondary }
+                }
+            }
+
+            // Connected account section
+            Rectangle {
+                Layout.fillWidth: true
+                visible: YtMusic.googleConnected
+                implicitHeight: connectedContent.implicitHeight + 16
+                radius: root.radiusSmall
+                color: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.92)
+                border.width: root.borderWidth
+                border.color: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.7)
+
+                ColumnLayout {
+                    id: connectedContent
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 8
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+
+                        Rectangle {
+                            Layout.preferredWidth: 32
+                            Layout.preferredHeight: 32
+                            radius: 16
+                            color: ColorUtils.transparentize(root.colPrimary, 0.85)
+
+                            Image {
+                                anchors.fill: parent
+                                anchors.margins: 1
+                                source: YtMusic.userAvatar || ""
+                                visible: YtMusic.userAvatar !== ""
+                                fillMode: Image.PreserveAspectCrop
+                                asynchronous: true
+                                layer.enabled: true
+                                layer.effect: GE.OpacityMask {
+                                    maskSource: Rectangle { width: 30; height: 30; radius: 15 }
+                                }
+                            }
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                visible: !YtMusic.userAvatar
+                                text: "account_circle"
+                                iconSize: 20
+                                color: root.colPrimary
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+                            StyledText {
+                                text: YtMusic.userName || Translation.tr("Connected")
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                font.weight: Font.Medium
+                                color: root.colText
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                            StyledText {
+                                text: YtMusic.googleBrowser
+                                    ? Translation.tr("via %1").arg(YtMusic.getBrowserDisplayName(YtMusic.googleBrowser))
+                                    : Translation.tr("Connected")
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: root.colTextSecondary
+                            }
+                        }
+                    }
+
+                    RippleButton {
+                        Layout.fillWidth: true
+                        implicitHeight: 32
+                        buttonRadius: root.radiusSmall
+                        colBackground: ColorUtils.transparentize(Appearance.colors.colError, 0.9)
+                        colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colError, 0.8)
+                        onClicked: { YtMusic.disconnectGoogle(); advancedOptionsPopup.close() }
+                        contentItem: RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 6
+                            MaterialSymbol { text: "logout"; iconSize: 16; color: Appearance.colors.colError }
+                            StyledText { text: Translation.tr("Disconnect"); color: Appearance.colors.colError; font.pixelSize: Appearance.font.pixelSize.smaller }
+                        }
+                    }
+                }
+            }
+
+            // Instructions (only when not connected)
+            Rectangle {
+                Layout.fillWidth: true
+                visible: !YtMusic.googleConnected
+                implicitHeight: infoColPopup.implicitHeight + 16
+                radius: root.radiusSmall
+                color: ColorUtils.transparentize(root.colPrimary, 0.95)
+                border.width: root.borderWidth
+                border.color: ColorUtils.transparentize(root.colPrimary, 0.8)
+
+                ColumnLayout {
+                    id: infoColPopup
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 6
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Log in to YouTube Music in your browser, then select it below.")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: root.colText
+                        wrapMode: Text.WordWrap
+                    }
+
+                    RippleButton {
+                        implicitWidth: 150
+                        implicitHeight: 28
+                        buttonRadius: 14
+                        colBackground: root.colLayer2
+                        onClicked: YtMusic.openYtMusicInBrowser()
+                        contentItem: RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 6
+                            MaterialSymbol { text: "open_in_new"; iconSize: 14; color: root.colPrimary }
+                            StyledText { text: Translation.tr("Open YouTube Music"); color: root.colPrimary; font.pixelSize: Appearance.font.pixelSize.smaller }
+                        }
+                    }
+                }
+            }
+
+            StyledText {
+                text: Translation.tr("Select Browser")
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.weight: Font.DemiBold
+                color: root.colText
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 6
+                columnSpacing: 6
+                visible: YtMusic.detectedBrowsers.length > 0
+
+                Repeater {
+                    model: YtMusic.detectedBrowsers
+                    delegate: RippleButton {
+                        required property string modelData
+                        readonly property bool isConnected: YtMusic.googleConnected && YtMusic.googleBrowser === modelData
+                        Layout.fillWidth: true
+                        implicitHeight: 36
+                        buttonRadius: root.radiusSmall
+                        colBackground: isConnected ? ColorUtils.transparentize(root.colPrimary, 0.85) : root.colLayer2
+                        colBackgroundHover: isConnected ? ColorUtils.transparentize(root.colPrimary, 0.75) : root.colSurfaceHover
+                        onClicked: { YtMusic.connectGoogle(modelData); advancedOptionsPopup.close() }
+                        contentItem: RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 6
+                            StyledText { text: YtMusic.browserInfo[modelData]?.icon ?? "🌐"; font.pixelSize: 14 }
+                            StyledText {
+                                text: YtMusic.browserInfo[modelData]?.name ?? modelData
+                                color: isConnected ? root.colPrimary : root.colText
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.weight: isConnected ? Font.Medium : Font.Normal
+                                Layout.fillWidth: true
+                            }
+                            MaterialSymbol {
+                                visible: isConnected
+                                text: "check_circle"
+                                iconSize: 16
+                                color: root.colPrimary
+                            }
+                        }
+                    }
+                }
+            }
+
+            StyledText {
+                text: Translation.tr("Custom Cookies File")
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.weight: Font.DemiBold
+                color: root.colText
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 36
+                radius: root.radiusSmall
+                color: root.colLayer2
+                border.width: root.borderWidth
+                border.color: cookiesFieldPopup.activeFocus ? root.colPrimary : root.colBorder
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 6
+                    MaterialSymbol { text: "description"; iconSize: 16; color: root.colTextSecondary }
+                    TextField {
+                        id: cookiesFieldPopup
+                        Layout.fillWidth: true
+                        placeholderText: "/path/to/cookies.txt"
+                        text: YtMusic.customCookiesPath
+                        color: root.colText
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        placeholderTextColor: root.colTextSecondary
+                        background: Item {}
+                        onAccepted: if (text) { YtMusic.setCustomCookiesPath(text); advancedOptionsPopup.close() }
+                    }
+                }
+            }
+        }
+    }
                 StackLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
@@ -274,6 +559,197 @@ Item {
                     SearchView {}
                     LibraryView {}
                     QueueView {}
+                }
+            }
+        }
+    }
+
+    // ── OAuth Setup Popup ──────────────────────────────────────────────
+    Popup {
+        id: oauthSetupPopup
+        anchors.centerIn: parent
+        width: 320
+        height: Math.min(420, oauthSetupContent.implicitHeight + 40)
+        padding: 16
+        modal: true
+        dim: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        onClosed: { if (YtMusic.oauthSetupActive) YtMusic.cancelOAuthSetup() }
+
+        background: Rectangle {
+            color: Appearance.inirEverywhere ? Appearance.inir.colLayer2
+                 : Appearance.auroraEverywhere ? Appearance.colors.colLayer1Base
+                 : Appearance.colors.colLayer1
+            radius: root.radiusNormal
+            border.width: root.borderWidth
+            border.color: root.colBorder
+        }
+
+        contentItem: ColumnLayout {
+            id: oauthSetupContent
+            spacing: 12
+
+            // Header
+            RowLayout {
+                Layout.fillWidth: true
+                MaterialSymbol { text: "passkey"; iconSize: 22; color: root.colPrimary }
+                StyledText {
+                    text: Translation.tr("YouTube OAuth Setup")
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.weight: Font.Bold
+                    color: root.colText
+                }
+                Item { Layout.fillWidth: true }
+                RippleButton {
+                    implicitWidth: 24; implicitHeight: 24; buttonRadius: 12
+                    colBackground: "transparent"; colBackgroundHover: root.colLayer2Hover
+                    onClicked: oauthSetupPopup.close()
+                    contentItem: MaterialSymbol { anchors.centerIn: parent; text: "close"; iconSize: 18; color: root.colTextSecondary }
+                }
+            }
+
+            // Step 1: Enter credentials
+            Loader {
+                Layout.fillWidth: true
+                active: !YtMusic.oauthUserCode && !YtMusic.oauthSetupActive
+                visible: active
+                sourceComponent: ColumnLayout {
+                    spacing: 10
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Create a Google Cloud project with YouTube Data API v3, then enter your OAuth client credentials.")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: root.colTextSecondary
+                        wrapMode: Text.WordWrap
+                    }
+
+                    RippleButton {
+                        implicitWidth: 160; implicitHeight: 28; buttonRadius: 14
+                        colBackground: root.colLayer2; colBackgroundHover: root.colLayer2Hover
+                        onClicked: Qt.openUrlExternally("https://console.cloud.google.com/apis/credentials")
+                        contentItem: RowLayout {
+                            anchors.centerIn: parent; spacing: 4
+                            MaterialSymbol { text: "open_in_new"; iconSize: 14; color: root.colPrimary }
+                            StyledText { text: Translation.tr("Google Cloud Console"); font.pixelSize: Appearance.font.pixelSize.smallest; color: root.colPrimary }
+                        }
+                    }
+
+                    StyledText { text: Translation.tr("Client ID"); font.pixelSize: Appearance.font.pixelSize.smaller; font.weight: Font.Medium; color: root.colText }
+                    Rectangle {
+                        Layout.fillWidth: true; implicitHeight: 34; radius: root.radiusSmall
+                        color: root.colLayer2; border.width: root.borderWidth; border.color: oauthClientIdField.activeFocus ? root.colPrimary : root.colBorder
+                        TextField {
+                            id: oauthClientIdField; anchors.fill: parent; anchors.margins: 6
+                            placeholderText: "xxxxx.apps.googleusercontent.com"; color: root.colText
+                            font.pixelSize: Appearance.font.pixelSize.smallest; placeholderTextColor: root.colTextSecondary; background: Item {}
+                        }
+                    }
+
+                    StyledText { text: Translation.tr("Client Secret"); font.pixelSize: Appearance.font.pixelSize.smaller; font.weight: Font.Medium; color: root.colText }
+                    Rectangle {
+                        Layout.fillWidth: true; implicitHeight: 34; radius: root.radiusSmall
+                        color: root.colLayer2; border.width: root.borderWidth; border.color: oauthClientSecretField.activeFocus ? root.colPrimary : root.colBorder
+                        TextField {
+                            id: oauthClientSecretField; anchors.fill: parent; anchors.margins: 6
+                            placeholderText: "GOCSPX-..."; color: root.colText; echoMode: TextInput.Password
+                            font.pixelSize: Appearance.font.pixelSize.smallest; placeholderTextColor: root.colTextSecondary; background: Item {}
+                        }
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        visible: YtMusic.oauthSetupError !== ""
+                        text: YtMusic.oauthSetupError
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        color: Appearance.colors.colError
+                        wrapMode: Text.WordWrap
+                    }
+
+                    RippleButton {
+                        Layout.alignment: Qt.AlignRight
+                        implicitWidth: 100; implicitHeight: 34; buttonRadius: root.radiusSmall
+                        colBackground: root.colPrimary
+                        enabled: oauthClientIdField.text.length > 10 && oauthClientSecretField.text.length > 5
+                        opacity: enabled ? 1.0 : 0.5
+                        onClicked: YtMusic.startOAuthSetup(oauthClientIdField.text.trim(), oauthClientSecretField.text.trim())
+                        contentItem: StyledText { anchors.centerIn: parent; text: Translation.tr("Continue"); color: Appearance.colors.colOnPrimary; font.weight: Font.Medium }
+                    }
+                }
+            }
+
+            // Step 2: Show device code
+            Loader {
+                Layout.fillWidth: true
+                active: YtMusic.oauthUserCode !== ""
+                visible: active
+                sourceComponent: ColumnLayout {
+                    spacing: 12
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Open the link below and enter this code:")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: root.colTextSecondary
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true; Layout.preferredHeight: 56
+                        radius: root.radiusSmall
+                        color: ColorUtils.transparentize(root.colPrimary, 0.9)
+                        border.width: 1; border.color: ColorUtils.transparentize(root.colPrimary, 0.7)
+
+                        StyledText {
+                            anchors.centerIn: parent
+                            text: YtMusic.oauthUserCode
+                            font.pixelSize: 22; font.weight: Font.Bold; font.letterSpacing: 3
+                            color: root.colPrimary
+                        }
+                    }
+
+                    RippleButton {
+                        Layout.fillWidth: true; implicitHeight: 34; buttonRadius: root.radiusSmall
+                        colBackground: root.colPrimary
+                        onClicked: Qt.openUrlExternally(YtMusic.oauthVerificationUrl || "https://www.google.com/device")
+                        contentItem: RowLayout {
+                            anchors.centerIn: parent; spacing: 6
+                            MaterialSymbol { text: "open_in_new"; iconSize: 16; color: Appearance.colors.colOnPrimary }
+                            StyledText { text: Translation.tr("Open Google"); color: Appearance.colors.colOnPrimary; font.weight: Font.Medium }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: 8
+                        MaterialLoadingIndicator { implicitSize: 18; loading: true }
+                        StyledText {
+                            text: Translation.tr("Waiting for authorization...")
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: root.colTextSecondary
+                        }
+                    }
+
+                    RippleButton {
+                        Layout.alignment: Qt.AlignRight
+                        implicitWidth: 80; implicitHeight: 28; buttonRadius: 14
+                        colBackground: "transparent"; colBackgroundHover: root.colLayer2Hover
+                        onClicked: { YtMusic.cancelOAuthSetup(); oauthSetupPopup.close() }
+                        contentItem: StyledText { anchors.centerIn: parent; text: Translation.tr("Cancel"); color: root.colTextSecondary; font.pixelSize: Appearance.font.pixelSize.smaller }
+                    }
+                }
+            }
+
+            // Loading state
+            Loader {
+                Layout.fillWidth: true
+                active: YtMusic.oauthSetupActive && !YtMusic.oauthUserCode
+                visible: active
+                sourceComponent: RowLayout {
+                    spacing: 8
+                    Item { Layout.fillWidth: true }
+                    MaterialLoadingIndicator { implicitSize: 24; loading: true }
+                    StyledText { text: Translation.tr("Requesting code..."); color: root.colTextSecondary }
+                    Item { Layout.fillWidth: true }
                 }
             }
         }
@@ -734,111 +1210,202 @@ Item {
         property int expandedPlaylist: -1
         property bool showLiked: false
 
-        // User Profile Card - shows when connected and in main library view
+        // Account Card - always visible in main library view
         Rectangle {
             Layout.fillWidth: true
-            visible: YtMusic.googleConnected && expandedPlaylist < 0 && !showLiked
-            implicitHeight: visible ? 56 : 0
+            visible: expandedPlaylist < 0 && !showLiked
+            implicitHeight: visible ? accountCardContent.implicitHeight + 20 : 0
             radius: root.radiusSmall
-            color: root.colLayer2
+            color: YtMusic.googleConnected
+                ? root.colLayer2
+                : ColorUtils.transparentize(root.colPrimary, 0.92)
             border.width: root.borderWidth
-            border.color: root.colBorder
+            border.color: YtMusic.googleConnected
+                ? root.colBorder
+                : ColorUtils.transparentize(root.colPrimary, 0.75)
 
-            RowLayout {
+            Behavior on color {
+                enabled: Appearance.animationsEnabled
+                animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+            }
+
+            ColumnLayout {
+                id: accountCardContent
                 anchors.fill: parent
                 anchors.margins: 10
-                spacing: 10
+                spacing: 8
 
-                // Avatar
-                Rectangle {
-                    Layout.preferredWidth: 36
-                    Layout.preferredHeight: 36
-                    radius: 18
-                    color: ColorUtils.transparentize(root.colPrimary, 0.85)
-
-                    Image {
-                        anchors.fill: parent
-                        anchors.margins: 1
-                        source: YtMusic.userAvatar || ""
-                        visible: YtMusic.userAvatar !== ""
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        layer.enabled: true
-                        layer.effect: GE.OpacityMask {
-                            maskSource: Rectangle { width: 34; height: 34; radius: 17 }
-                        }
-                    }
-
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        visible: !YtMusic.userAvatar
-                        text: "account_circle"
-                        iconSize: 22
-                        color: root.colPrimary
-                    }
-                }
-
-                // Name + sync status
-                ColumnLayout {
+                RowLayout {
                     Layout.fillWidth: true
-                    spacing: 0
+                    spacing: 10
 
-                    StyledText {
-                        text: YtMusic.userName || Translation.tr("Connected")
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.weight: Font.Medium
-                        color: root.colText
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
+                    // Avatar / connect icon
+                    Rectangle {
+                        Layout.preferredWidth: 36
+                        Layout.preferredHeight: 36
+                        radius: 18
+                        color: ColorUtils.transparentize(root.colPrimary, 0.85)
 
-                    StyledText {
-                        text: YtMusic.syncingLiked ? Translation.tr("Syncing...")
-                            : YtMusic.lastLikedSync ? Translation.tr("Synced %1").arg(YtMusic.lastLikedSync)
-                            : Translation.tr("Not synced yet")
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: YtMusic.syncingLiked ? root.colPrimary : root.colTextSecondary
-                    }
-                }
+                        Image {
+                            anchors.fill: parent
+                            anchors.margins: 1
+                            source: YtMusic.userAvatar || ""
+                            visible: YtMusic.googleConnected && YtMusic.userAvatar !== ""
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                            layer.enabled: true
+                            layer.effect: GE.OpacityMask {
+                                maskSource: Rectangle { width: 34; height: 34; radius: 17 }
+                            }
+                        }
 
-                // Sync button
-                RippleButton {
-                    implicitWidth: 28
-                    implicitHeight: 28
-                    buttonRadius: 14
-                    colBackground: "transparent"
-                    colBackgroundHover: root.colLayer2Hover
-                    enabled: !YtMusic.syncingLiked
-                    onClicked: { YtMusic.fetchLikedSongs(); YtMusic.fetchYtMusicPlaylists() }
-                    contentItem: MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "sync"
-                        iconSize: 18
-                        color: root.colTextSecondary
-                        RotationAnimation on rotation {
-                            from: 0; to: 360; duration: 1000
-                            loops: Animation.Infinite
-                            running: YtMusic.syncingLiked
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            visible: !YtMusic.googleConnected || !YtMusic.userAvatar
+                            text: YtMusic.googleConnected ? "account_circle" : "link"
+                            iconSize: 22
+                            color: root.colPrimary
                         }
                     }
-                    StyledToolTip { text: Translation.tr("Sync library") }
+
+                    // Name / connect prompt
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 0
+
+                        StyledText {
+                            text: YtMusic.googleConnected
+                                ? (YtMusic.userName || Translation.tr("Connected"))
+                                : Translation.tr("Sign in to YouTube")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.weight: Font.Medium
+                            color: root.colText
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                        }
+
+                        StyledText {
+                            text: YtMusic.googleChecking ? Translation.tr("Connecting...")
+                                : YtMusic.googleConnected
+                                    ? (YtMusic.syncingLiked ? Translation.tr("Syncing...")
+                                        : YtMusic.lastLikedSync ? Translation.tr("Synced %1").arg(YtMusic.lastLikedSync)
+                                        : Translation.tr("Not synced yet"))
+                                    : Translation.tr("Access liked songs & playlists")
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: YtMusic.googleChecking || YtMusic.syncingLiked ? root.colPrimary : root.colTextSecondary
+                        }
+                    }
+
+                    // Connected: Sync button
+                    RippleButton {
+                        visible: YtMusic.googleConnected
+                        implicitWidth: 32
+                        implicitHeight: 32
+                        buttonRadius: 16
+                        colBackground: root.colSurfaceHover
+                        colBackgroundHover: root.colLayer2Hover
+                        enabled: !YtMusic.syncingLiked
+                        onClicked: { YtMusic.fetchLikedSongs(); YtMusic.fetchYtMusicPlaylists() }
+                        contentItem: MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: "sync"
+                            iconSize: 20
+                            color: root.colPrimary
+                            RotationAnimation on rotation {
+                                from: 0; to: 360; duration: 1000
+                                loops: Animation.Infinite
+                                running: YtMusic.syncingLiked
+                            }
+                        }
+                        StyledToolTip { text: Translation.tr("Sync library") }
+                    }
+
+                    // Connected: Disconnect button
+                    RippleButton {
+                        visible: YtMusic.googleConnected
+                        implicitWidth: 32
+                        implicitHeight: 32
+                        buttonRadius: 16
+                        colBackground: "transparent"
+                        colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colError, 0.85)
+                        onClicked: YtMusic.disconnectGoogle()
+                        contentItem: MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: "logout"
+                            iconSize: 18
+                            color: root.colTextSecondary
+                        }
+                        StyledToolTip { text: Translation.tr("Disconnect") }
+                    }
+
+                    // Not connected: Connect button
+                    RippleButton {
+                        visible: !YtMusic.googleConnected && !YtMusic.googleChecking
+                        implicitWidth: 80
+                        implicitHeight: 32
+                        buttonRadius: 16
+                        colBackground: root.colPrimary
+                        onClicked: YtMusic.quickConnect()
+                        contentItem: StyledText {
+                            anchors.centerIn: parent
+                            text: Translation.tr("Connect")
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            font.weight: Font.Medium
+                            color: Appearance.colors.colOnPrimary
+                        }
+                    }
+
+                    // Checking: loading indicator
+                    MaterialLoadingIndicator {
+                        visible: YtMusic.googleChecking
+                        implicitSize: 20
+                        loading: visible
+                    }
                 }
 
-                // Settings/disconnect
-                RippleButton {
-                    implicitWidth: 28
-                    implicitHeight: 28
-                    buttonRadius: 14
-                    colBackground: "transparent"
-                    colBackgroundHover: root.colLayer2Hover
-                    onClicked: advancedOptionsPopup.open()
-                    contentItem: MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "settings"
-                        iconSize: 18
-                        color: root.colTextSecondary
+                // Error row - shows inline when connection fails
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: YtMusic.googleError !== "" && !YtMusic.googleChecking
+                    spacing: 6
+
+                    MaterialSymbol { text: "error"; iconSize: 14; color: Appearance.colors.colError }
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: YtMusic.googleError
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        color: Appearance.colors.colError
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 2
+                        elide: Text.ElideRight
                     }
-                    StyledToolTip { text: Translation.tr("Account settings") }
+                    RippleButton {
+                        implicitWidth: 56
+                        implicitHeight: 24
+                        buttonRadius: 12
+                        colBackground: ColorUtils.transparentize(Appearance.colors.colError, 0.85)
+                        onClicked: YtMusic.quickConnect()
+                        contentItem: StyledText {
+                            anchors.centerIn: parent
+                            text: Translation.tr("Retry")
+                            font.pixelSize: Appearance.font.pixelSize.smallest
+                            color: Appearance.colors.colError
+                        }
+                    }
+                    RippleButton {
+                        implicitWidth: 24
+                        implicitHeight: 24
+                        buttonRadius: 12
+                        colBackground: "transparent"
+                        onClicked: advancedOptionsPopup.open()
+                        contentItem: MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: "settings"
+                            iconSize: 14
+                            color: root.colTextSecondary
+                        }
+                        StyledToolTip { text: Translation.tr("Advanced") }
+                    }
                 }
             }
         }
@@ -868,6 +1435,24 @@ Item {
             }
             
             Item { Layout.fillWidth: true }
+            
+            // Settings/connection options
+            RippleButton {
+                visible: expandedPlaylist < 0 && !showLiked
+                implicitWidth: 32
+                implicitHeight: 32
+                buttonRadius: root.radiusSmall
+                colBackground: root.colSurface
+                colBackgroundHover: root.colSurfaceHover
+                onClicked: advancedOptionsPopup.open()
+                contentItem: MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "tune"
+                    iconSize: 18
+                    color: root.colTextSecondary
+                }
+                StyledToolTip { text: Translation.tr("Connection settings") }
+            }
             
             RippleButton {
                 visible: (expandedPlaylist >= 0 && (YtMusic.playlists[expandedPlaylist]?.items?.length ?? 0) > 0) || (showLiked && YtMusic.likedSongs.length > 0)
@@ -1315,11 +1900,12 @@ Item {
     component ConnectionBanner: Rectangle {
         id: banner
 
+        property bool extraHidden: false
         readonly property bool dismissed: Config.options?.sidebar?.ytmusic?.hideSyncBanner ?? false
-        readonly property bool shouldShow: !YtMusic.googleConnected && !dismissed
+        readonly property bool shouldShow: !YtMusic.googleConnected && !dismissed && !extraHidden
         readonly property bool hasError: YtMusic.googleError !== "" && !YtMusic.googleChecking
 
-        visible: shouldShow || YtMusic.googleChecking
+        visible: (shouldShow || YtMusic.googleChecking) && !extraHidden
         implicitHeight: visible ? (hasError ? errorContent.implicitHeight + 24 : 52) : 0
         radius: root.radiusSmall
         color: hasError ? ColorUtils.transparentize(Appearance.colors.colError, 0.9)
@@ -1535,256 +2121,4 @@ Item {
     }
 
     // Advanced Options Popup
-    Popup {
-        id: advancedOptionsPopup
-        anchors.centerIn: parent
-        width: 300
-        height: Math.min(400, advancedContent.implicitHeight + 40)
-        padding: 16
-        modal: true
-        dim: true
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-
-        background: Rectangle {
-            color: Appearance.inirEverywhere ? Appearance.inir.colLayer2
-                 : Appearance.auroraEverywhere ? Appearance.colors.colLayer1Base
-                 : Appearance.colors.colLayer1
-            radius: root.radiusNormal
-            border.width: root.borderWidth
-            border.color: root.colBorder
-        }
-
-        contentItem: ColumnLayout {
-            id: advancedContent
-            spacing: 12
-
-            RowLayout {
-                Layout.fillWidth: true
-                StyledText {
-                    text: Translation.tr("Connection Options")
-                    font.pixelSize: Appearance.font.pixelSize.normal
-                    font.weight: Font.Bold
-                    color: root.colText
-                }
-                Item { Layout.fillWidth: true }
-                RippleButton {
-                    implicitWidth: 24
-                    implicitHeight: 24
-                    buttonRadius: 12
-                    colBackground: "transparent"
-                    colBackgroundHover: root.colLayer2Hover
-                    onClicked: advancedOptionsPopup.close()
-                    contentItem: MaterialSymbol { anchors.centerIn: parent; text: "close"; iconSize: 18; color: root.colTextSecondary }
-                }
-            }
-
-            // Connected account section
-            Rectangle {
-                Layout.fillWidth: true
-                visible: YtMusic.googleConnected
-                implicitHeight: connectedContent.implicitHeight + 16
-                radius: root.radiusSmall
-                color: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.92)
-                border.width: root.borderWidth
-                border.color: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.7)
-
-                ColumnLayout {
-                    id: connectedContent
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    spacing: 8
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 10
-
-                        Rectangle {
-                            Layout.preferredWidth: 32
-                            Layout.preferredHeight: 32
-                            radius: 16
-                            color: ColorUtils.transparentize(root.colPrimary, 0.85)
-
-                            Image {
-                                anchors.fill: parent
-                                anchors.margins: 1
-                                source: YtMusic.userAvatar || ""
-                                visible: YtMusic.userAvatar !== ""
-                                fillMode: Image.PreserveAspectCrop
-                                asynchronous: true
-                                layer.enabled: true
-                                layer.effect: GE.OpacityMask {
-                                    maskSource: Rectangle { width: 30; height: 30; radius: 15 }
-                                }
-                            }
-
-                            MaterialSymbol {
-                                anchors.centerIn: parent
-                                visible: !YtMusic.userAvatar
-                                text: "account_circle"
-                                iconSize: 20
-                                color: root.colPrimary
-                            }
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 0
-                            StyledText {
-                                text: YtMusic.userName || Translation.tr("Connected")
-                                font.pixelSize: Appearance.font.pixelSize.small
-                                font.weight: Font.Medium
-                                color: root.colText
-                                elide: Text.ElideRight
-                                Layout.fillWidth: true
-                            }
-                            StyledText {
-                                text: YtMusic.googleBrowser
-                                    ? Translation.tr("via %1").arg(YtMusic.getBrowserDisplayName(YtMusic.googleBrowser))
-                                    : Translation.tr("Connected")
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: root.colTextSecondary
-                            }
-                        }
-                    }
-
-                    RippleButton {
-                        Layout.fillWidth: true
-                        implicitHeight: 32
-                        buttonRadius: root.radiusSmall
-                        colBackground: ColorUtils.transparentize(Appearance.colors.colError, 0.9)
-                        colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colError, 0.8)
-                        onClicked: { YtMusic.disconnectGoogle(); advancedOptionsPopup.close() }
-                        contentItem: RowLayout {
-                            anchors.centerIn: parent
-                            spacing: 6
-                            MaterialSymbol { text: "logout"; iconSize: 16; color: Appearance.colors.colError }
-                            StyledText { text: Translation.tr("Disconnect"); color: Appearance.colors.colError; font.pixelSize: Appearance.font.pixelSize.smaller }
-                        }
-                    }
-                }
-            }
-
-            // Instructions (only when not connected)
-            Rectangle {
-                Layout.fillWidth: true
-                visible: !YtMusic.googleConnected
-                implicitHeight: infoColPopup.implicitHeight + 16
-                radius: root.radiusSmall
-                color: ColorUtils.transparentize(root.colPrimary, 0.95)
-                border.width: root.borderWidth
-                border.color: ColorUtils.transparentize(root.colPrimary, 0.8)
-
-                ColumnLayout {
-                    id: infoColPopup
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    spacing: 6
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: Translation.tr("Log in to YouTube Music in your browser, then select it below.")
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: root.colText
-                        wrapMode: Text.WordWrap
-                    }
-
-                    RippleButton {
-                        implicitWidth: 150
-                        implicitHeight: 28
-                        buttonRadius: 14
-                        colBackground: root.colLayer2
-                        onClicked: YtMusic.openYtMusicInBrowser()
-                        contentItem: RowLayout {
-                            anchors.centerIn: parent
-                            spacing: 6
-                            MaterialSymbol { text: "open_in_new"; iconSize: 14; color: root.colPrimary }
-                            StyledText { text: Translation.tr("Open YouTube Music"); color: root.colPrimary; font.pixelSize: Appearance.font.pixelSize.smaller }
-                        }
-                    }
-                }
-            }
-
-            StyledText {
-                text: Translation.tr("Select Browser")
-                font.pixelSize: Appearance.font.pixelSize.small
-                font.weight: Font.DemiBold
-                color: root.colText
-            }
-
-            GridLayout {
-                Layout.fillWidth: true
-                columns: 2
-                rowSpacing: 6
-                columnSpacing: 6
-                visible: YtMusic.detectedBrowsers.length > 0
-
-                Repeater {
-                    model: YtMusic.detectedBrowsers
-                    delegate: RippleButton {
-                        required property string modelData
-                        readonly property bool isConnected: YtMusic.googleConnected && YtMusic.googleBrowser === modelData
-                        Layout.fillWidth: true
-                        implicitHeight: 36
-                        buttonRadius: root.radiusSmall
-                        colBackground: isConnected ? ColorUtils.transparentize(root.colPrimary, 0.85) : root.colLayer2
-                        colBackgroundHover: isConnected ? ColorUtils.transparentize(root.colPrimary, 0.75) : root.colSurfaceHover
-                        onClicked: { YtMusic.connectGoogle(modelData); advancedOptionsPopup.close() }
-                        contentItem: RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 8
-                            spacing: 6
-                            StyledText { text: YtMusic.browserInfo[modelData]?.icon ?? "🌐"; font.pixelSize: 14 }
-                            StyledText {
-                                text: YtMusic.browserInfo[modelData]?.name ?? modelData
-                                color: isConnected ? root.colPrimary : root.colText
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                font.weight: isConnected ? Font.Medium : Font.Normal
-                                Layout.fillWidth: true
-                            }
-                            MaterialSymbol {
-                                visible: isConnected
-                                text: "check_circle"
-                                iconSize: 16
-                                color: root.colPrimary
-                            }
-                        }
-                    }
-                }
-            }
-
-            StyledText {
-                text: Translation.tr("Custom Cookies File")
-                font.pixelSize: Appearance.font.pixelSize.small
-                font.weight: Font.DemiBold
-                color: root.colText
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 36
-                radius: root.radiusSmall
-                color: root.colLayer2
-                border.width: root.borderWidth
-                border.color: cookiesFieldPopup.activeFocus ? root.colPrimary : root.colBorder
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    spacing: 6
-                    MaterialSymbol { text: "description"; iconSize: 16; color: root.colTextSecondary }
-                    TextField {
-                        id: cookiesFieldPopup
-                        Layout.fillWidth: true
-                        placeholderText: "/path/to/cookies.txt"
-                        text: YtMusic.customCookiesPath
-                        color: root.colText
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        placeholderTextColor: root.colTextSecondary
-                        background: Item {}
-                        onAccepted: if (text) { YtMusic.setCustomCookiesPath(text); advancedOptionsPopup.close() }
-                    }
-                }
-            }
-        }
-    }
 }

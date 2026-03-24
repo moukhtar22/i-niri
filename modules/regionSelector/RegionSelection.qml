@@ -16,7 +16,7 @@ PanelWindow {
     color: "transparent"
     WlrLayershell.namespace: "quickshell:regionSelector"
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore
     anchors {
         left: true
@@ -36,9 +36,12 @@ PanelWindow {
     property string screenshotDir: Directories.screenshotTemp
     property string imageSearchEngineBaseUrl: Config.options?.search?.imageSearch?.imageSearchEngineBaseUrl ?? "https://lens.google.com/uploadbyurl?url="
     property string fileUploadApiEndpoint: Config.options?.search?.imageSearch?.fileUploadApiEndpoint ?? "https://0x0.st"
+    property string fileUploadApiFallback: Config.options?.search?.imageSearch?.fileUploadApiFallback ?? "https://litterbox.catbox.moe/resources/internals/api.php"
+    property string fileUploadApiFallback2: Config.options?.search?.imageSearch?.fileUploadApiFallback2 ?? "https://catbox.moe/user/api.php"
 
     // Tri-style color support
-    property color overlayColor: Appearance.inirEverywhere ? "#88000000"
+    property color overlayColor: Appearance.angelEverywhere ? "#55000000"
+        : Appearance.inirEverywhere ? "#88000000"
         : Appearance.auroraEverywhere ? "#66000000" : "#88111111"
     property color brightText: Appearance.inirEverywhere ? Appearance.inir.colText
         : Appearance.auroraEverywhere ? Appearance.colors.colOnLayer0
@@ -337,12 +340,17 @@ PanelWindow {
         const cleanup = `/usr/bin/rm '${StringUtils.shellSingleQuoteEscape(root.screenshotPath)}'`
         const slurpRegion = `${rx},${ry} ${rw}x${rh}`
         const uploadAndGetUrl = (filePath) => {
-            return `/usr/bin/curl -sF file=@'${StringUtils.shellSingleQuoteEscape(filePath)}' ${root.fileUploadApiEndpoint}`
+            const escaped = StringUtils.shellSingleQuoteEscape(filePath)
+            const primary = `/usr/bin/curl -sf --max-time 10 -F file=@'${escaped}' ${root.fileUploadApiEndpoint}`
+            const fallback1 = `/usr/bin/curl -s --max-time 15 -F reqtype=fileupload -F time=1h -F "fileToUpload=@'${escaped}'" ${root.fileUploadApiFallback}`
+            const fallback2 = `/usr/bin/curl -s --max-time 15 -F reqtype=fileupload -F "fileToUpload=@'${escaped}'" ${root.fileUploadApiFallback2}`
+            // Try primary, then fallback1, then fallback2 if all fail or return empty/non-URL response
+            return `url=$(${primary} 2>/dev/null); if [[ -z "$url" || "$url" != http* ]]; then url=$(${fallback1}); fi; if [[ -z "$url" || "$url" != http* ]]; then url=$(${fallback2}); fi; echo "$url"`
         }
         const annotationCommand = `${(Config.options?.regionSelector?.annotation?.useSatty ?? false) ? "satty" : "swappy"} -f -`;
         switch (root.action) {
             case RegionSelection.SnipAction.Copy:
-                snipProc.command = ["/usr/bin/bash", "-c", `${cropToStdout} | /usr/bin/wl-copy && ${cleanup} && /usr/bin/notify-send "Screenshot copied" "${rw}x${rh} region copied to clipboard" -a "Screenshot" -i camera-photo -t 3000`]
+                snipProc.command = ["/usr/bin/bash", "-c", `_ss="$HOME/Pictures/Screenshots/ss-$(date +%Y%m%d-%H%M%S).png" && mkdir -p "$HOME/Pictures/Screenshots" && ${cropToStdout} | tee "$_ss" | /usr/bin/wl-copy && echo -n "$_ss" | /usr/bin/wl-copy --primary && ${cleanup} && /usr/bin/notify-send "Screenshot copied" "${rw}x${rh} saved to $_ss" -a "Screenshot" -i camera-photo -t 3000`]
                 break;
             case RegionSelection.SnipAction.Edit:
                 snipProc.command = ["/usr/bin/bash", "-c", `${cropToStdout} | ${annotationCommand} && ${cleanup}`]
@@ -351,7 +359,7 @@ PanelWindow {
                 snipProc.command = ["/usr/bin/bash", "-c", `${cropInPlace} && /usr/bin/xdg-open "${root.imageSearchEngineBaseUrl}$(${uploadAndGetUrl(root.screenshotPath)})" && ${cleanup}`]
                 break;
             case RegionSelection.SnipAction.CharRecognition:
-                snipProc.command = ["/usr/bin/bash", "-c", `${cropInPlace} && /usr/bin/tesseract '${StringUtils.shellSingleQuoteEscape(root.screenshotPath)}' stdout -l $(/usr/bin/tesseract --list-langs | /usr/bin/awk 'NR>1{print $1}' | /usr/bin/tr '\\n' '+' | /usr/bin/sed 's/\\+$/\\n/') | /usr/bin/wl-copy && ${cleanup} && /usr/bin/notify-send "Text recognized" "OCR text copied to clipboard" -a "OCR" -i edit-find -t 3000`]
+                snipProc.command = ["/usr/bin/bash", "-c", `${cropInPlace} && /usr/bin/tesseract '${StringUtils.shellSingleQuoteEscape(root.screenshotPath)}' stdout -l $(/usr/bin/tesseract --list-langs | /usr/bin/awk 'NR>1{print $1}' | /usr/bin/tr '\\n' '+' | /usr/bin/sed 's/\\+$/\\n/') | tee >(/usr/bin/wl-copy --primary) | /usr/bin/wl-copy && ${cleanup} && /usr/bin/notify-send "Text recognized" "OCR text copied to clipboard" -a "OCR" -i edit-find -t 3000`]
                 break;
             case RegionSelection.SnipAction.Record:
                 snipProc.command = ["/usr/bin/bash", "-c", `${Directories.recordScriptPath} --region '${slurpRegion}'`]
@@ -555,13 +563,13 @@ PanelWindow {
                     }
                 }
                 Behavior on opacity {
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                 }
                 Behavior on anchors.topMargin {
-                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
                 }
                 Behavior on anchors.bottomMargin {
-                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
                 }
 
                 Loader {

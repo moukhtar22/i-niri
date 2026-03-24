@@ -20,8 +20,13 @@ Item {
     readonly property string popupMode: Config.options?.media?.popupMode ?? "dock"
 
     Layout.fillHeight: true
-    implicitWidth: rowLayout.implicitWidth + rowLayout.spacing * 2
+    // Clamp width to prevent long song titles from overflowing into Workspaces.
+    // The bar's centerSideModuleWidth binding already accounts for this, but
+    // an explicit maxWidth keeps the text properly elided inside the group.
+    readonly property real maxMediaWidth: 220
+    implicitWidth: Math.min(rowLayout.implicitWidth + rowLayout.spacing * 2, maxMediaWidth)
     implicitHeight: Appearance.sizes.barHeight
+    clip: true
 
     Timer {
         running: activePlayer?.playbackState == MprisPlaybackState.Playing
@@ -62,12 +67,16 @@ Item {
                 anchors.centerIn: parent
                 width: volumeRow.width + 12
                 height: volumeRow.height + 8
-                radius: Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.verysmall
-                color: Appearance.inirEverywhere ? Appearance.inir.colLayer2
+                radius: Appearance.angelEverywhere ? Appearance.angel.roundingSmall
+                      : Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.verysmall
+                color: Appearance.angelEverywhere ? Appearance.angel.colGlassPopup
+                     : Appearance.inirEverywhere ? Appearance.inir.colLayer2
                      : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
                      : Appearance.colors.colLayer3
-                border.width: Appearance.inirEverywhere || Appearance.auroraEverywhere ? 1 : 0
-                border.color: Appearance.inirEverywhere ? Appearance.inir.colBorder
+                border.width: Appearance.angelEverywhere ? Appearance.angel.cardBorderWidth
+                            : (Appearance.inirEverywhere || Appearance.auroraEverywhere) ? 1 : 0
+                border.color: Appearance.angelEverywhere ? Appearance.angel.colCardBorder
+                            : Appearance.inirEverywhere ? Appearance.inir.colBorder
                             : Appearance.auroraEverywhere ? Appearance.aurora.colPopupBorder
                             : Appearance.colors.colLayer3Hover
 
@@ -112,7 +121,26 @@ Item {
     // Bar-anchored media controls popup (when popupMode === "bar")
     Loader {
         id: barMediaPopupLoader
-        active: root.barMediaPopupVisible && root.popupMode === "bar"
+        active: (root.barMediaPopupVisible || _barMediaClosing) && root.popupMode === "bar"
+
+        property bool _barMediaClosing: false
+
+        Connections {
+            target: root
+            function onBarMediaPopupVisibleChanged() {
+                if (!root.barMediaPopupVisible) {
+                    barMediaPopupLoader._barMediaClosing = true
+                    _barMediaCloseTimer.restart()
+                }
+            }
+        }
+
+        Timer {
+            id: _barMediaCloseTimer
+            interval: 200
+            onTriggered: barMediaPopupLoader._barMediaClosing = false
+        }
+
         sourceComponent: PopupWindow {
             id: barMediaPopup
             visible: true
@@ -138,19 +166,18 @@ Item {
                 anchors.centerIn: parent
                 onCloseRequested: root.barMediaPopupVisible = false
                 
-                // Entry animation
-                opacity: 0
-                scale: 0.9
+                // Entry/exit animation
+                opacity: root.barMediaPopupVisible ? 1 : 0
+                scale: root.barMediaPopupVisible ? 1 : 0.9
                 transformOrigin: Config.options.bar.bottom ? Item.Bottom : Item.Top
-                
-                Component.onCompleted: {
-                    entryAnim.start()
+
+                Behavior on opacity {
+                    enabled: Appearance.animationsEnabled
+                    NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
                 }
-                
-                ParallelAnimation {
-                    id: entryAnim
-                    NumberAnimation { target: mediaPopupContent; property: "opacity"; to: 1; duration: 200; easing.type: Easing.OutCubic }
-                    NumberAnimation { target: mediaPopupContent; property: "scale"; to: 1; duration: 250; easing.type: Easing.OutBack; easing.overshoot: 1.2 }
+                Behavior on scale {
+                    enabled: Appearance.animationsEnabled
+                    NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
                 }
             }
         }

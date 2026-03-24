@@ -34,7 +34,8 @@ ColumnLayout {
         topRightRadius: codeBlockBackgroundRounding
         bottomLeftRadius: Appearance.rounding.unsharpen
         bottomRightRadius: Appearance.rounding.unsharpen
-        color: Appearance.inirEverywhere ? Appearance.inir.colLayer2 
+        color: Appearance.angelEverywhere ? Appearance.angel.colGlassElevated
+            : Appearance.inirEverywhere ? Appearance.inir.colLayer2 
             : Appearance.auroraEverywhere ? Appearance.aurora.colElevatedSurface : Appearance.colors.colSurfaceContainerHighest
         implicitHeight: codeBlockTitleBarRowLayout.implicitHeight + codeBlockHeaderPadding * 2
 
@@ -197,7 +198,7 @@ ColumnLayout {
 
                         Behavior on opacity {
                             enabled: Appearance.animationsEnabled
-                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                         }
                         
                         contentItem: Rectangle {

@@ -15,7 +15,8 @@ Rectangle {
 
     implicitHeight: rowLayout.implicitHeight + Appearance.sizes.spacingMedium * 2
     radius: Appearance.rounding.small
-    color: Appearance.inirEverywhere ? Appearance.inir.colLayer2
+    color: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
+        : Appearance.inirEverywhere ? Appearance.inir.colLayer2
         : Appearance.auroraEverywhere ? Appearance.aurora.colElevatedSurface : Appearance.colors.colLayer2
 
     RowLayout {
@@ -83,7 +84,7 @@ Rectangle {
                 }
                 onMoved: {
                     if (root.node === Audio.sink) {
-                        Audio.sink.audio.volume = value
+                        Audio.setSinkVolume(value)
                     } else if (root.node?.audio) {
                         root.node.audio.volume = value
                     }

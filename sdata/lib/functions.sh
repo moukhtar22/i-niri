@@ -7,9 +7,7 @@ function try { "$@" || sleep 0; }
 
 function v(){
   if ! ${quiet:-false}; then
-    echo -e "####################################################"
-    echo -e "${STY_BLUE}[$0]: Next command:${STY_RST}"
-    echo -e "${STY_GREEN}$*${STY_RST}"
+    echo -e "  ${STY_FAINT}▶${STY_RST} ${STY_GREEN}$*${STY_RST}"
   fi
   local execute=true
   if $ask;then
@@ -31,10 +29,10 @@ function v(){
       fi
       
       case $p in
-        [yY] | "") echo -e "${STY_BLUE}OK, executing...${STY_RST}" ;break ;;
+        [yY] | "") break ;;
         [eE]) echo -e "${STY_BLUE}Exiting...${STY_RST}" ;exit ;break ;;
         [sS]) echo -e "${STY_BLUE}Alright, skipping...${STY_RST}" ;execute=false ;break ;;
-        "yesforall") echo -e "${STY_BLUE}Alright, won't ask again.${STY_RST}"; ask=false ;break ;;
+        "yesforall") ask=false ;break ;;
         *) echo -e "${STY_RED}Please enter [y/e/s/yesforall].${STY_RST}";;
       esac
     done
@@ -83,17 +81,16 @@ function x(){
     esac
   done
   case $cmdstatus in
-    0) if ! ${quiet:-false}; then echo -e "${STY_BLUE}[$0]: Command \"${STY_GREEN}$*${STY_BLUE}\" finished.${STY_RST}"; fi;;
+    0) ;;
     1) echo -e "${STY_RED}[$0]: Command \"${STY_GREEN}$*${STY_RED}\" failed. Exiting...${STY_RST}";exit 1;;
     2) echo -e "${STY_RED}[$0]: Command \"${STY_GREEN}$*${STY_RED}\" failed but ignored.${STY_RST}";;
   esac
 }
 
 function showfun(){
-  echo -e "${STY_BLUE}[$0]: Function \"$1\":${STY_RST}"
-  printf "${STY_GREEN}"
-  type -a "$1" 2>/dev/null || return 1
-  printf "${STY_RST}"
+  if ! ${quiet:-false}; then
+    echo -e "\n  ${STY_PURPLE}${STY_BOLD}❯${STY_RST} ${STY_BOLD}$1${STY_RST}"
+  fi
 }
 
 function pause(){
@@ -116,29 +113,27 @@ function command_exists() {
 
 function log_info() {
   if ! ${quiet:-false}; then
-    echo -e "${STY_BLUE}[INFO]${STY_RST} $1"
+    echo -e "  ${STY_BLUE}→${STY_RST} $1"
   fi
 }
 
 function log_success() {
   if ! ${quiet:-false}; then
-    echo -e "${STY_GREEN}[OK]${STY_RST} $1"
+    echo -e "  ${STY_GREEN}✓${STY_RST} $1"
   fi
 }
 
 function log_warning() {
-  # Warnings always shown
-  echo -e "${STY_YELLOW}[WARN]${STY_RST} $1"
+  echo -e "  ${STY_YELLOW}⚠${STY_RST} $1"
 }
 
 function log_error() {
-  # Errors always shown
-  echo -e "${STY_RED}[ERROR]${STY_RST} $1" >&2
+  echo -e "  ${STY_RED}✗${STY_RST} $1" >&2
 }
 
 function log_header() {
   if ! ${quiet:-false}; then
-    echo -e "\n${STY_PURPLE}=== $1 ===${STY_RST}"
+    echo -e "\n  ${STY_PURPLE}${STY_BOLD}$1${STY_RST}"
   fi
 }
 
@@ -185,18 +180,18 @@ rsync_dir__sync(){
 }
 
 function install_file(){
-  local s=$1
-  local t=$2
-  if [ -f $t ] && ! ${quiet:-false}; then
+  local s="$1"
+  local t="$2"
+  if [ -f "$t" ] && ! ${quiet:-false}; then
     echo -e "${STY_YELLOW}[$0]: \"$t\" will be overwritten.${STY_RST}"
   fi
-  v cp_file $s $t
+  v cp_file "$s" "$t"
 }
 
 function install_file__auto_backup(){
-  local s=$1
-  local t=$2
-  if [ -f $t ];then
+  local s="$1"
+  local t="$2"
+  if [ -f "$t" ];then
     if ! ${quiet:-false}; then
       echo -e "${STY_YELLOW}[$0]: \"$t\" exists.${STY_RST}"
     fi
@@ -204,8 +199,8 @@ function install_file__auto_backup(){
       if ! ${quiet:-false}; then
         echo -e "${STY_BLUE}[$0]: First run - backing up.${STY_RST}"
       fi
-      v mv $t $t.old
-      v cp_file $s $t
+      v mv "$t" "$t.old"
+      v cp_file "$s" "$t"
     else
       if ! ${quiet:-false}; then
         echo -e "${STY_BLUE}[$0]: Not first run - preserving existing file${STY_RST}"
@@ -215,32 +210,32 @@ function install_file__auto_backup(){
     if ! ${quiet:-false}; then
       echo -e "${STY_GREEN}[$0]: \"$t\" does not exist.${STY_RST}"
     fi
-    v cp_file $s $t
+    v cp_file "$s" "$t"
   fi
 }
 
 function install_dir(){
-  local s=$1
-  local t=$2
-  if [ -d $t ] && ! ${quiet:-false}; then
+  local s="$1"
+  local t="$2"
+  if [ -d "$t" ] && ! ${quiet:-false}; then
     echo -e "${STY_YELLOW}[$0]: \"$t\" will be merged.${STY_RST}"
   fi
-  rsync_dir $s $t
+  rsync_dir "$s" "$t"
 }
 
 function install_dir__sync(){
-  local s=$1
-  local t=$2
-  if [ -d $t ] && ! ${quiet:-false}; then
+  local s="$1"
+  local t="$2"
+  if [ -d "$t" ] && ! ${quiet:-false}; then
     echo -e "${STY_YELLOW}[$0]: \"$t\" will be synced (--delete).${STY_RST}"
   fi
-  rsync_dir__sync $s $t
+  rsync_dir__sync "$s" "$t"
 }
 
 function install_dir__skip_existed(){
-  local s=$1
-  local t=$2
-  if [ -d $t ];then
+  local s="$1"
+  local t="$2"
+  if [ -d "$t" ];then
     if ! ${quiet:-false}; then
       echo -e "${STY_BLUE}[$0]: \"$t\" exists, skipping.${STY_RST}"
     fi
@@ -248,7 +243,7 @@ function install_dir__skip_existed(){
     if ! ${quiet:-false}; then
       echo -e "${STY_YELLOW}[$0]: \"$t\" does not exist.${STY_RST}"
     fi
-    v rsync_dir $s $t
+    v rsync_dir "$s" "$t"
   fi
 }
 
@@ -295,5 +290,33 @@ function dedup_and_sort_listfile(){
     temp="$(mktemp)"
     sort -u -- "$1" > "$temp"
     mv -f -- "$temp" "$2"
+  fi
+}
+
+# Intelligent privilege escalation: sudo for terminal, pkexec for graphical/IPC mode
+# Usage: elevate command [args...]
+# Returns: exit code of the elevated command
+function elevate() {
+  if [[ -t 0 ]] && [[ -t 1 ]]; then
+    # Interactive terminal available — use sudo
+    sudo "$@"
+  elif command -v pkexec &>/dev/null; then
+    # No terminal but pkexec available — use graphical auth dialog
+    pkexec "$@"
+  else
+    # Fallback to sudo (will likely fail without terminal, but try anyway)
+    sudo "$@"
+  fi
+}
+
+# Check if we can elevate privileges (either via terminal sudo or pkexec)
+# Returns: 0 if elevation is possible, 1 otherwise
+function can_elevate() {
+  if [[ -t 0 ]] && [[ -t 1 ]]; then
+    return 0  # Terminal available for sudo
+  elif command -v pkexec &>/dev/null && [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
+    return 0  # Graphical session with pkexec available
+  else
+    return 1  # No way to elevate
   fi
 }

@@ -18,6 +18,8 @@ Singleton {
     property string filePath: Directories.generatedMaterialThemePath
     property bool ready: false
 
+    readonly property bool defaultApplyExternal: (Quickshell.env("QS_NO_RELOAD_POPUP") ?? "") !== "1"
+
     // Check if auto theme is selected (reads directly from Config to avoid circular dependency with ThemeService)
     readonly property bool isAutoTheme: (Config.options?.appearance?.theme ?? "auto") === "auto"
 
@@ -32,7 +34,23 @@ Singleton {
             return;
         }
 
-        const json = JSON.parse(fileContent)
+        if (!fileContent || fileContent.trim().length === 0) {
+            return
+        }
+
+        let json
+        try {
+            json = JSON.parse(fileContent)
+        } catch (e) {
+            // FileView can read while colors.json is being rewritten.
+            // Ignore transient parse errors and wait for next change event.
+            return
+        }
+
+        if (!json || typeof json !== "object" || !json.background) {
+            return
+        }
+
         for (const key in json) {
             if (json.hasOwnProperty(key)) {
                 // Convert snake_case to CamelCase
@@ -70,13 +88,29 @@ Singleton {
         }
     }
 
-	FileView { 
+    Timer {
+        id: delayedExternalApply
+        interval: 600
+        repeat: false
+        running: false
+        onTriggered: {
+            if (!root.isAutoTheme) return;
+            if (!root.defaultApplyExternal) return;
+            Quickshell.execDetached([
+                "/usr/bin/bash",
+                Directories.scriptPath + "/colors/applycolor.sh"
+            ])
+        }
+    }
+
+    FileView { 
         id: themeFileView
         path: Qt.resolvedUrl(root.filePath)
         watchChanges: true
         onFileChanged: {
             this.reload()
             delayedFileRead.start()
+            delayedExternalApply.restart()
         }
         onLoadedChanged: {
             const fileContent = themeFileView.text()

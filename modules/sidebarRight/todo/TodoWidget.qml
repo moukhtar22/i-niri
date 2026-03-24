@@ -98,12 +98,12 @@ Item {
 
                 Behavior on x {
                     enabled: tabIndicator.enableIndicatorAnimation
-                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
                 }
 
                 Behavior on implicitWidth {
                     enabled: tabIndicator.enableIndicatorAnimation
-                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
                 }
             }
         }
@@ -112,7 +112,8 @@ Item {
             id: tabBarBottomBorder
             Layout.fillWidth: true
             height: 1
-            color: Appearance.auroraEverywhere ? "transparent" : Appearance.colors.colOutlineVariant
+            color: Appearance.angelEverywhere ? Appearance.angel.colCardBorder
+                : Appearance.auroraEverywhere ? "transparent" : Appearance.colors.colOutlineVariant
         }
 
         SwipeView {

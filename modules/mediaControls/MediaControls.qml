@@ -96,6 +96,10 @@ Scope {
                     }
                 }
 
+                Keys.onEscapePressed: {
+                    GlobalStates.mediaControlsOpen = false;
+                }
+
                 MouseArea {
                     anchors.fill: parent
                     onClicked: GlobalStates.mediaControlsOpen = false
@@ -174,7 +178,7 @@ Scope {
 
                         StyledRectangularShadow {
                             target: placeholderBackground
-                            visible: !Appearance.inirEverywhere && !Appearance.auroraEverywhere
+                            visible: Appearance.angelEverywhere || (!Appearance.inirEverywhere && !Appearance.auroraEverywhere)
                         }
 
                         Rectangle {

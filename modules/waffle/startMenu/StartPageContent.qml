@@ -23,6 +23,7 @@ WPanelPageColumn {
     BodyRectangle {
         Layout.fillWidth: true
         Layout.fillHeight: true
+        clip: true
 
         ColumnLayout {
             anchors.fill: parent
@@ -74,33 +75,42 @@ WPanelPageColumn {
             // Recommended section
             ColumnLayout {
                 Layout.fillWidth: true
+                Layout.minimumHeight: recHeader.implicitHeight + 8 + Math.min(recGrid.implicitHeight, 2 * 44 + 1 * 4)
+                Layout.maximumHeight: recHeader.implicitHeight + 8 + recGrid.implicitHeight
                 visible: (root.recentApps?.length ?? 0) > 0
-                spacing: 12
+                spacing: 8
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    WText {
-                        text: Translation.tr("Recommended")
-                        font.pixelSize: Looks.font.pixelSize.large
-                        font.weight: Font.DemiBold
-                    }
-                    Item { Layout.fillWidth: true }
+                WText {
+                    id: recHeader
+                    text: Translation.tr("Recommended")
+                    font.pixelSize: Looks.font.pixelSize.large
+                    font.weight: Font.DemiBold
                 }
 
-                Grid {
+                Flickable {
+                    id: recFlickable
                     Layout.fillWidth: true
-                    columns: 2
-                    rowSpacing: 4
-                    columnSpacing: 16
+                    Layout.fillHeight: true
+                    contentHeight: recGrid.implicitHeight
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
 
-                    Repeater {
-                        model: root.recentApps.slice(0, 6)
-                        delegate: RecButton {
-                            required property var modelData
-                            required property int index
-                            appId: modelData.appId
-                            appName: modelData.name
-                            animIndex: index
+                    Grid {
+                        id: recGrid
+                        width: parent.width
+                        columns: 2
+                        rowSpacing: 4
+                        columnSpacing: 16
+
+                        Repeater {
+                            model: root.recentApps.slice(0, 4)
+                            delegate: RecButton {
+                                required property var modelData
+                                required property int index
+                                appId: modelData.appId
+                                appName: modelData.name
+                                animIndex: index
+                            }
                         }
                     }
                 }
@@ -118,7 +128,7 @@ WPanelPageColumn {
         const windowList = CompositorService.isNiri ? (NiriService.windows ?? []) : []
         for (const w of windowList) {
             const appId = w.app_id ?? ""
-            if (appId && !seen.has(appId) && recent.length < 6) {
+            if (appId && !seen.has(appId) && recent.length < 4) {
                 seen.add(appId)
                 const entry = DesktopEntries.heuristicLookup(appId)
                 recent.push({ appId: appId, name: entry?.name ?? appId })
@@ -257,12 +267,12 @@ WPanelPageColumn {
             WUserAvatar { sourceSize: Qt.size(32, 32) }
             WText {
                 Layout.alignment: Qt.AlignVCenter
-                text: SystemInfo.username
+                text: SystemInfo.displayName || SystemInfo.username
             }
         }
 
         onClicked: userMenu.open()
-        WToolTip { text: SystemInfo.username }
+        WToolTip { text: SystemInfo.displayName || SystemInfo.username }
 
         Popup {
             id: userMenu
@@ -332,7 +342,7 @@ WPanelPageColumn {
                                 Layout.alignment: Qt.AlignVCenter
                                 spacing: 2
                                 WText {
-                                    text: SystemInfo.username
+                                    text: SystemInfo.displayName || SystemInfo.username
                                     font.pixelSize: Looks.font.pixelSize.larger
                                     font.weight: Looks.font.weight.strong
                                 }

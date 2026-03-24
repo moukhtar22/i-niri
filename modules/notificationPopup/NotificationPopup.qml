@@ -23,7 +23,7 @@ Scope {
         // Hide during GameMode to avoid input interference
         visible: (Notifications.popupList.length > 0) && !GlobalStates.screenLocked && !GameMode.active
         screen: CompositorService.isNiri
-            ? Quickshell.screens.find(s => s.name === NiriService.currentOutput) ?? Quickshell.screens[0]
+            ? Quickshell.screens.find(s => s.name === NiriService.currentOutput) ?? GlobalStates.primaryScreen
             : Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? null
 
         WlrLayershell.namespace: "quickshell:notificationPopup"
@@ -56,9 +56,17 @@ Scope {
         NotificationListView {
             id: listview
             anchors {
-                fill: parent
-                margins: root.edgeMargin
+                top: parent.top
+                left: parent.left
+                right: parent.right
+                topMargin: root.edgeMargin
+                leftMargin: root.edgeMargin
+                rightMargin: root.edgeMargin
             }
+            // Size to content — don't stretch to fill PanelWindow
+            // The heightBuffer only enlarges the window (prevents Wayland clipping)
+            // but the listview stays content-sized so no empty space is visible
+            implicitHeight: contentHeight
             // Clip content to prevent overflow while PanelWindow resizes asynchronously
             clip: true
             popup: true

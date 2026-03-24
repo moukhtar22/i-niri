@@ -33,7 +33,9 @@ Item {
         anchors.centerIn: parent
         width: parent.width
         implicitHeight: stack.implicitHeight + 16
-        radius: Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
+        radius: Appearance.angelEverywhere ? Appearance.angel.roundingNormal
+            : Appearance.inirEverywhere ? Appearance.inir.roundingNormal
+            : Appearance.rounding.normal
         color: "transparent"
 
         StackLayout {
@@ -360,7 +362,7 @@ Item {
                                 : (Appearance.inirEverywhere ? Appearance.inir.colLayer2
                                     : Appearance.auroraEverywhere ? Appearance.aurora.colElevatedSurface
                                     : Appearance.colors.colSecondaryContainer)
-                            Behavior on color { enabled: Appearance.animationsEnabled; animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this) }
+                            Behavior on color { enabled: Appearance.animationsEnabled; animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
 
                             MaterialSymbol {
                                 id: playIcon
@@ -372,7 +374,7 @@ Item {
                                     : (Appearance.inirEverywhere ? Appearance.inir.colText
                                         : Appearance.auroraEverywhere ? Appearance.colors.colOnSecondaryContainer
                                         : Appearance.colors.colOnSecondaryContainer)
-                                Behavior on color { enabled: Appearance.animationsEnabled; animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this) }
+                                Behavior on color { enabled: Appearance.animationsEnabled; animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
                             }
                         }
                     }

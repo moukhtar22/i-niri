@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import Quickshell.Io
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -11,6 +12,267 @@ ContentPage {
     settingsPageName: Translation.tr("Interface")
 
     property bool isIiActive: Config.options?.panelFamily !== "waffle"
+    property bool recordingCapabilitiesLoaded: false
+    property var detectedVideoCodecs: []
+    property var detectedAudioCodecs: []
+    property var detectedAudioSources: []
+    property var detectedHardwareDevices: []
+    property string detectedDefaultSink: ""
+
+    readonly property string detectedDefaultAudioSource: detectedDefaultSink.length > 0 ? `${detectedDefaultSink}.monitor` : ""
+    readonly property bool gpuRecordingAvailable: detectedVideoCodecs.some(codec => String(codec).indexOf("_vaapi") !== -1)
+    readonly property var recordingQualityPresetOptions: [
+        { value: "compact", displayName: Translation.tr("Compact") },
+        { value: "balanced", displayName: Translation.tr("Balanced") },
+        { value: "quality", displayName: Translation.tr("Quality") },
+        { value: "master", displayName: Translation.tr("Master") },
+        { value: "custom", displayName: Translation.tr("Custom") }
+    ]
+    readonly property var recordingAccelerationOptions: gpuRecordingAvailable
+        ? [
+            { value: "auto", displayName: Translation.tr("Auto") },
+            { value: "gpu", displayName: Translation.tr("Prefer GPU") },
+            { value: "software", displayName: Translation.tr("Software only") }
+        ]
+        : [
+            { value: "auto", displayName: Translation.tr("Auto") },
+            { value: "software", displayName: Translation.tr("Software only") }
+        ]
+    readonly property var recordingFpsOptions: [24, 30, 45, 60, 90, 120, 144].map(value => ({ value: value, displayName: `${value} FPS` }))
+    readonly property var recordingVideoBitrateOptions: [4000, 6000, 8000, 10000, 12000, 16000, 20000, 28000].map(value => ({ value: value, displayName: `${value} kbps` }))
+    readonly property var recordingAudioBitrateOptions: [96, 128, 160, 192, 256, 320].map(value => ({ value: value, displayName: `${value} kbps` }))
+    readonly property var recordingSampleRateOptions: [32000, 44100, 48000, 96000].map(value => ({ value: value, displayName: `${value} Hz` }))
+    readonly property var recordingSoftwarePresetOptions: ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"].map(value => ({ value: value, displayName: value }))
+    readonly property var recordingPixelFormatOptions: [
+        { value: "yuv420p", displayName: Translation.tr("yuv420p — smaller files") },
+        { value: "yuv444p", displayName: Translation.tr("yuv444p — sharper text, bigger files") }
+    ]
+    readonly property var recordingCrfOptions: [14, 18, 21, 23, 26, 28, 30, 35].map(value => ({ value: value, displayName: `CRF ${value}` }))
+    readonly property var recordingAudioBackendOptions: [
+        { value: "", displayName: Translation.tr("Auto") },
+        { value: "pipewire", displayName: "PipeWire" },
+        { value: "pulse", displayName: "PulseAudio" }
+    ]
+    readonly property var recordingVaapiFilterOptions: [
+        { value: "scale_vaapi=format=nv12:out_range=full", displayName: Translation.tr("Full range — recommended") },
+        { value: "scale_vaapi=format=nv12", displayName: Translation.tr("Limited range") },
+        { value: "", displayName: Translation.tr("No VAAPI filter") }
+    ]
+
+    function setRecordingConfig(path, value) {
+        Config.setNestedValue(path, value)
+        if (path !== "screenRecord.qualityPreset" && (Config.options?.screenRecord?.qualityPreset ?? "balanced") !== "custom")
+            Config.setNestedValue("screenRecord.qualityPreset", "custom")
+    }
+
+    function choiceIndex(options, value) {
+        for (let i = 0; i < options.length; ++i) {
+            if (options[i].value === value)
+                return i
+        }
+        return options.length > 0 ? 0 : -1
+    }
+
+    function ensureOption(options, value, displayName) {
+        const normalized = String(value ?? "")
+        const result = Array.isArray(options) ? options.slice() : []
+        if (normalized.length === 0)
+            return result
+        if (!result.some(option => String(option.value) === normalized))
+            result.push({ value: value, displayName: displayName })
+        return result
+    }
+
+    function videoCodecDisplayName(codec) {
+        switch (codec) {
+        case "h264_vaapi": return Translation.tr("H.264 (GPU / VAAPI)")
+        case "hevc_vaapi": return Translation.tr("H.265 / HEVC (GPU / VAAPI)")
+        case "vp9_vaapi": return Translation.tr("VP9 (GPU / VAAPI)")
+        case "av1_vaapi": return Translation.tr("AV1 (GPU / VAAPI)")
+        case "libx264": return Translation.tr("H.264 (software)")
+        case "libx265": return Translation.tr("H.265 / HEVC (software)")
+        default: return codec
+        }
+    }
+
+    function audioCodecDisplayName(codec) {
+        switch (codec) {
+        case "aac": return Translation.tr("AAC")
+        case "libopus": return Translation.tr("Opus")
+        case "opus": return Translation.tr("Opus")
+        default: return codec
+        }
+    }
+
+    function audioSourceDisplayName(source) {
+        if (source === "")
+            return detectedDefaultAudioSource.length > 0
+                ? `${Translation.tr("Default output monitor")} (${detectedDefaultAudioSource})`
+                : Translation.tr("Default output monitor")
+        if (source === detectedDefaultAudioSource)
+            return `${Translation.tr("Default output monitor")} (${source})`
+        if (String(source).indexOf(".monitor") !== -1)
+            return `${Translation.tr("Output monitor")} (${source})`
+        return source
+    }
+
+    function hardwareDeviceDisplayName(device) {
+        return device === "/dev/dri/renderD128"
+            ? `${Translation.tr("Primary render device")} (${device})`
+            : device
+    }
+
+    function updateRecordingCapabilities(payloadText) {
+        try {
+            const payload = JSON.parse((payloadText ?? "").trim() || "{}")
+            detectedVideoCodecs = payload.videoCodecs ?? []
+            detectedAudioCodecs = payload.audioCodecs ?? []
+            detectedAudioSources = payload.audioSources ?? []
+            detectedHardwareDevices = payload.hardwareDevices ?? []
+            detectedDefaultSink = payload.defaultSink ?? ""
+        } catch (e) {
+            detectedVideoCodecs = []
+            detectedAudioCodecs = []
+            detectedAudioSources = []
+            detectedHardwareDevices = []
+            detectedDefaultSink = ""
+        }
+        recordingCapabilitiesLoaded = true
+    }
+
+    function availableVideoCodecOptions() {
+        let options = detectedVideoCodecs.map(codec => ({ value: codec, displayName: videoCodecDisplayName(codec) }))
+        options = ensureOption(options, Config.options?.screenRecord?.videoCodec ?? "libx264", `${Translation.tr("Configured")}: ${Config.options?.screenRecord?.videoCodec ?? "libx264"}`)
+        return options
+    }
+
+    function availableAudioCodecOptions() {
+        let options = detectedAudioCodecs.map(codec => ({ value: codec, displayName: audioCodecDisplayName(codec) }))
+        options = ensureOption(options, Config.options?.screenRecord?.audioCodec ?? "aac", `${Translation.tr("Configured")}: ${Config.options?.screenRecord?.audioCodec ?? "aac"}`)
+        return options
+    }
+
+    function availableAudioSourceOptions() {
+        let options = [{ value: "", displayName: audioSourceDisplayName("") }]
+        options = options.concat(detectedAudioSources.map(source => ({ value: source, displayName: audioSourceDisplayName(source) })))
+        options = ensureOption(options, Config.options?.screenRecord?.audioSource ?? "", `${Translation.tr("Configured source")}: ${Config.options?.screenRecord?.audioSource ?? ""}`)
+        return options
+    }
+
+    function availableHardwareDeviceOptions() {
+        let options = detectedHardwareDevices.map(device => ({ value: device, displayName: hardwareDeviceDisplayName(device) }))
+        options = ensureOption(options, Config.options?.screenRecord?.hardwareDevice ?? "/dev/dri/renderD128", `${Translation.tr("Configured device")}: ${Config.options?.screenRecord?.hardwareDevice ?? "/dev/dri/renderD128"}`)
+        return options
+    }
+
+    component RecordingDropdownField: ColumnLayout {
+        id: field
+        required property string title
+        required property string description
+        required property var options
+        required property var currentValue
+        property bool enabled: true
+        signal selected(var newValue)
+
+        Layout.fillWidth: true
+        spacing: 4
+
+        StyledText {
+            Layout.fillWidth: true
+            text: field.title
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            visible: field.description.length > 0
+            text: field.description
+            color: Appearance.angelEverywhere ? Appearance.angel.colTextMuted
+                : Appearance.inirEverywhere ? Appearance.inir.colTextSecondary
+                : Appearance.colors.colSubtext
+            font.pixelSize: Appearance.font.pixelSize.smallie
+            wrapMode: Text.WordWrap
+        }
+
+        StyledComboBox {
+            Layout.fillWidth: true
+            enabled: field.enabled
+            model: field.options
+            textRole: "displayName"
+            currentIndex: root.choiceIndex(field.options, field.currentValue)
+            onActivated: index => {
+                if (index >= 0 && index < field.options.length)
+                    field.selected(field.options[index].value)
+            }
+        }
+    }
+
+    Process {
+        id: recordingCapabilityProbe
+        running: true
+        command: ["/usr/bin/bash", "-lc", "python3 - <<'PY'\nimport glob, json, subprocess\n\nenc = subprocess.run(['ffmpeg', '-hide_banner', '-encoders'], capture_output=True, text=True).stdout.splitlines()\nencoders = set()\nfor line in enc:\n    parts = line.split()\n    if len(parts) >= 2:\n        encoders.add(parts[1])\nvideo = [c for c in ['h264_vaapi','hevc_vaapi','vp9_vaapi','av1_vaapi','libx264','libx265'] if c in encoders]\naudio = [c for c in ['aac','libopus','opus'] if c in encoders]\nsources_raw = subprocess.run(['pactl', 'list', 'sources', 'short'], capture_output=True, text=True).stdout.splitlines()\nsources = []\nfor line in sources_raw:\n    parts = line.split()\n    if len(parts) >= 2:\n        sources.append(parts[1])\ndefault_sink = subprocess.run(['pactl', 'get-default-sink'], capture_output=True, text=True).stdout.strip()\ndevices = sorted(glob.glob('/dev/dri/renderD*'))\nprint(json.dumps({\n    'videoCodecs': video,\n    'audioCodecs': audio,\n    'audioSources': sources,\n    'hardwareDevices': devices,\n    'defaultSink': default_sink\n}))\nPY"]
+        stdout: StdioCollector {
+            id: recordingCapabilityCollector
+            onStreamFinished: root.updateRecordingCapabilities(recordingCapabilityCollector.text)
+        }
+        onExited: (exitCode) => {
+            if (exitCode !== 0 && !root.recordingCapabilitiesLoaded)
+                root.recordingCapabilitiesLoaded = true
+        }
+    }
+
+    function applyRecordingPreset(preset) {
+        Config.setNestedValue("screenRecord.qualityPreset", preset)
+        switch (preset) {
+        case "compact":
+            Config.setNestedValue("screenRecord.accelerationMode", "auto")
+            Config.setNestedValue("screenRecord.videoCodec", "libx264")
+            Config.setNestedValue("screenRecord.audioCodec", "aac")
+            Config.setNestedValue("screenRecord.fps", 30)
+            Config.setNestedValue("screenRecord.videoBitrateKbps", 6000)
+            Config.setNestedValue("screenRecord.audioBitrateKbps", 128)
+            Config.setNestedValue("screenRecord.audioSampleRate", 48000)
+            Config.setNestedValue("screenRecord.pixelFormat", "yuv420p")
+            Config.setNestedValue("screenRecord.preset", "veryfast")
+            Config.setNestedValue("screenRecord.crf", 28)
+            break
+        case "balanced":
+            Config.setNestedValue("screenRecord.accelerationMode", "auto")
+            Config.setNestedValue("screenRecord.videoCodec", "libx264")
+            Config.setNestedValue("screenRecord.audioCodec", "aac")
+            Config.setNestedValue("screenRecord.fps", 60)
+            Config.setNestedValue("screenRecord.videoBitrateKbps", 10000)
+            Config.setNestedValue("screenRecord.audioBitrateKbps", 160)
+            Config.setNestedValue("screenRecord.audioSampleRate", 48000)
+            Config.setNestedValue("screenRecord.pixelFormat", "yuv420p")
+            Config.setNestedValue("screenRecord.preset", "veryfast")
+            Config.setNestedValue("screenRecord.crf", 23)
+            break
+        case "quality":
+            Config.setNestedValue("screenRecord.accelerationMode", "auto")
+            Config.setNestedValue("screenRecord.videoCodec", "libx264")
+            Config.setNestedValue("screenRecord.audioCodec", "aac")
+            Config.setNestedValue("screenRecord.fps", 60)
+            Config.setNestedValue("screenRecord.videoBitrateKbps", 16000)
+            Config.setNestedValue("screenRecord.audioBitrateKbps", 192)
+            Config.setNestedValue("screenRecord.audioSampleRate", 48000)
+            Config.setNestedValue("screenRecord.pixelFormat", "yuv420p")
+            Config.setNestedValue("screenRecord.preset", "medium")
+            Config.setNestedValue("screenRecord.crf", 18)
+            break
+        case "master":
+            Config.setNestedValue("screenRecord.accelerationMode", "auto")
+            Config.setNestedValue("screenRecord.videoCodec", "libx264")
+            Config.setNestedValue("screenRecord.audioCodec", "aac")
+            Config.setNestedValue("screenRecord.fps", 60)
+            Config.setNestedValue("screenRecord.videoBitrateKbps", 28000)
+            Config.setNestedValue("screenRecord.audioBitrateKbps", 256)
+            Config.setNestedValue("screenRecord.audioSampleRate", 48000)
+            Config.setNestedValue("screenRecord.pixelFormat", "yuv420p")
+            Config.setNestedValue("screenRecord.preset", "slow")
+            Config.setNestedValue("screenRecord.crf", 14)
+            break
+        }
+    }
 
     SettingsCardSection {
         expanded: false
@@ -156,6 +418,202 @@ ContentPage {
     }
 
     SettingsCardSection {
+        id: screenRecordSection
+        expanded: false
+        icon: "screen_record"
+        title: Translation.tr("Screen recording")
+
+        readonly property bool isCustomPreset: (Config.options?.screenRecord?.qualityPreset ?? "balanced") === "custom"
+
+        SettingsGroup {
+            NoticeBox {
+                Layout.fillWidth: true
+                materialIcon: recordingCapabilitiesLoaded ? (gpuRecordingAvailable ? "memory" : "developer_mode") : "progress_activity"
+                text: !recordingCapabilitiesLoaded
+                    ? Translation.tr("Detecting available encoders…")
+                    : gpuRecordingAvailable
+                        ? Translation.tr("GPU recording available. Hardware acceleration will be used when possible.")
+                        : Translation.tr("No GPU encoder detected. Software recording will be used.")
+            }
+
+            ConfigRow {
+                uniform: true
+
+                RecordingDropdownField {
+                    title: Translation.tr("Quality preset")
+                    description: Translation.tr("Tradeoff between file size and quality.")
+                    options: root.recordingQualityPresetOptions
+                    currentValue: Config.options?.screenRecord?.qualityPreset ?? "balanced"
+                    onSelected: newValue => {
+                        if (newValue === "custom")
+                            Config.setNestedValue("screenRecord.qualityPreset", "custom")
+                        else
+                            root.applyRecordingPreset(newValue)
+                    }
+                }
+
+                RecordingDropdownField {
+                    title: Translation.tr("Acceleration")
+                    description: Translation.tr("Auto picks the best path for your hardware.")
+                    options: root.recordingAccelerationOptions
+                    currentValue: Config.options?.screenRecord?.accelerationMode ?? "auto"
+                    onSelected: newValue => root.setRecordingConfig("screenRecord.accelerationMode", newValue)
+                }
+            }
+
+            SettingsSwitch {
+                buttonIcon: "swap_horiz"
+                text: Translation.tr("Fallback to safe mode if preferred encoder fails")
+                checked: Config.options?.screenRecord?.enableFallback ?? true
+                onCheckedChanged: root.setRecordingConfig("screenRecord.enableFallback", checked)
+            }
+
+            ContentSubsection {
+                visible: screenRecordSection.isCustomPreset
+                title: Translation.tr("Video")
+
+                ConfigRow {
+                    uniform: true
+
+                    RecordingDropdownField {
+                        title: Translation.tr("Codec")
+                        description: ""
+                        options: root.availableVideoCodecOptions()
+                        currentValue: Config.options?.screenRecord?.videoCodec ?? "libx264"
+                        onSelected: newValue => root.setRecordingConfig("screenRecord.videoCodec", newValue)
+                    }
+
+                    RecordingDropdownField {
+                        title: Translation.tr("Frame rate")
+                        description: ""
+                        options: root.recordingFpsOptions
+                        currentValue: Config.options?.screenRecord?.fps ?? 60
+                        onSelected: newValue => root.setRecordingConfig("screenRecord.fps", newValue)
+                    }
+                }
+
+                ConfigRow {
+                    uniform: true
+
+                    RecordingDropdownField {
+                        title: Translation.tr("Bitrate")
+                        description: Translation.tr("Higher = better quality, bigger file.")
+                        options: root.recordingVideoBitrateOptions
+                        currentValue: Config.options?.screenRecord?.videoBitrateKbps ?? 12000
+                        onSelected: newValue => root.setRecordingConfig("screenRecord.videoBitrateKbps", newValue)
+                    }
+
+                    RecordingDropdownField {
+                        title: Translation.tr("CRF")
+                        description: Translation.tr("Lower = better quality. Software mode only.")
+                        options: root.recordingCrfOptions
+                        currentValue: Config.options?.screenRecord?.crf ?? 21
+                        onSelected: newValue => root.setRecordingConfig("screenRecord.crf", newValue)
+                    }
+                }
+
+                ConfigRow {
+                    uniform: true
+
+                    RecordingDropdownField {
+                        title: Translation.tr("Encoder speed")
+                        description: Translation.tr("Software mode only.")
+                        options: root.recordingSoftwarePresetOptions
+                        currentValue: Config.options?.screenRecord?.preset ?? "veryfast"
+                        onSelected: newValue => root.setRecordingConfig("screenRecord.preset", newValue)
+                    }
+
+                    RecordingDropdownField {
+                        title: Translation.tr("Pixel format")
+                        description: ""
+                        options: root.recordingPixelFormatOptions
+                        currentValue: Config.options?.screenRecord?.pixelFormat ?? "yuv420p"
+                        onSelected: newValue => root.setRecordingConfig("screenRecord.pixelFormat", newValue)
+                    }
+                }
+            }
+
+            ContentSubsection {
+                visible: screenRecordSection.isCustomPreset
+                title: Translation.tr("Audio")
+
+                ConfigRow {
+                    uniform: true
+
+                    RecordingDropdownField {
+                        title: Translation.tr("Codec")
+                        description: ""
+                        options: root.availableAudioCodecOptions()
+                        currentValue: Config.options?.screenRecord?.audioCodec ?? "aac"
+                        onSelected: newValue => root.setRecordingConfig("screenRecord.audioCodec", newValue)
+                    }
+
+                    RecordingDropdownField {
+                        title: Translation.tr("Bitrate")
+                        description: ""
+                        options: root.recordingAudioBitrateOptions
+                        currentValue: Config.options?.screenRecord?.audioBitrateKbps ?? 192
+                        onSelected: newValue => root.setRecordingConfig("screenRecord.audioBitrateKbps", newValue)
+                    }
+                }
+
+                ConfigRow {
+                    uniform: true
+
+                    RecordingDropdownField {
+                        title: Translation.tr("Sample rate")
+                        description: ""
+                        options: root.recordingSampleRateOptions
+                        currentValue: Config.options?.screenRecord?.audioSampleRate ?? 48000
+                        onSelected: newValue => root.setRecordingConfig("screenRecord.audioSampleRate", newValue)
+                    }
+
+                    RecordingDropdownField {
+                        title: Translation.tr("Backend")
+                        description: ""
+                        options: root.recordingAudioBackendOptions
+                        currentValue: Config.options?.screenRecord?.audioBackend ?? ""
+                        onSelected: newValue => root.setRecordingConfig("screenRecord.audioBackend", newValue)
+                    }
+                }
+
+                RecordingDropdownField {
+                    title: Translation.tr("Audio source")
+                    description: Translation.tr("Default output monitor captures desktop audio.")
+                    options: root.availableAudioSourceOptions()
+                    currentValue: Config.options?.screenRecord?.audioSource ?? ""
+                    onSelected: newValue => root.setRecordingConfig("screenRecord.audioSource", newValue)
+                }
+            }
+
+            ContentSubsection {
+                visible: screenRecordSection.isCustomPreset && root.gpuRecordingAvailable
+                title: Translation.tr("GPU hardware")
+
+                ConfigRow {
+                    uniform: true
+
+                    RecordingDropdownField {
+                        title: Translation.tr("Render device")
+                        description: ""
+                        options: root.availableHardwareDeviceOptions()
+                        currentValue: Config.options?.screenRecord?.hardwareDevice ?? "/dev/dri/renderD128"
+                        onSelected: newValue => root.setRecordingConfig("screenRecord.hardwareDevice", newValue)
+                    }
+
+                    RecordingDropdownField {
+                        title: Translation.tr("VAAPI filter")
+                        description: ""
+                        options: root.ensureOption(root.recordingVaapiFilterOptions, Config.options?.screenRecord?.vaapiFilter ?? "scale_vaapi=format=nv12:out_range=full", `${Translation.tr("Configured filter")}: ${Config.options?.screenRecord?.vaapiFilter ?? "scale_vaapi=format=nv12:out_range=full"}`)
+                        currentValue: Config.options?.screenRecord?.vaapiFilter ?? "scale_vaapi=format=nv12:out_range=full"
+                        onSelected: newValue => root.setRecordingConfig("screenRecord.vaapiFilter", newValue)
+                    }
+                }
+            }
+        }
+    }
+
+    SettingsCardSection {
         expanded: false
         icon: "forum"
         title: Translation.tr("Overlay: Discord")
@@ -164,10 +622,10 @@ ContentPage {
             MaterialTextArea {
                 Layout.fillWidth: true
                 placeholderText: Translation.tr("Discord launch command (e.g., discord, vesktop, webcord)")
-                text: Config.options.apps.discord
+                text: Config.options?.apps?.discord ?? ""
                 wrapMode: TextEdit.NoWrap
                 onTextChanged: {
-                    Config.options.apps.discord = text;
+                    Config.setNestedValue("apps.discord", text);
                 }
             }
         }
@@ -358,6 +816,23 @@ ContentPage {
                 }
                 StyledToolTip {
                     text: Translation.tr("Show the macOS-style dock at the bottom of the screen")
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Dock style")
+                tooltip: Translation.tr("Panel: classic unified background. Pill: each icon floats in its own capsule. macOS: frosted glass shelf with magnify effect.")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options?.dock?.style ?? "panel"
+                    onSelected: newValue => {
+                        Config.setNestedValue("dock.style", newValue)
+                    }
+                    options: [
+                        { displayName: Translation.tr("Panel"), icon: "dock_to_bottom", value: "panel" },
+                        { displayName: Translation.tr("Pill"),  icon: "interests",       value: "pill"  },
+                        { displayName: Translation.tr("macOS"), icon: "desktop_mac",     value: "macos" }
+                    ]
                 }
             }
 
@@ -600,6 +1075,19 @@ ContentPage {
                     }
                     StyledToolTip {
                         text: Translation.tr("Time to wait before showing window preview")
+                    }
+                }
+
+                SettingsSwitch {
+                    buttonIcon: "keep"
+                    text: Translation.tr("Keep preview on click")
+                    enabled: Config.options.dock.hoverPreview !== false
+                    checked: Config.options?.dock?.keepPreviewOnClick ?? false
+                    onCheckedChanged: {
+                        Config.setNestedValue("dock.keepPreviewOnClick", checked)
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Don't close the preview popup when clicking a window thumbnail, so you can navigate between windows")
                     }
                 }
             }
@@ -1014,6 +1502,16 @@ ContentPage {
             }
 
             SettingsSwitch {
+                buttonIcon: "animation"
+                text: Translation.tr("Instant sidebar opening")
+                checked: Config.options.sidebar?.instantOpen ?? false
+                onCheckedChanged: Config.setNestedValue("sidebar.instantOpen", checked)
+                StyledToolTip {
+                    text: Translation.tr("Disable the sidebar slide animation and open or close it instantly to reduce stutter under load")
+                }
+            }
+
+            SettingsSwitch {
                 buttonIcon: "folder_open"
                 text: Translation.tr("Open folder after wallpaper download")
                 checked: Config.options.sidebar?.openFolderOnDownload ?? false
@@ -1127,6 +1625,17 @@ ContentPage {
                         text: Translation.tr("Search and play music from YouTube using yt-dlp")
                     }
                 }
+
+                // DISABLED: webapps — requires quickshell-webengine rebuild
+                // SettingsSwitch {
+                //     buttonIcon: "extension"
+                //     text: Translation.tr("Web Apps")
+                //     checked: Config.options?.sidebar?.plugins?.enable ?? false
+                //     onCheckedChanged: Config.setNestedValue("sidebar.plugins.enable", checked)
+                //     StyledToolTip {
+                //         text: Translation.tr("Embed web apps like Discord, YouTube Music and more in the sidebar (requires quickshell-webengine)")
+                //     }
+                // }
             }
 
             ContentSubsection {
@@ -1165,6 +1674,15 @@ ContentPage {
                     onClicked: {
                         // checked ya fue invertido por ConfigSwitch.onClicked
                         rightSidebarWidgets.setWidget("calendar", checked)
+                    }
+                }
+
+                SettingsSwitch {
+                    buttonIcon: "event_upcoming"
+                    text: Translation.tr("Events")
+                    Component.onCompleted: checked = rightSidebarWidgets.isEnabled("events")
+                    onClicked: {
+                        rightSidebarWidgets.setWidget("events", checked)
                     }
                 }
 
@@ -1302,7 +1820,7 @@ ContentPage {
                         Layout.fillWidth: true
                         spacing: 6
 
-                        TextField {
+                        MaterialTextField {
                             id: subInput
                             Layout.fillWidth: true
                             placeholderText: Translation.tr("Add subreddit...")
@@ -1376,7 +1894,7 @@ ContentPage {
                             color: Appearance.colors.colOnLayer1
                         }
 
-                        TextField {
+                        MaterialTextField {
                             Layout.fillWidth: true
                             placeholderText: "https://hianime.to/search?keyword=%s"
                             text: Config.options.sidebar?.animeSchedule?.watchSite ?? ""
@@ -1430,7 +1948,7 @@ ContentPage {
                         font.pixelSize: Appearance.font.pixelSize.small
                         color: Appearance.colors.colOnSecondaryContainer
                     }
-                    TextField {
+                    MaterialTextField {
                         id: wallhavenApiInput
                         Layout.fillWidth: true
                         placeholderText: Translation.tr("Optional - for NSFW content")
@@ -1725,9 +2243,9 @@ ContentPage {
                 ColumnLayout {
                     id: quickLaunchEditor
                     Layout.fillWidth: true
-                    Layout.leftMargin: 40
-                    Layout.topMargin: 4
-                    spacing: 4
+                    Layout.leftMargin: 16
+                    Layout.topMargin: 2
+                    spacing: 2
                     visible: Config.options?.sidebar?.widgets?.launch ?? true
 
                     property var shortcuts: Config.options?.sidebar?.widgets?.quickLaunch ?? [
@@ -1776,101 +2294,113 @@ ContentPage {
                     Repeater {
                         model: quickLaunchEditor.shortcuts.length
 
-                        delegate: Rectangle {
+                        delegate: Item {
                             id: launchItem
                             required property int index
                             readonly property var itemData: quickLaunchEditor.shortcuts[index] ?? {}
                             Layout.fillWidth: true
-                            implicitHeight: 40
-                            radius: SettingsMaterialPreset.groupRadius
-                            color: Appearance.colors.colLayer2
+                            implicitHeight: itemRow.implicitHeight + 8
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: Appearance.rounding.small
+                                color: itemHover.containsMouse ? Appearance.colors.colLayer2Hover : "transparent"
+                                Behavior on color {
+                                    enabled: Appearance.animationsEnabled
+                                    animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                                }
+                            }
+
+                            MouseArea {
+                                id: itemHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                acceptedButtons: Qt.NoButton
+                            }
 
                             RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 8
-                                anchors.rightMargin: 6
-                                spacing: 6
-
-                                MaterialSymbol {
-                                    text: launchItem.itemData.icon ?? "apps"
-                                    iconSize: 20
-                                    color: Appearance.colors.colPrimary
+                                id: itemRow
+                                anchors {
+                                    left: parent.left; right: parent.right
+                                    verticalCenter: parent.verticalCenter
+                                    leftMargin: 8; rightMargin: 4
                                 }
+                                spacing: 8
 
-                                TextInput {
-                                    Layout.preferredWidth: 60
-                                    text: launchItem.itemData.icon ?? ""
-                                    font.pixelSize: Appearance.font.pixelSize.smaller
-                                    font.family: Appearance.font.family.main
-                                    color: Appearance.colors.colSubtext
-                                    selectByMouse: true
-                                    clip: true
-                                    onTextEdited: quickLaunchEditor.queueUpdate(launchItem.index, "icon", text)
-
-                                    Text {
-                                        anchors.fill: parent
-                                        text: "icon"
-                                        color: Appearance.colors.colOutline
-                                        font: parent.font
-                                        visible: !parent.text && !parent.activeFocus
+                                // Icon preview
+                                Rectangle {
+                                    implicitWidth: 32; implicitHeight: 32
+                                    radius: Appearance.rounding.small
+                                    color: Appearance.colors.colSecondaryContainer
+                                    MaterialSymbol {
+                                        anchors.centerIn: parent
+                                        text: launchItem.itemData.icon ?? "apps"
+                                        iconSize: 18
+                                        color: Appearance.colors.colOnSecondaryContainer
                                     }
                                 }
 
-                                Rectangle { width: 1; Layout.fillHeight: true; Layout.topMargin: 8; Layout.bottomMargin: 8; color: Appearance.colors.colOutlineVariant }
-
-                                TextInput {
+                                // Icon name
+                                ToolbarTextField {
                                     Layout.preferredWidth: 70
-                                    text: launchItem.itemData.name ?? ""
-                                    font.pixelSize: Appearance.font.pixelSize.small
-                                    font.family: Appearance.font.family.main
-                                    color: Appearance.colors.colOnLayer1
+                                    implicitHeight: 30
+                                    padding: 6
+                                    text: launchItem.itemData.icon ?? ""
+                                    placeholderText: Translation.tr("Icon")
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
                                     selectByMouse: true
-                                    clip: true
-                                    onTextEdited: quickLaunchEditor.queueUpdate(launchItem.index, "name", text)
-
-                                    Text {
-                                        anchors.fill: parent
-                                        text: Translation.tr("Name")
-                                        color: Appearance.colors.colOutline
-                                        font: parent.font
-                                        visible: !parent.text && !parent.activeFocus
-                                    }
+                                    onTextEdited: quickLaunchEditor.queueUpdate(launchItem.index, "icon", text)
                                 }
 
-                                Rectangle { width: 1; Layout.fillHeight: true; Layout.topMargin: 8; Layout.bottomMargin: 8; color: Appearance.colors.colOutlineVariant }
-
-                                TextInput {
+                                // Display name
+                                ToolbarTextField {
+                                    Layout.preferredWidth: 100
                                     Layout.fillWidth: true
+                                    Layout.maximumWidth: 140
+                                    implicitHeight: 30
+                                    padding: 6
+                                    text: launchItem.itemData.name ?? ""
+                                    placeholderText: Translation.tr("Name")
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    font.weight: Font.Medium
+                                    selectByMouse: true
+                                    onTextEdited: quickLaunchEditor.queueUpdate(launchItem.index, "name", text)
+                                }
+
+                                // Command
+                                ToolbarTextField {
+                                    Layout.fillWidth: true
+                                    implicitHeight: 30
+                                    padding: 6
                                     text: launchItem.itemData.cmd ?? ""
+                                    placeholderText: Translation.tr("Command")
                                     font.pixelSize: Appearance.font.pixelSize.smaller
                                     font.family: Appearance.font.family.monospace
                                     color: Appearance.colors.colSubtext
                                     selectByMouse: true
-                                    clip: true
                                     onTextEdited: quickLaunchEditor.queueUpdate(launchItem.index, "cmd", text)
-
-                                    Text {
-                                        anchors.fill: parent
-                                        text: Translation.tr("Command")
-                                        color: Appearance.colors.colOutline
-                                        font: parent.font
-                                        visible: !parent.text && !parent.activeFocus
-                                    }
                                 }
 
+                                // Delete
                                 RippleButton {
-                                    implicitWidth: 28; implicitHeight: 28
+                                    implicitWidth: 24; implicitHeight: 24
                                     buttonRadius: Appearance.rounding.full
                                     colBackground: "transparent"
                                     colBackgroundHover: Appearance.colors.colErrorContainer
                                     colRipple: Appearance.colors.colError
+                                    opacity: itemHover.containsMouse ? 1 : 0.3
                                     onClicked: quickLaunchEditor.removeShortcut(launchItem.index)
+
+                                    Behavior on opacity {
+                                        enabled: Appearance.animationsEnabled
+                                        NumberAnimation { duration: 150 }
+                                    }
 
                                     contentItem: MaterialSymbol {
                                         anchors.centerIn: parent
                                         text: "close"
                                         iconSize: 14
-                                        color: Appearance.colors.colSubtext
+                                        color: Appearance.colors.colError
                                     }
 
                                     StyledToolTip { text: Translation.tr("Remove") }
@@ -1879,20 +2409,29 @@ ContentPage {
                         }
                     }
 
+                    // Add button
                     RippleButton {
                         Layout.fillWidth: true
-                        implicitHeight: 32
-                        buttonRadius: SettingsMaterialPreset.groupRadius
+                        implicitHeight: 34
+                        buttonRadius: Appearance.rounding.small
                         colBackground: "transparent"
                         colBackgroundHover: Appearance.colors.colLayer2Hover
-                        colRipple: Appearance.colors.colLayer2Active
+                        colRipple: Appearance.colors.colPrimaryContainer
                         onClicked: quickLaunchEditor.addShortcut()
 
                         contentItem: RowLayout {
                             anchors.centerIn: parent
                             spacing: 6
-                            MaterialSymbol { text: "add"; iconSize: 16; color: Appearance.colors.colPrimary }
-                            StyledText { text: Translation.tr("Add shortcut"); font.pixelSize: Appearance.font.pixelSize.smaller; color: Appearance.colors.colSubtext }
+                            MaterialSymbol {
+                                text: "add"
+                                iconSize: 18
+                                color: Appearance.colors.colPrimary
+                            }
+                            StyledText {
+                                text: Translation.tr("Add shortcut")
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colPrimary
+                            }
                         }
                     }
                 }
@@ -1993,14 +2532,15 @@ ContentPage {
                 }
 
                 // Coin input with autocomplete
-                Item {
+                ConfigRow {
                     Layout.fillWidth: true
                     implicitHeight: coinInput.implicitHeight
 
-                    TextField {
+                    MaterialTextField {
                         id: coinInput
                         width: parent.width
                         placeholderText: Translation.tr("Type to search coins...")
+                        text: ""
                         font.pixelSize: Appearance.font.pixelSize.small
                         color: Appearance.m3colors.m3onSurface
                         placeholderTextColor: Appearance.colors.colSubtext
@@ -2324,6 +2864,48 @@ ContentPage {
                 }
             }
             SettingsSwitch {
+                buttonIcon: "dashboard"
+                text: Translation.tr("Dashboard panel")
+                checked: Config.options?.overview?.dashboard?.enable ?? true
+                onCheckedChanged: Config.setNestedValue("overview.dashboard.enable", checked)
+                StyledToolTip { text: Translation.tr("Show a control center dashboard below workspace previews") }
+            }
+            SettingsSwitch {
+                buttonIcon: "toggle_on"
+                text: Translation.tr("Dashboard: Quick toggles")
+                checked: Config.options?.overview?.dashboard?.showToggles ?? true
+                onCheckedChanged: Config.setNestedValue("overview.dashboard.showToggles", checked)
+                visible: Config.options?.overview?.dashboard?.enable ?? true
+            }
+            SettingsSwitch {
+                buttonIcon: "music_note"
+                text: Translation.tr("Dashboard: Media player")
+                checked: Config.options?.overview?.dashboard?.showMedia ?? true
+                onCheckedChanged: Config.setNestedValue("overview.dashboard.showMedia", checked)
+                visible: Config.options?.overview?.dashboard?.enable ?? true
+            }
+            SettingsSwitch {
+                buttonIcon: "volume_up"
+                text: Translation.tr("Dashboard: Volume slider")
+                checked: Config.options?.overview?.dashboard?.showVolume ?? true
+                onCheckedChanged: Config.setNestedValue("overview.dashboard.showVolume", checked)
+                visible: Config.options?.overview?.dashboard?.enable ?? true
+            }
+            SettingsSwitch {
+                buttonIcon: "cloud"
+                text: Translation.tr("Dashboard: Weather")
+                checked: Config.options?.overview?.dashboard?.showWeather ?? true
+                onCheckedChanged: Config.setNestedValue("overview.dashboard.showWeather", checked)
+                visible: Config.options?.overview?.dashboard?.enable ?? true
+            }
+            SettingsSwitch {
+                buttonIcon: "memory"
+                text: Translation.tr("Dashboard: System stats")
+                checked: Config.options?.overview?.dashboard?.showSystem ?? true
+                onCheckedChanged: Config.setNestedValue("overview.dashboard.showSystem", checked)
+                visible: Config.options?.overview?.dashboard?.enable ?? true
+            }
+            SettingsSwitch {
                 buttonIcon: "center_focus_strong"
                 text: Translation.tr("Center icons")
                 checked: Config.options.overview.centerIcons
@@ -2471,9 +3053,20 @@ ContentPage {
                 title: Translation.tr("Positioning")
 
                 SettingsSwitch {
+                    buttonIcon: "vertical_align_center"
+                    text: Translation.tr("Center launcher panel")
+                    checked: Config.options?.overview?.centerLauncher ?? false
+                    onCheckedChanged: Config.setNestedValue("overview.centerLauncher", checked)
+                    StyledToolTip {
+                        text: Translation.tr("Center the Super+Space launcher vertically. Disables top/bottom margin adjustments while enabled")
+                    }
+                }
+
+                SettingsSwitch {
                     buttonIcon: "dashboard_customize"
                     text: Translation.tr("Respect bar area (never overlap)")
                     checked: !Config.options.overview || Config.options.overview.respectBar !== false
+                    enabled: !(Config.options?.overview?.centerLauncher ?? false)
                     onCheckedChanged: {
                         if (!Config.options.overview)
                             Config.options.overview = ({})
@@ -2489,6 +3082,7 @@ ContentPage {
                     ConfigSpinBox {
                         icon: "vertical_align_top"
                         text: Translation.tr("Extra top margin (px)")
+                        enabled: !(Config.options?.overview?.centerLauncher ?? false)
                         value: Config.options.overview && Config.options.overview.topMargin !== undefined
                                ? Config.options.overview.topMargin
                                : 0
@@ -2507,6 +3101,7 @@ ContentPage {
                     ConfigSpinBox {
                         icon: "vertical_align_bottom"
                         text: Translation.tr("Extra bottom margin (px)")
+                        enabled: !(Config.options?.overview?.centerLauncher ?? false)
                         value: Config.options.overview && Config.options.overview.bottomMargin !== undefined
                                ? Config.options.overview.bottomMargin
                                : 0
@@ -2769,15 +3364,42 @@ ContentPage {
         title: Translation.tr("Wallpaper selector")
 
         SettingsGroup {
-            SettingsSwitch {
-                buttonIcon: "ad"
-                text: Translation.tr('Use system file picker')
-                checked: Config.options.wallpaperSelector.useSystemFileDialog
-                onCheckedChanged: {
-                    Config.options.wallpaperSelector.useSystemFileDialog = checked;
+            ContentSubsection {
+                title: Translation.tr("Selector style")
+
+                SettingsSwitch {
+                    buttonIcon: "view_carousel"
+                    text: Translation.tr("Coverflow mode")
+                    checked: (Config.options?.wallpaperSelector?.style ?? "grid") === "coverflow"
+                    onCheckedChanged: Config.setNestedValue("wallpaperSelector.style", checked ? "coverflow" : "grid")
+                    StyledToolTip {
+                        text: Translation.tr("Use a fullscreen coverflow carousel instead of the grid picker.\nNavigate with arrow keys or mouse wheel.")
+                    }
                 }
-                StyledToolTip {
-                    text: Translation.tr("Use your system's native file picker instead of the built-in one")
+
+                SettingsSwitch {
+                    visible: (Config.options?.wallpaperSelector?.style ?? "grid") === "coverflow"
+                    buttonIcon: "view_array"
+                    text: Translation.tr("Skew view (parallelogram cards)")
+                    checked: (Config.options?.wallpaperSelector?.coverflowView ?? "gallery") === "skew"
+                    onCheckedChanged: Config.setNestedValue("wallpaperSelector.coverflowView", checked ? "skew" : "gallery")
+                    StyledToolTip {
+                        text: Translation.tr("Use tilted parallelogram cards instead of the hero + filmstrip layout.\nYou can also switch between views from the toolbar inside the coverflow.")
+                    }
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Behavior")
+
+                SettingsSwitch {
+                    buttonIcon: "open_in_new"
+                    text: Translation.tr("Use system file picker")
+                    checked: Config.options?.wallpaperSelector?.useSystemFileDialog ?? false
+                    onCheckedChanged: Config.setNestedValue("wallpaperSelector.useSystemFileDialog", checked)
+                    StyledToolTip {
+                        text: Translation.tr("Use your system's native file picker instead of the built-in one")
+                    }
                 }
             }
         }
@@ -2804,6 +3426,47 @@ ContentPage {
                 onCheckedChanged: Config.setNestedValue("settingsUi.overlayMode", checked)
                 StyledToolTip {
                     text: Translation.tr("When enabled, Settings opens as a floating overlay inside the shell instead of a separate window. This lets you preview changes instantly.\nRequires a shell restart to take effect.")
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Overlay appearance")
+                visible: Config.options?.settingsUi?.overlayMode ?? false
+
+                ConfigSpinBox {
+                    icon: "water"
+                    text: Translation.tr("Background dim (%)")
+                    value: Config.options?.settingsUi?.overlayAppearance?.scrimDim ?? 35
+                    from: 0
+                    to: 80
+                    stepSize: 5
+                    onValueChanged: Config.setNestedValue("settingsUi.overlayAppearance.scrimDim", value)
+                    StyledToolTip {
+                        text: Translation.tr("How dark the backdrop behind the Settings panel should be (0 = transparent, 80 = very dark)")
+                    }
+                }
+
+                ConfigSpinBox {
+                    icon: "opacity"
+                    text: Translation.tr("Panel background opacity (%)")
+                    value: Math.round((Config.options?.settingsUi?.overlayAppearance?.backgroundOpacity ?? 1.0) * 100)
+                    from: 20
+                    to: 100
+                    stepSize: 5
+                    onValueChanged: Config.setNestedValue("settingsUi.overlayAppearance.backgroundOpacity", value / 100)
+                    StyledToolTip {
+                        text: Translation.tr("Opacity of the Settings panel background. Lower values let the shell show through.")
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "blur_on"
+                    text: Translation.tr("Enhanced blur (aurora/angel only)")
+                    checked: Config.options?.settingsUi?.overlayAppearance?.enableBlur ?? false
+                    onCheckedChanged: Config.setNestedValue("settingsUi.overlayAppearance.enableBlur", checked)
+                    StyledToolTip {
+                        text: Translation.tr("Apply extra glass blur behind the Settings panel. Only visible with aurora or angel global style.")
+                    }
                 }
             }
 

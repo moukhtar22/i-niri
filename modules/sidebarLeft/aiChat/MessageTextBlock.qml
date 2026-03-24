@@ -24,7 +24,7 @@ ColumnLayout {
     property list<string> renderedLatexHashes: []
     property string renderedSegmentContent: ""
     property string shownText: ""
-    property bool fadeChunkSplitting: !forceDisableChunkSplitting && !editing && !/\n\|/.test(shownText) && Config.options.sidebar.ai.textFadeIn
+    property bool fadeChunkSplitting: !forceDisableChunkSplitting && !editing && !/\n\|/.test(shownText) && (Config.options?.sidebar?.ai?.textFadeIn ?? false)
 
     Layout.fillWidth: true
 
@@ -145,7 +145,7 @@ ColumnLayout {
                 }
             }
             Behavior on opacity {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
             }
 
             Layout.fillWidth: true

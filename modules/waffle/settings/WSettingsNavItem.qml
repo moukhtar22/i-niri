@@ -19,13 +19,13 @@ Button {
     background: Rectangle {
         radius: Looks.radius.medium
         color: {
-            if (root.selected) return Looks.colors.bg2
+            if (root.selected) return Looks.colors.bg2Hover
             if (root.down) return Looks.colors.bg2Active
             if (root.hovered) return Looks.colors.bg2Hover
             return "transparent"
         }
         
-        // Selection indicator
+        // Selection indicator - Win11 pill style
         Rectangle {
             visible: root.selected
             anchors {
@@ -33,29 +33,39 @@ Button {
                 verticalCenter: parent.verticalCenter
             }
             width: 3
-            height: 16
-            radius: 2
+            height: root.down ? 8 : 16
+            radius: 1.5
             color: Looks.colors.accent
+            
+            Behavior on height {
+                animation: NumberAnimation { duration: Looks.transition.enabled ? Looks.transition.duration.fast : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.standard }
+            }
         }
-        
+
         Behavior on color {
-            animation: Looks.transition.color.createObject(this)
+            animation: ColorAnimation { duration: Looks.transition.enabled ? 70 : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.standard }
         }
     }
     
     contentItem: RowLayout {
-        spacing: 12
+        spacing: root.expanded ? 12 : 0
         
         Item {
-            implicitWidth: 24
-            implicitHeight: 24
-            Layout.leftMargin: root.expanded ? 8 : 12
+            implicitWidth: 20
+            implicitHeight: 20
+            Layout.leftMargin: root.expanded ? 14 : 0
+            Layout.fillWidth: !root.expanded
+            Layout.alignment: root.expanded ? Qt.AlignVCenter : Qt.AlignCenter
             
             FluentIcon {
                 anchors.centerIn: parent
                 icon: root.navIcon
-                implicitSize: 20
-                color: root.selected ? Looks.colors.accent : Looks.colors.fg
+                implicitSize: root.expanded ? 18 : 20
+                color: root.selected ? Looks.colors.fg : Looks.colors.subfg
+                
+                Behavior on color {
+                    animation: ColorAnimation { duration: Looks.transition.enabled ? 70 : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.standard }
+                }
             }
         }
         
@@ -63,10 +73,19 @@ Button {
             visible: root.expanded
             Layout.fillWidth: true
             text: root.text
-            font.pixelSize: Looks.font.pixelSize.normal
+            font.pixelSize: Looks.font.pixelSize.large
             font.weight: root.selected ? Looks.font.weight.regular : Looks.font.weight.thin
-            color: Looks.colors.fg
+            color: root.selected ? Looks.colors.fg : Looks.colors.subfg
             elide: Text.ElideRight
+            
+            Behavior on color {
+                animation: ColorAnimation { duration: Looks.transition.enabled ? 70 : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.standard }
+            }
         }
+    }
+    
+    WToolTip {
+        visible: !root.expanded && root.hovered
+        text: root.text
     }
 }

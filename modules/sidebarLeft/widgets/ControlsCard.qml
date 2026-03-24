@@ -64,15 +64,17 @@ Item {
             width: 1
             height: 24
             radius: 0.5
-            color: Appearance.colors.colOutlineVariant
+            color: Appearance.angelEverywhere ? Appearance.angel.colBorderSubtle
+                : Appearance.inirEverywhere ? Appearance.inir.colBorderSubtle
+                : Appearance.colors.colOutlineVariant
             opacity: 0.5
             Layout.leftMargin: 8
             Layout.rightMargin: 8
         }
 
         // Actions
-        Action { btnIcon: "wifi"; tip: Translation.tr("Network"); onClicked: Quickshell.execDetached(["/usr/bin/nm-connection-editor"]); visible: Config.options?.sidebar?.widgets?.controlsCard?.showNetwork ?? true }
-        Action { btnIcon: "bluetooth"; tip: Translation.tr("Bluetooth"); onClicked: Quickshell.execDetached(["/usr/bin/blueman-manager"]); visible: Config.options?.sidebar?.widgets?.controlsCard?.showBluetooth ?? true }
+        Action { btnIcon: "wifi"; tip: Translation.tr("Network"); onClicked: function() { GlobalStates.sidebarLeftOpen = false; GlobalStates.requestWifiDialog = true }; visible: Config.options?.sidebar?.widgets?.controlsCard?.showNetwork ?? true }
+        Action { btnIcon: "bluetooth"; tip: Translation.tr("Bluetooth"); onClicked: function() { GlobalStates.sidebarLeftOpen = false; GlobalStates.requestBluetoothDialog = true }; visible: Config.options?.sidebar?.widgets?.controlsCard?.showBluetooth ?? true }
         Action { btnIcon: "settings"; tip: Translation.tr("Settings"); onClicked: root.openSettings(); visible: Config.options?.sidebar?.widgets?.controlsCard?.showSettings ?? true }
         Action { btnIcon: "lock"; tip: Translation.tr("Lock"); onClicked: Session.lock(); visible: Config.options?.sidebar?.widgets?.controlsCard?.showLock ?? true }
 
@@ -86,18 +88,21 @@ Item {
 
         implicitWidth: 40
         implicitHeight: 40
-        buttonRadius: Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.full
+        buttonRadius: Appearance.angelEverywhere ? Appearance.angel.roundingSmall
+            : Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.full
         colBackground: "transparent"
-        colBackgroundHover: Appearance.inirEverywhere ? Appearance.inir.colLayer1Hover
+        colBackgroundHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
+            : Appearance.inirEverywhere ? Appearance.inir.colLayer1Hover
             : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover
             : Appearance.colors.colLayer1Hover
-        colRipple: Appearance.inirEverywhere ? Appearance.inir.colLayer1Active
+        colRipple: Appearance.angelEverywhere ? Appearance.angel.colGlassCardActive
+            : Appearance.inirEverywhere ? Appearance.inir.colLayer1Active
             : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceActive
             : Appearance.colors.colLayer1Active
 
         Behavior on colBackground {
             enabled: Appearance.animationsEnabled
-            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+            animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
         }
 
         contentItem: Item {
@@ -107,14 +112,16 @@ Item {
                 iconSize: 22
                 fill: active ? 1 : 0
                 color: active
-                    ? (Appearance.inirEverywhere ? Appearance.inir.colPrimary
+                    ? (Appearance.angelEverywhere ? Appearance.angel.colPrimary
+                        : Appearance.inirEverywhere ? Appearance.inir.colPrimary
                         : Appearance.auroraEverywhere ? Appearance.m3colors.m3primary
                         : Appearance.colors.colPrimary)
-                    : (Appearance.inirEverywhere ? Appearance.inir.colText
+                    : (Appearance.angelEverywhere ? Appearance.angel.colText
+                        : Appearance.inirEverywhere ? Appearance.inir.colText
                         : Appearance.auroraEverywhere ? Appearance.m3colors.m3onSurface
                         : Appearance.colors.colOnLayer0)
                 Behavior on fill { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveFast.duration } }
-                Behavior on color { enabled: Appearance.animationsEnabled; animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this) }
+                Behavior on color { enabled: Appearance.animationsEnabled; animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
             }
         }
 
@@ -127,11 +134,14 @@ Item {
 
         implicitWidth: 40
         implicitHeight: 40
-        buttonRadius: Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.full
+        buttonRadius: Appearance.angelEverywhere ? Appearance.angel.roundingSmall
+            : Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.full
         colBackground: "transparent"
-        colBackgroundHover: Appearance.inirEverywhere ? Appearance.inir.colLayer1Hover 
+        colBackgroundHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
+            : Appearance.inirEverywhere ? Appearance.inir.colLayer1Hover 
             : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface : Appearance.colors.colLayer1Hover
-        colRipple: Appearance.inirEverywhere ? Appearance.inir.colLayer1Active 
+        colRipple: Appearance.angelEverywhere ? Appearance.angel.colGlassCardActive
+            : Appearance.inirEverywhere ? Appearance.inir.colLayer1Active 
             : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceActive : Appearance.colors.colLayer1Active
 
         contentItem: Item {

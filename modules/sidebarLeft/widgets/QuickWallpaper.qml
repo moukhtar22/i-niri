@@ -99,10 +99,12 @@ Item {
                     implicitHeight: 28
                     buttonRadius: Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.full
                     colBackground: "transparent"
-                    colBackgroundHover: Appearance.inirEverywhere ? Appearance.inir.colLayer2Hover 
+                    colBackgroundHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
+                        : Appearance.inirEverywhere ? Appearance.inir.colLayer2Hover 
                         : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface 
                         : Appearance.colors.colLayer2Hover
-                    colRipple: Appearance.inirEverywhere ? Appearance.inir.colLayer2Active 
+                    colRipple: Appearance.angelEverywhere ? Appearance.angel.colGlassCardActive
+                        : Appearance.inirEverywhere ? Appearance.inir.colLayer2Active 
                         : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceActive 
                         : Appearance.colors.colLayer2Active
                     onClicked: {
@@ -126,10 +128,12 @@ Item {
                     implicitHeight: 28
                     buttonRadius: Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.full
                     colBackground: "transparent"
-                    colBackgroundHover: Appearance.inirEverywhere ? Appearance.inir.colLayer2Hover 
+                    colBackgroundHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
+                        : Appearance.inirEverywhere ? Appearance.inir.colLayer2Hover 
                         : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface 
                         : Appearance.colors.colLayer2Hover
-                    colRipple: Appearance.inirEverywhere ? Appearance.inir.colLayer2Active 
+                    colRipple: Appearance.angelEverywhere ? Appearance.angel.colGlassCardActive
+                        : Appearance.inirEverywhere ? Appearance.inir.colLayer2Active 
                         : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceActive 
                         : Appearance.colors.colLayer2Active
                     onClicked: GlobalStates.wallpaperSelectorOpen = true
@@ -200,7 +204,7 @@ Item {
                         required property int index
                         required property string modelData
                         readonly property string filePath: modelData
-                        readonly property bool isCurrentWallpaper: (Config.options?.background?.wallpaperPath ?? "") === filePath
+                        readonly property bool isCurrentWallpaper: Wallpapers.isCurrentWallpaperPath(filePath, "main", "")
                         readonly property bool isHovered: mouseArea.containsMouse
 
                         width: root.itemWidth
@@ -217,7 +221,7 @@ Item {
 
                             Behavior on border.width {
                                 enabled: Appearance.animationsEnabled
-                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                             }
                         }
 
@@ -253,7 +257,7 @@ Item {
                                 color: wallpaperDelegate.isHovered && !wallpaperDelegate.isCurrentWallpaper
                                     ? ColorUtils.transparentize("black", 0.7)
                                     : "transparent"
-                                Behavior on color { animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this) }
+                                Behavior on color { animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
                             }
 
                             // Check icon for selected
@@ -268,7 +272,7 @@ Item {
 
                                 Behavior on scale {
                                     enabled: Appearance.animationsEnabled
-                                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                    animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                                 }
 
                                 MaterialSymbol {

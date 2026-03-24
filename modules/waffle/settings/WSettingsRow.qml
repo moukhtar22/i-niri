@@ -24,42 +24,18 @@ Item {
     signal clicked()
     
     Layout.fillWidth: true
-    implicitHeight: Math.max(48, contentRow.implicitHeight + 16)
+    Layout.leftMargin: 16
+    Layout.rightMargin: 16
+    implicitHeight: Math.max(48, contentRow.implicitHeight + 14)
     
     // Highlight animation for search focus
-    SequentialAnimation {
-        id: highlightAnim
-        running: false
-        loops: 2
-        
-        ParallelAnimation {
-            NumberAnimation {
-                target: highlightOverlay
-                property: "opacity"
-                to: 0.15
-                duration: 150
-            }
-            NumberAnimation {
-                target: root
-                property: "scale"
-                to: 1.01
-                duration: 150
-            }
-        }
-        ParallelAnimation {
-            NumberAnimation {
-                target: highlightOverlay
-                property: "opacity"
-                to: 0
-                duration: 150
-            }
-            NumberAnimation {
-                target: root
-                property: "scale"
-                to: 1.0
-                duration: 150
-            }
-        }
+    Behavior on opacity {
+        enabled: Looks.transition?.opacity !== undefined
+        animation: NumberAnimation { duration: Looks.transition.enabled ? Looks.transition.duration.normal : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.standard }
+    }
+    Behavior on scale {
+        enabled: Looks.transition?.resize !== undefined
+        animation: NumberAnimation { duration: Looks.transition.enabled ? Looks.transition.duration.medium : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.standard }
     }
     
     function _findSettingsContext(): var {
@@ -149,7 +125,7 @@ Item {
             : "transparent"
         
         Behavior on color {
-            animation: Looks.transition.color.createObject(this)
+            animation: ColorAnimation { duration: Looks.transition.enabled ? 70 : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.standard }
         }
     }
     
@@ -161,6 +137,13 @@ Item {
         color: Looks.colors.accent
         opacity: 0
     }
+
+    SequentialAnimation {
+        id: highlightAnim
+        NumberAnimation { target: highlightOverlay; property: "opacity"; to: 0.18; duration: 200; easing.type: Easing.OutCubic }
+        PauseAnimation { duration: 600 }
+        NumberAnimation { target: highlightOverlay; property: "opacity"; to: 0; duration: 400; easing.type: Easing.InCubic }
+    }
     
     MouseArea {
         id: mouseArea
@@ -169,6 +152,20 @@ Item {
         hoverEnabled: true
         cursorShape: root.clickable ? Qt.PointingHandCursor : Qt.ArrowCursor
         onClicked: root.clicked()
+    }
+    
+    // Bottom separator
+    Rectangle {
+        anchors {
+            bottom: parent.bottom
+            left: parent.left
+            right: parent.right
+            leftMargin: root.icon !== "" ? 40 : 12
+            rightMargin: 12
+        }
+        height: 1
+        color: Looks.colors.bg2Border
+        opacity: 0.35
     }
     
     RowLayout {
@@ -183,8 +180,8 @@ Item {
         FluentIcon {
             visible: root.icon !== ""
             icon: root.icon
-            implicitSize: 20
-            color: Looks.colors.fg
+            implicitSize: 16
+            color: Looks.colors.subfg
         }
         
         ColumnLayout {

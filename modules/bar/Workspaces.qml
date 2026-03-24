@@ -181,9 +181,10 @@ Item {
             wheelStepCounter = 0
             const deltaX = event.angleDelta.x
             const deltaY = event.angleDelta.y
-            const delta = deltaX !== 0 ? deltaX : -deltaY
+            let delta = deltaX !== 0 ? deltaX : -deltaY
             if (delta === 0) return
             
+            if (wsConfig.invertScroll ?? false) delta = -delta
             const direction = delta > 0 ? 1 : -1
 
             if (CompositorService.isNiri) {
@@ -253,31 +254,33 @@ Item {
                 z: 1
                 implicitWidth: workspaceButtonWidth
                 implicitHeight: workspaceButtonWidth
-                radius: (width / 2)
+                radius: Appearance.angelEverywhere ? Appearance.angel.roundingSmall : (width / 2)
                 property var previousOccupied: (workspaceOccupied[index-1] && !(!activeWindow?.activated && currentWorkspaceNumber === index))
                 property var rightOccupied: (workspaceOccupied[index+1] && !(!activeWindow?.activated && currentWorkspaceNumber === index+2))
-                property var radiusPrev: previousOccupied ? 0 : (width / 2)
-                property var radiusNext: rightOccupied ? 0 : (width / 2)
+                property var radiusPrev: Appearance.angelEverywhere ? Appearance.angel.roundingSmall : (previousOccupied ? 0 : (width / 2))
+                property var radiusNext: Appearance.angelEverywhere ? Appearance.angel.roundingSmall : (rightOccupied ? 0 : (width / 2))
 
                 topLeftRadius: radiusPrev
                 bottomLeftRadius: root.vertical ? radiusNext : radiusPrev
                 topRightRadius: root.vertical ? radiusPrev : radiusNext
                 bottomRightRadius: radiusNext
                 
-                color: Appearance.auroraEverywhere 
+                color: Appearance.angelEverywhere
+                    ? Appearance.angel.colGlassCard
+                    : Appearance.auroraEverywhere 
                     ? Appearance.aurora.colSubSurface 
                     : ColorUtils.transparentize(Appearance.m3colors.m3secondaryContainer, 0.4)
                 opacity: (workspaceOccupied[index] && !(!activeWindow?.activated && currentWorkspaceNumber === index+1)) ? 1 : 0
 
                 Behavior on opacity {
-                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
                 }
                 Behavior on radiusPrev {
-                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
                 }
 
                 Behavior on radiusNext {
-                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
                 }
 
             }
@@ -291,8 +294,8 @@ Item {
         z: 2
         visible: !root.columnMode
         // Make active ws indicator, which has a brighter color, smaller to look like it is of the same size as ws occupied highlight
-        radius: Appearance.rounding.full
-        color: Appearance.colors.colPrimary
+        radius: Appearance.angelEverywhere ? Appearance.angel.roundingSmall : Appearance.rounding.full
+        color: Appearance.angelEverywhere ? Appearance.angel.colPrimary : Appearance.colors.colPrimary
 
         anchors {
             verticalCenter: vertical ? undefined : parent.verticalCenter
@@ -391,7 +394,7 @@ Item {
                                 Appearance.colors.colOnLayer1Inactive)
 
                         Behavior on opacity {
-                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                         }
                     }
                     Rectangle { // Dot instead of ws number
@@ -411,7 +414,7 @@ Item {
                                 Appearance.colors.colOnLayer1Inactive)
 
                         Behavior on opacity {
-                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                         }
                     }
                     Item { // Main app icon
@@ -435,16 +438,16 @@ Item {
                             implicitSize: (!root.showNumbers && wsConfig.showAppIcons) ? workspaceIconSize : workspaceIconSizeShrinked
 
                             Behavior on opacity {
-                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                             }
                             Behavior on anchors.bottomMargin {
-                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                             }
                             Behavior on anchors.rightMargin {
-                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                             }
                             Behavior on implicitSize {
-                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                             }
                         }
 
@@ -510,10 +513,10 @@ Item {
                     : ColorUtils.transparentize(Appearance.m3colors.m3secondaryContainer, 0.4)
 
                 Behavior on radiusPrev {
-                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
                 }
                 Behavior on radiusNext {
-                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
                 }
             }
         }
@@ -523,8 +526,8 @@ Item {
     Rectangle {
         z: 2
         visible: root.columnMode && root.currentWindowIndex >= 0
-        radius: Appearance.rounding.full
-        color: Appearance.colors.colPrimary
+        radius: Appearance.angelEverywhere ? Appearance.angel.roundingSmall : Appearance.rounding.full
+        color: Appearance.angelEverywhere ? Appearance.angel.colPrimary : Appearance.colors.colPrimary
 
         anchors {
             verticalCenter: vertical ? undefined : parent.verticalCenter
@@ -595,7 +598,7 @@ Item {
                         color: parent.dotColor
 
                         Behavior on opacity {
-                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                         }
                     }
 
@@ -614,7 +617,7 @@ Item {
                             implicitSize: root.workspaceIconSize
 
                             Behavior on opacity {
-                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                             }
                         }
 

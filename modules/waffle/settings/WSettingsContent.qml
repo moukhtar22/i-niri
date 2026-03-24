@@ -20,7 +20,7 @@ Item {
     property int currentPage: 0
     property string searchText: ""
     property var searchResults: []
-    property bool navExpanded: width > 800
+    property bool navExpanded: width > 760
     
     // Complete search index with all individual options + targetLabel for spotlight
     property var searchIndex: [
@@ -284,11 +284,11 @@ Item {
         // Navigation sidebar
         Rectangle {
             Layout.fillHeight: true
-            Layout.preferredWidth: root.navExpanded ? 280 : 64
+            Layout.preferredWidth: root.navExpanded ? 240 : 56
             color: Looks.colors.bgPanelFooterBase
             
             Behavior on Layout.preferredWidth {
-                NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
+                animation: NumberAnimation { duration: Looks.transition.enabled ? Looks.transition.duration.medium : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.standard }
             }
             
             ColumnLayout {
@@ -302,59 +302,87 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.bottomMargin: 8
-                    spacing: 12
+                    spacing: 10
                     visible: root.navExpanded
-                    
-                    Rectangle {
-                        width: 32
-                        height: 32
-                        radius: Looks.radius.medium
-                        color: Looks.colors.accent
-                        
-                        FluentIcon {
+
+                    Item {
+                        implicitWidth: 34
+                        implicitHeight: 34
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: width / 2
+                            color: Looks.colors.bg1
+                            border.width: 1
+                            border.color: Looks.colors.accent
+                        }
+
+                        WUserAvatar {
                             anchors.centerIn: parent
-                            icon: "settings"
-                            implicitSize: 18
-                            color: Looks.colors.accentFg
+                            sourceSize: Qt.size(30, 30)
                         }
                     }
-                    
-                    WText {
+
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        text: Translation.tr("Settings")
-                        font.pixelSize: Looks.font.pixelSize.larger
-                        font.weight: Font.DemiBold
+                        spacing: 0
+
+                        WText {
+                            text: Translation.tr("Settings")
+                            font.pixelSize: Looks.font.pixelSize.larger
+                            font.weight: Looks.font.weight.strong
+                            color: Looks.colors.fg
+                        }
+
+                        WText {
+                            text: SystemInfo.displayName || SystemInfo.username
+                            font.pixelSize: Looks.font.pixelSize.small
+                            color: Looks.colors.subfg
+                            elide: Text.ElideRight
+                        }
                     }
-                    
+
                     WBorderlessButton {
-                        implicitWidth: 32
-                        implicitHeight: 32
+                        implicitWidth: 28
+                        implicitHeight: 28
+                        onClicked: Quickshell.execDetached(["/usr/bin/qs", "-c", "ii", "ipc", "call", "lock", "activate"])
+
+                        contentItem: FluentIcon {
+                            anchors.centerIn: parent
+                            icon: "lock-closed"
+                            implicitSize: 14
+                            color: Looks.colors.subfg
+                        }
+                    }
+
+                    WBorderlessButton {
+                        implicitWidth: 28
+                        implicitHeight: 28
                         onClicked: root.closeRequested()
                         
                         contentItem: FluentIcon {
                             anchors.centerIn: parent
                             icon: "dismiss"
-                            implicitSize: 16
-                            color: Looks.colors.fg
+                            implicitSize: 14
+                            color: Looks.colors.subfg
                         }
                     }
                 }
                 
-                // Header icon (collapsed)
-                Rectangle {
+                // Header icon (collapsed) — larger, with accent tint
+                Item {
                     visible: !root.navExpanded
-                    Layout.preferredWidth: 40
-                    Layout.preferredHeight: 40
+                    Layout.preferredWidth: 32
+                    Layout.preferredHeight: 32
                     Layout.alignment: Qt.AlignHCenter
                     Layout.bottomMargin: 8
-                    radius: Looks.radius.medium
-                    color: Looks.colors.accent
                     
                     FluentIcon {
                         anchors.centerIn: parent
                         icon: "settings"
-                        implicitSize: 20
-                        color: Looks.colors.accentFg
+                        implicitSize: 22
+                        color: Looks.colors.accent
+                        opacity: 0.8
                     }
                 }
                 
@@ -369,9 +397,9 @@ Item {
                     border.width: searchInput.activeFocus ? 2 : 1
                     border.color: searchInput.activeFocus ? Looks.colors.accent : Looks.colors.bg2Border
                     
-                    Behavior on border.color {
-                        ColorAnimation { duration: 120 }
-                    }
+                      Behavior on border.color {
+                          animation: ColorAnimation { duration: Looks.transition.enabled ? 70 : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.standard }
+                      }
                     
                     RowLayout {
                         anchors {
@@ -404,6 +432,10 @@ Item {
                                 
                                 onTextChanged: {
                                     root.searchText = text;
+                                    if (text.length > 0 && !pageStack.preloadRequested) {
+                                        pageStack.preloadRequested = true
+                                        preloadTimer.start()
+                                    }
                                     root.recomputeSearchResults();
                                 }
                                 
@@ -478,7 +510,7 @@ Item {
                     border.width: 1
                     border.color: Looks.colors.bg2Border
                     
-                    layer.enabled: true
+                    layer.enabled: Appearance.effectsEnabled
                     layer.effect: DropShadow {
                         color: Looks.colors.shadow
                         radius: 8
@@ -530,9 +562,9 @@ Item {
                                 return "transparent";
                             }
                             
-                            Behavior on color {
-                                ColorAnimation { duration: 80 }
-                            }
+                              Behavior on color {
+                                  animation: ColorAnimation { duration: Looks.transition.enabled ? 70 : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.standard }
+                              }
                             
                             MouseArea {
                                 id: resultMouse
@@ -602,9 +634,9 @@ Item {
                                         : Looks.colors.subfg
                                     opacity: resultMouse.containsMouse || resultDelegate.ListView.isCurrentItem ? 1 : 0
                                     
-                                    Behavior on opacity {
-                                        NumberAnimation { duration: 80 }
-                                    }
+                                      Behavior on opacity {
+                                          animation: NumberAnimation { duration: Looks.transition.enabled ? Looks.transition.duration.normal : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.standard }
+                                      }
                                 }
                             }
                         }
@@ -650,7 +682,7 @@ Item {
                     ColumnLayout {
                         id: navColumn
                         width: parent.width
-                        spacing: 2
+                        spacing: 4
                         
                         Repeater {
                             model: root.pages
@@ -674,21 +706,21 @@ Item {
                 // Expand/collapse button
                 WBorderlessButton {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 40
+                    Layout.preferredHeight: 36
                     
                     contentItem: RowLayout {
-                        spacing: 12
+                        spacing: 10
                         
                         Item {
-                            implicitWidth: 24
-                            implicitHeight: 24
-                            Layout.leftMargin: root.navExpanded ? 8 : 12
+                            implicitWidth: 20
+                            implicitHeight: 20
+                            Layout.leftMargin: root.navExpanded ? 12 : 14
                             
                             FluentIcon {
                                 anchors.centerIn: parent
                                 icon: root.navExpanded ? "panel-left-contract" : "panel-left-expand"
-                                implicitSize: 20
-                                color: Looks.colors.fg
+                                implicitSize: 16
+                                color: Looks.colors.subfg
                             }
                         }
                         
@@ -697,6 +729,7 @@ Item {
                             Layout.fillWidth: true
                             text: Translation.tr("Collapse")
                             font.pixelSize: Looks.font.pixelSize.normal
+                            color: Looks.colors.subfg
                         }
                     }
                     
@@ -725,6 +758,7 @@ Item {
                 
                 property var visitedPages: ({})
                 property bool allPagesLoaded: false
+                property bool preloadRequested: false
                 
                 Connections {
                     target: root
@@ -736,8 +770,6 @@ Item {
                 
                 Component.onCompleted: {
                     visitedPages[root.currentPage] = true
-                    // Pre-load all pages async for search registration
-                    preloadTimer.start()
                 }
                 
                 // Timer to pre-load pages one by one
@@ -775,9 +807,9 @@ Item {
                         visible: index === root.currentPage && status === Loader.Ready
                         opacity: visible ? 1 : 0
                         
-                        Behavior on opacity {
-                            NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
-                        }
+                          Behavior on opacity {
+                              animation: NumberAnimation { duration: Looks.transition.enabled ? Looks.transition.duration.normal : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.standard }
+                          }
                     }
                 }
             }
@@ -789,6 +821,10 @@ Item {
         sequences: [StandardKey.Find]
         onActivated: {
             if (!root.navExpanded) root.navExpanded = true;
+            if (!pageStack.preloadRequested) {
+                pageStack.preloadRequested = true
+                preloadTimer.start()
+            }
             searchInput.forceActiveFocus();
         }
     }

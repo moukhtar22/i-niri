@@ -92,6 +92,10 @@ Scope {
         }
         Cliphist.wipe()
         showClearConfirmation = false
+        // Reset model and count immediately so the UI reflects the wipe
+        // (the async refresh would miss because the panel closes below)
+        filteredClipboardModel.clear()
+        totalCount = 0
         GlobalStates.clipboardOpen = false
     }
 
@@ -152,7 +156,27 @@ Scope {
 
     PanelWindow {
         id: window
-        visible: GlobalStates.clipboardOpen
+
+        Component.onCompleted: visible = GlobalStates.clipboardOpen
+
+        Connections {
+            target: GlobalStates
+            function onClipboardOpenChanged() {
+                if (GlobalStates.clipboardOpen) {
+                    _closeTimer.stop()
+                    window.visible = true
+                } else {
+                    _closeTimer.restart()
+                }
+            }
+        }
+
+        Timer {
+            id: _closeTimer
+            interval: 180
+            onTriggered: window.visible = false
+        }
+
         exclusionMode: ExclusionMode.Ignore
         color: "transparent"
         WlrLayershell.namespace: "quickshell:clipboardPanel"
@@ -222,10 +246,24 @@ Scope {
             }
         }
 
+        // Scrim backdrop for glass styles
+        Rectangle {
+            anchors.fill: parent
+            color: Appearance.colors.colScrim
+            visible: Appearance.auroraEverywhere
+            opacity: GlobalStates.clipboardOpen ? 1 : 0
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Appearance.calcEffectiveDuration(200)
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
+
         StyledRectangularShadow {
             target: panelBackground
             radius: panelBackground.radius
-            visible: !Appearance.inirEverywhere && !Appearance.auroraEverywhere
+            visible: Appearance.angelEverywhere || (!Appearance.inirEverywhere && !Appearance.auroraEverywhere)
         }
 
         // Click outside the panel to close
@@ -244,19 +282,28 @@ Scope {
             }
         }
 
-        Rectangle {
+        GlassBackground {
             id: panelBackground
             anchors.centerIn: parent
             width: panelWidth
             height: Math.min(contentColumn.implicitHeight, panelMaxHeight)
-            color: Appearance.inirEverywhere ? Appearance.inir.colLayer1
-                 : Appearance.auroraEverywhere ? Appearance.colors.colLayer2Base
-                 : Appearance.colors.colLayer1
-            border.width: Appearance.auroraEverywhere ? 1 : 1
-            border.color: Appearance.inirEverywhere ? Appearance.inir.colBorder 
+            fallbackColor: Appearance.colors.colLayer1
+            inirColor: Appearance.inir.colLayer1
+            auroraTransparency: Appearance.angelEverywhere
+                ? Appearance.angel.panelTransparentize
+                : Math.max(0.12, Appearance.aurora.subSurfaceTransparentize - 0.14)
+            screenX: (window.screen?.width ?? 1920) / 2 - width / 2
+            screenY: (window.screen?.height ?? 1080) / 2 - height / 2
+            screenWidth: window.screen?.width ?? 1920
+            screenHeight: window.screen?.height ?? 1080
+            border.width: Appearance.angelEverywhere ? Appearance.angel.panelBorderWidth
+                : Appearance.auroraEverywhere ? 1 : 1
+            border.color: Appearance.angelEverywhere ? Appearance.angel.colPanelBorder
+                : Appearance.inirEverywhere ? Appearance.inir.colBorder 
                 : Appearance.auroraEverywhere ? Appearance.aurora.colTooltipBorder 
                 : Appearance.colors.colOutlineVariant
-            radius: Appearance.inirEverywhere ? Appearance.inir.roundingLarge : Appearance.rounding.screenRounding
+            radius: Appearance.angelEverywhere ? Appearance.angel.roundingLarge
+                : Appearance.inirEverywhere ? Appearance.inir.roundingLarge : Appearance.rounding.screenRounding
             
             // Entry animation
             opacity: GlobalStates.clipboardOpen ? 1 : 0
@@ -287,7 +334,7 @@ Scope {
                     id: headerToolbar
                     Layout.fillWidth: true
                     enableShadow: false
-                    transparent: Appearance.auroraEverywhere
+                    transparent: Appearance.angelEverywhere || Appearance.auroraEverywhere
 
                     MaterialSymbol {
                         text: "content_paste"
@@ -401,9 +448,14 @@ Scope {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     implicitHeight: Math.min(480, Math.max(160, listView.contentHeight + 20))
-                    radius: Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
-                    color: Appearance.inirEverywhere ? Appearance.inir.colLayer2
-                        : Appearance.auroraEverywhere ? Appearance.colors.colLayer2Base
+                    radius: Appearance.angelEverywhere ? Appearance.angel.roundingNormal
+                        : Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
+                    color: Appearance.angelEverywhere
+                        ? ColorUtils.transparentize(Appearance.angel.colGlassCard, 0.76)
+                        : Appearance.inirEverywhere ? Appearance.inir.colLayer2
+                        : Appearance.auroraEverywhere
+                        ? ColorUtils.transparentize(Appearance.colors.colLayer0Base,
+                            Math.max(0.12, Appearance.aurora.subSurfaceTransparentize - 0.14))
                         : Appearance.colors.colLayer2
                     clip: true
 
@@ -454,6 +506,10 @@ Scope {
                                 }
                             }
                             query: root.searchText
+
+                            onHoveredChanged: {
+                                if (hovered) listView.currentIndex = index
+                            }
                         }
 
                         function moveNext() {
@@ -495,7 +551,7 @@ Scope {
                     clip: true
 
                     Behavior on Layout.preferredHeight {
-                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                     }
 
                     Rectangle {
@@ -504,14 +560,19 @@ Scope {
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
                         implicitHeight: hintsColumn.implicitHeight + 16
-                        radius: Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
-                        color: Appearance.inirEverywhere ? Appearance.inir.colLayer2 
-                            : Appearance.auroraEverywhere ? Appearance.colors.colLayer2Base
+                        radius: Appearance.angelEverywhere ? Appearance.angel.roundingNormal
+                            : Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
+                        color: Appearance.angelEverywhere
+                            ? ColorUtils.transparentize(Appearance.angel.colGlassCard, 0.76)
+                            : Appearance.inirEverywhere ? Appearance.inir.colLayer2
+                            : Appearance.auroraEverywhere
+                            ? ColorUtils.transparentize(Appearance.colors.colLayer0Base,
+                                Math.max(0.12, Appearance.aurora.subSurfaceTransparentize - 0.14))
                             : Appearance.colors.colPrimaryContainer
                         opacity: root.showKeyboardHints ? 1 : 0
 
                         Behavior on opacity {
-                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                         }
 
                         ColumnLayout {
@@ -524,7 +585,8 @@ Scope {
                                 Layout.fillWidth: true
                                 text: Translation.tr("↑/↓, J/K: Navigate • Enter: Paste")
                                 font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.inirEverywhere ? Appearance.inir.colText 
+                                color: Appearance.angelEverywhere ? Appearance.angel.colText
+                                    : Appearance.inirEverywhere ? Appearance.inir.colText 
                                     : Appearance.auroraEverywhere ? Appearance.m3colors.m3onSurface 
                                     : Appearance.colors.colOnPrimaryContainer
                                 elide: Text.ElideRight
@@ -534,7 +596,8 @@ Scope {
                                 Layout.fillWidth: true
                                 text: Translation.tr("Ctrl+C: Copy • Del: Delete • Shift+Del: Clear all • Esc: Close")
                                 font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.inirEverywhere ? Appearance.inir.colText 
+                                color: Appearance.angelEverywhere ? Appearance.angel.colText
+                                    : Appearance.inirEverywhere ? Appearance.inir.colText 
                                     : Appearance.auroraEverywhere ? Appearance.m3colors.m3onSurface 
                                     : Appearance.colors.colOnPrimaryContainer
                                 elide: Text.ElideRight

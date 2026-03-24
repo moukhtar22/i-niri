@@ -16,13 +16,24 @@ AbstractBackgroundWidget {
     implicitHeight: contentColumn.implicitHeight
     implicitWidth: contentColumn.implicitWidth
 
-    property string clockStyle: Config.options.background.widgets.clock.style
-    property bool forceCenter: (GlobalStates.screenLocked && Config.options.lock.centerClock)
+    property string clockStyle: Config.options?.background?.widgets?.clock?.style ?? "cookie"
+    property bool forceCenter: (GlobalStates.screenLocked && (Config.options?.lock?.centerClock ?? false))
     property bool wallpaperSafetyTriggered: false
     needsColText: clockStyle === "digital"
-    x: forceCenter ? ((root.screenWidth - root.width) / 2) : targetX
-    y: forceCenter ? ((root.screenHeight - root.height) / 2) : targetY
     visibleWhenLocked: true
+
+    Binding {
+        target: root
+        property: "x"
+        value: (root.screenWidth - root.width) / 2
+        when: root.forceCenter
+    }
+    Binding {
+        target: root
+        property: "y"
+        value: (root.screenHeight - root.height) / 2
+        when: root.forceCenter
+    }
 
     property var textHorizontalAlignment: {
         if (root.forceCenter)
@@ -36,7 +47,7 @@ AbstractBackgroundWidget {
 
     // Per-clock dim factor (0..1), independent from wallpaper dim
     property real dimFactor: {
-        const v = Config.options.background.widgets.clock.dim;
+        const v = Config.options?.background?.widgets?.clock?.dim ?? 0;
         const n = Number(v);
         return Math.max(0, Math.min(1, Number.isFinite(n) ? n / 100 : 0));
     }
@@ -62,7 +73,8 @@ AbstractBackgroundWidget {
                 }
                 FadeLoader {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    shown: Config.options.background.widgets.clock.quote.enable && Config.options.background.widgets.clock.quote.text !== ""
+                    shown: (Config.options?.background?.widgets?.clock?.quote?.enable ?? false)
+                        && (Config.options?.background?.widgets?.clock?.quote?.text ?? "") !== ""
                     sourceComponent: CookieQuote {}
                 }
             }
@@ -86,7 +98,8 @@ AbstractBackgroundWidget {
                 }
                 StyledText {
                     // Somehow gets fucked up if made a ClockText???
-                    visible: Config.options.background.widgets.clock.quote.enable && Config.options.background.widgets.clock.quote.text.length > 0
+                    visible: (Config.options?.background?.widgets?.clock?.quote?.enable ?? false)
+                        && (Config.options?.background?.widgets?.clock?.quote?.text ?? "").length > 0
                     Layout.fillWidth: true
                     horizontalAlignment: root.textHorizontalAlignment
                     font {
@@ -96,7 +109,7 @@ AbstractBackgroundWidget {
                     color: root.clockTextColor
                     style: Text.Raised
                     styleColor: Appearance.colors.colShadow
-                    text: Config.options.background.widgets.clock.quote.text
+                    text: Config.options?.background?.widgets?.clock?.quote?.text ?? ""
                 }
             }
         }
@@ -122,13 +135,13 @@ AbstractBackgroundWidget {
                 color: ColorUtils.transparentize(Appearance.colors.colSecondaryContainer, root.clockStyle === "cookie" ? 0 : 1)
 
                 Behavior on implicitWidth {
-                    animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
+                    animation: NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve }
                 }
                 Behavior on implicitHeight {
-                    animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
+                    animation: NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve }
                 }
                 Behavior on opacity {
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                 }
 
                 RowLayout {
@@ -147,7 +160,7 @@ AbstractBackgroundWidget {
                     }
                     ClockStatusText {
                         id: lockStatusText
-                        shown: GlobalStates.screenLocked && Config.options.lock.showLockedText
+                        shown: GlobalStates.screenLocked && (Config.options?.lock?.showLockedText ?? false)
                         statusIcon: "lock"
                         statusText: Translation.tr("Locked")
                     }
@@ -171,7 +184,7 @@ AbstractBackgroundWidget {
         color: root.clockTextColor
         style: Text.Raised
         styleColor: Appearance.colors.colShadow
-        animateChange: Config.options.background.widgets.clock.digital.animateChange
+        animateChange: Config.options?.background?.widgets?.clock?.digital?.animateChange ?? false
     }
     component ClockStatusText: Row {
         id: statusTextRow
@@ -186,7 +199,7 @@ AbstractBackgroundWidget {
         opacity: shown ? 1 : 0
         visible: opacity > 0
         Behavior on opacity {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
         }
         spacing: 4
         MaterialSymbol {

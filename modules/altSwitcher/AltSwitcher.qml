@@ -232,17 +232,22 @@ Scope {
 
     property bool _noUiRebuildPending: false
     
+    // Synchronous version for immediate use in noVisualUi mode
+    function rebuildNoUiSnapshotSync() {
+        const windows = NiriService.windows || []
+        const workspaces = NiriService.workspaces || {}
+        const mruIds = NiriService.mruWindowIds || []
+        root.noUiSnapshot = buildItemsFrom(windows, workspaces, mruIds)
+        root.noUiIndex = 0
+    }
+    
     function rebuildNoUiSnapshot() {
         if (_noUiRebuildPending) return
         _noUiRebuildPending = true
         
         Qt.callLater(function() {
             _noUiRebuildPending = false
-            const windows = NiriService.windows || []
-            const workspaces = NiriService.workspaces || {}
-            const mruIds = NiriService.mruWindowIds || []
-            root.noUiSnapshot = buildItemsFrom(windows, workspaces, mruIds)
-            root.noUiIndex = 0
+            rebuildNoUiSnapshotSync()
         })
     }
 
@@ -332,8 +337,7 @@ Scope {
         color: "transparent"
         WlrLayershell.namespace: "quickshell:altSwitcher"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
-
+        WlrLayershell.keyboardFocus: root.panelVisible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         anchors {
             top: true
             bottom: true
@@ -426,8 +430,12 @@ Scope {
                 visible: !root.compactStyle && !root.listStyle
                 z: 0
                 anchors.fill: parent
-                radius: Appearance.inirEverywhere ? Appearance.inir.roundingLarge : (Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1)
+                radius: Appearance.angelEverywhere ? Appearance.angel.roundingLarge
+                    : Appearance.inirEverywhere ? Appearance.inir.roundingLarge
+                    : (Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1)
                 color: {
+                    if (Appearance.angelEverywhere)
+                        return Appearance.angel.colGlassPopup
                     if (Appearance.inirEverywhere)
                         return Appearance.inir.colLayer0
                     if (Appearance.auroraEverywhere)
@@ -437,8 +445,10 @@ Scope {
                     const base = ColorUtils.mix(Appearance.colors.colLayer0, Qt.rgba(0, 0, 0, 1), 0.35)
                     return ColorUtils.applyAlpha(base, root.altBackgroundOpacity)
                 }
-                border.width: Appearance.inirEverywhere || Appearance.auroraEverywhere ? 1 : (root.altUseM3Layout ? 1 : 0)
-                border.color: Appearance.inirEverywhere ? Appearance.inir.colBorder 
+                border.width: Appearance.angelEverywhere ? Appearance.angel.panelBorderWidth
+                    : Appearance.inirEverywhere || Appearance.auroraEverywhere ? 1 : (root.altUseM3Layout ? 1 : 0)
+                border.color: Appearance.angelEverywhere ? Appearance.angel.colPanelBorder
+                    : Appearance.inirEverywhere ? Appearance.inir.colBorder 
                     : Appearance.auroraEverywhere ? Appearance.colors.colLayer0Border 
                     : Appearance.colors.colLayer0Border
             }
@@ -447,26 +457,30 @@ Scope {
                 id: compactBackground
                 visible: root.compactStyle
                 anchors.fill: parent
-                radius: Appearance.inirEverywhere ? Appearance.inir.roundingLarge : Appearance.rounding.large
-                color: Appearance.inirEverywhere ? Appearance.inir.colLayer2 
+                radius: Appearance.angelEverywhere ? Appearance.angel.roundingLarge
+                    : Appearance.inirEverywhere ? Appearance.inir.roundingLarge : Appearance.rounding.large
+                color: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
+                    : Appearance.inirEverywhere ? Appearance.inir.colLayer2 
                     : Appearance.auroraEverywhere ? Appearance.colors.colLayer1Base 
                     : Appearance.m3colors.m3surfaceContainerHigh
-                border.width: Appearance.inirEverywhere || Appearance.auroraEverywhere ? 1 : 0
-                border.color: Appearance.inirEverywhere ? Appearance.inir.colBorder 
+                border.width: Appearance.angelEverywhere ? Appearance.angel.cardBorderWidth
+                    : Appearance.inirEverywhere || Appearance.auroraEverywhere ? 1 : 0
+                border.color: Appearance.angelEverywhere ? Appearance.angel.colCardBorder
+                    : Appearance.inirEverywhere ? Appearance.inir.colBorder 
                     : Appearance.auroraEverywhere ? Appearance.colors.colLayer0Border 
                     : "transparent"
             }
 
             StyledRectangularShadow {
                 target: root.compactStyle ? compactBackground : panelBackground
-                visible: !Appearance.inirEverywhere && !Appearance.auroraEverywhere
+                visible: !root.listStyle && (Appearance.angelEverywhere || (!Appearance.inirEverywhere && !Appearance.auroraEverywhere))
             }
 
             MultiEffect {
                 z: 0.5
                 anchors.fill: panelBackground
                 source: panelBackground
-                visible: !root.compactStyle && !root.altUseM3Layout && Appearance.effectsEnabled && root.effectiveEnableBlurGlass && root.altBlurAmount > 0 && !root.isHighLoad
+                visible: !root.compactStyle && !root.listStyle && !root.altUseM3Layout && Appearance.effectsEnabled && root.effectiveEnableBlurGlass && root.altBlurAmount > 0 && !root.isHighLoad
                 blurEnabled: true
                 blur: root.altBlurAmount
                 blurMax: 64
@@ -494,14 +508,17 @@ Scope {
                             anchors.centerIn: parent
                             width: parent.width
                             height: parent.height
-                            radius: Appearance.inirEverywhere ? Appearance.inir.roundingNormal 
+                            radius: Appearance.angelEverywhere ? Appearance.angel.roundingNormal
+                                : Appearance.inirEverywhere ? Appearance.inir.roundingNormal 
                                 : Appearance.auroraEverywhere ? Appearance.rounding.normal 
                                 : Appearance.rounding.normal
                             color: listView.currentIndex === index 
-                                   ? (Appearance.inirEverywhere ? Appearance.inir.colPrimary 
+                                   ? (Appearance.angelEverywhere ? Appearance.angel.colGlassCardActive
+                                       : Appearance.inirEverywhere ? Appearance.inir.colPrimary 
                                        : Appearance.auroraEverywhere ? Appearance.colors.colPrimaryContainer 
                                        : Appearance.m3colors.m3primaryContainer)
-                                   : (Appearance.inirEverywhere ? Appearance.inir.colLayer3 
+                                   : (Appearance.angelEverywhere ? Appearance.angel.colGlassCard
+                                       : Appearance.inirEverywhere ? Appearance.inir.colLayer3 
                                        : Appearance.auroraEverywhere ? Appearance.colors.colLayer2Base 
                                        : Appearance.m3colors.m3surfaceContainerHighest)
                             scale: compactMouseArea.pressed ? 0.92 : (compactMouseArea.containsMouse && !root.isHighLoad ? 1.05 : 1.0)
@@ -583,18 +600,22 @@ Scope {
                 anchors.centerIn: parent
                 width: 400
                 implicitHeight: listHeader.height + listSeparator.height + listColumn.height
-                radius: Appearance.inirEverywhere ? Appearance.inir.roundingLarge : Appearance.rounding.large
-                color: Appearance.inirEverywhere ? Appearance.inir.colLayer1 
+                radius: Appearance.angelEverywhere ? Appearance.angel.roundingLarge
+                    : Appearance.inirEverywhere ? Appearance.inir.roundingLarge : Appearance.rounding.large
+                color: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
+                    : Appearance.inirEverywhere ? Appearance.inir.colLayer1 
                     : Appearance.auroraEverywhere ? Appearance.colors.colLayer1Base 
                     : Appearance.colors.colSurfaceContainer
-                border.width: Appearance.auroraEverywhere ? 1 : 0
-                border.color: Appearance.auroraEverywhere ? Appearance.colors.colLayer0Border : "transparent"
+                border.width: Appearance.angelEverywhere ? Appearance.angel.cardBorderWidth
+                    : Appearance.auroraEverywhere ? 1 : 0
+                border.color: Appearance.angelEverywhere ? Appearance.angel.colCardBorder
+                    : Appearance.auroraEverywhere ? Appearance.colors.colLayer0Border : "transparent"
 
                 StyledRectangularShadow {
                     target: listContent
                     blur: 0.5 * Appearance.sizes.elevationMargin
                     spread: 0
-                    visible: !Appearance.inirEverywhere && !Appearance.auroraEverywhere
+                    visible: Appearance.angelEverywhere || (!Appearance.inirEverywhere && !Appearance.auroraEverywhere)
                 }
 
                 Column {
@@ -654,7 +675,8 @@ Scope {
 
                                 width: listColumn.width - listColumn.leftPadding - listColumn.rightPadding
                                 implicitHeight: 52
-                                buttonRadius: Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
+                                buttonRadius: Appearance.angelEverywhere ? Appearance.angel.roundingNormal
+                                    : Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
                                 toggled: listView.currentIndex === index
 
                                 colBackground: "transparent"
@@ -1223,7 +1245,7 @@ Scope {
 
                 const len = root.noUiSnapshot?.length ?? 0
                 if (!root.quickSwitchDone || len === 0) {
-                    root.rebuildNoUiSnapshot()
+                    root.rebuildNoUiSnapshotSync()  // Use sync version for immediate response
                 }
 
                 const newLen = root.noUiSnapshot?.length ?? 0
@@ -1255,7 +1277,7 @@ Scope {
 
                 const len = root.noUiSnapshot?.length ?? 0
                 if (!root.quickSwitchDone || len === 0) {
-                    root.rebuildNoUiSnapshot()
+                    root.rebuildNoUiSnapshotSync()  // Use sync version for immediate response
                 }
 
                 const newLen = root.noUiSnapshot?.length ?? 0

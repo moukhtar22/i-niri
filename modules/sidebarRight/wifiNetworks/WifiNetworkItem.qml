@@ -33,11 +33,11 @@ DialogListItem {
                 iconSize: Appearance.font.pixelSize.larger
                 property int strength: root.wifiNetwork?.strength ?? 0
                 text: strength > 80 ? "signal_wifi_4_bar" : strength > 60 ? "network_wifi_3_bar" : strength > 40 ? "network_wifi_2_bar" : strength > 20 ? "network_wifi_1_bar" : "signal_wifi_0_bar"
-                color: Appearance.colors.colOnSurfaceVariant
+                color: Appearance.inirEverywhere ? Appearance.inir.colTextSecondary : Appearance.colors.colOnSurfaceVariant
             }
             StyledText {
                 Layout.fillWidth: true
-                color: Appearance.colors.colOnSurfaceVariant
+                color: Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnSurfaceVariant
                 elide: Text.ElideRight
                 text: root.wifiNetwork?.ssid ?? Translation.tr("Unknown")
             }
@@ -45,7 +45,7 @@ DialogListItem {
                 visible: (root.wifiNetwork?.isSecure || root.wifiNetwork?.active) ?? false
                 text: root.wifiNetwork?.active ? "check" : Network.wifiConnectTarget === root.wifiNetwork ? "settings_ethernet" : "lock"
                 iconSize: Appearance.font.pixelSize.larger
-                color: Appearance.colors.colOnSurfaceVariant
+                color: Appearance.inirEverywhere ? Appearance.inir.colTextSecondary : Appearance.colors.colOnSurfaceVariant
             }
         }
 
@@ -100,9 +100,12 @@ DialogListItem {
                 DialogButton {
                     Layout.fillWidth: true
                     buttonText: Translation.tr("Open network portal")
-                    colBackground: Appearance.auroraEverywhere ? "transparent" : Appearance.colors.colLayer4
-                    colBackgroundHover: Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface : Appearance.colors.colLayer4Hover
-                    colRipple: Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceActive : Appearance.colors.colLayer4Active
+                    colBackground: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
+                        : Appearance.auroraEverywhere ? "transparent" : Appearance.colors.colLayer4
+                    colBackgroundHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
+                        : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface : Appearance.colors.colLayer4Hover
+                    colRipple: Appearance.angelEverywhere ? Appearance.angel.colGlassCardActive
+                        : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceActive : Appearance.colors.colLayer4Active
                     onClicked: {
                         Network.openPublicWifiPortal()
                         GlobalStates.sidebarRightOpen = false

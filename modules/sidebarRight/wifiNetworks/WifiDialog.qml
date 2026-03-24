@@ -10,7 +10,7 @@ import Quickshell
 
 WindowDialog {
     id: root
-    backgroundHeight: 600
+    backgroundHeight: 450
 
     WindowDialogTitle {
         text: Translation.tr("Connect to Wi-Fi")
@@ -23,16 +23,16 @@ WindowDialog {
         Layout.fillWidth: true
         Layout.topMargin: -8
         Layout.bottomMargin: -8
-        Layout.leftMargin: -(Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.large)
-        Layout.rightMargin: -(Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.large)
+        Layout.leftMargin: -(Appearance.angelEverywhere ? Appearance.angel.roundingNormal : Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.large)
+        Layout.rightMargin: -(Appearance.angelEverywhere ? Appearance.angel.roundingNormal : Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.large)
     }
     StyledListView {
         Layout.fillHeight: true
         Layout.fillWidth: true
         Layout.topMargin: -15
         Layout.bottomMargin: -16
-        Layout.leftMargin: -(Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.large)
-        Layout.rightMargin: -(Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.large)
+        Layout.leftMargin: -(Appearance.angelEverywhere ? Appearance.angel.roundingNormal : Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.large)
+        Layout.rightMargin: -(Appearance.angelEverywhere ? Appearance.angel.roundingNormal : Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.large)
         leftMargin: 8
         rightMargin: 8
         topMargin: 8

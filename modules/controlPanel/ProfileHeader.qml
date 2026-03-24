@@ -26,6 +26,17 @@ Item {
         return Translation.tr("Good Evening")
     }
 
+    function openAccountSettings(): void {
+        const cmd = Config.options?.apps?.manageUser ?? "kcmshell6 kcm_users"
+        ShellExec.execCmd(cmd)
+        GlobalStates.controlPanelOpen = false
+    }
+
+    function lockScreen(): void {
+        GlobalStates.controlPanelOpen = false
+        Quickshell.execDetached(["/usr/bin/qs", "-c", "ii", "ipc", "call", "lock", "activate"])
+    }
+
     RowLayout {
         anchors.fill: parent
         spacing: 12
@@ -42,7 +53,8 @@ Item {
                 radius: width / 2
                 color: "transparent"
                 border.width: 2
-                border.color: root.inirEverywhere ? Appearance.inir.colPrimary 
+                border.color: Appearance.angelEverywhere ? Appearance.angel.colPrimary
+                            : root.inirEverywhere ? Appearance.inir.colPrimary 
                             : root.auroraEverywhere ? Appearance.m3colors.m3primary
                             : Appearance.colors.colPrimary
             }
@@ -75,7 +87,10 @@ Item {
                     
                     onStatusChanged: {
                         if (status === Image.Error) {
-                            source = `file://${Directories.userAvatarPathAccountsService}`
+                            if (String(source).indexOf(Directories.userAvatarPathAccountsService) >= 0)
+                                source = `file://${Directories.userAvatarPathRicersAndWeirdSystems2}`
+                            else
+                                source = `file://${Directories.userAvatarPathAccountsService}`
                         }
                     }
                 }
@@ -91,7 +106,8 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     radius: width / 2
-                    color: root.inirEverywhere ? Appearance.inir.colLayer2 
+                    color: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
+                         : root.inirEverywhere ? Appearance.inir.colLayer2 
                          : root.auroraEverywhere ? Appearance.aurora.colSubSurface
                          : Appearance.colors.colLayer2
                     visible: avatarImg.status !== Image.Ready
@@ -100,7 +116,8 @@ Item {
                         anchors.centerIn: parent
                         text: "person"
                         iconSize: 22
-                        color: root.inirEverywhere ? Appearance.inir.colPrimary 
+                        color: Appearance.angelEverywhere ? Appearance.angel.colPrimary
+                             : root.inirEverywhere ? Appearance.inir.colPrimary 
                              : root.auroraEverywhere ? Appearance.m3colors.m3primary
                              : Appearance.colors.colPrimary
                     }
@@ -114,16 +131,18 @@ Item {
             StyledText {
                 text: root.getGreeting()
                 font.pixelSize: Appearance.font.pixelSize.smaller
-                color: root.inirEverywhere ? Appearance.inir.colTextSecondary 
-                     : root.auroraEverywhere ? Appearance.m3colors.m3outline
-                     : Appearance.colors.colSubtext
+                color: Appearance.angelEverywhere ? Appearance.angel.colPrimary
+                     : root.inirEverywhere ? Appearance.inir.colPrimary 
+                     : root.auroraEverywhere ? Appearance.m3colors.m3primary
+                     : Appearance.colors.colPrimary
             }
             StyledText {
-                text: SystemInfo.username
+                text: SystemInfo.displayName || SystemInfo.username
                 font.pixelSize: Appearance.font.pixelSize.normal
                 font.weight: Font.Medium
                 font.capitalization: Font.Capitalize
-                color: root.inirEverywhere ? Appearance.inir.colText 
+                color: Appearance.angelEverywhere ? Appearance.angel.colText
+                     : root.inirEverywhere ? Appearance.inir.colText 
                      : root.auroraEverywhere ? Appearance.m3colors.m3onSurface
                      : Appearance.colors.colOnLayer0
             }
@@ -138,32 +157,57 @@ Item {
             RippleButton {
                 implicitWidth: 32
                 implicitHeight: 32
-                buttonRadius: root.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.full
+                buttonRadius: Appearance.angelEverywhere ? Appearance.angel.roundingSmall
+                            : root.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.full
                 colBackground: "transparent"
-                colBackgroundHover: root.inirEverywhere ? Appearance.inir.colLayer2Hover 
+                colBackgroundHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
+                                  : root.inirEverywhere ? Appearance.inir.colLayer2Hover 
                                   : root.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover
                                   : Appearance.colors.colLayer2Hover
-                onClicked: {
-                    GlobalStates.controlPanelOpen = false
-                    lockProc.running = true
-                }
+                onClicked: root.lockScreen()
                 contentItem: MaterialSymbol { 
                     anchors.centerIn: parent
                     text: "lock"
                     iconSize: 18
-                    color: root.inirEverywhere ? Appearance.inir.colText 
+                    color: Appearance.angelEverywhere ? Appearance.angel.colText
+                         : root.inirEverywhere ? Appearance.inir.colText 
                          : root.auroraEverywhere ? Appearance.m3colors.m3onSurface
                          : Appearance.colors.colOnLayer0
                 }
                 StyledToolTip { text: Translation.tr("Lock") }
             }
-            
+
             RippleButton {
                 implicitWidth: 32
                 implicitHeight: 32
-                buttonRadius: root.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.full
+                buttonRadius: Appearance.angelEverywhere ? Appearance.angel.roundingSmall
+                            : root.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.full
                 colBackground: "transparent"
-                colBackgroundHover: root.inirEverywhere ? Appearance.inir.colLayer2Hover 
+                colBackgroundHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
+                                  : root.inirEverywhere ? Appearance.inir.colLayer2Hover 
+                                  : root.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover
+                                  : Appearance.colors.colLayer2Hover
+                onClicked: root.openAccountSettings()
+                contentItem: MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "manage_accounts"
+                    iconSize: 18
+                    color: Appearance.angelEverywhere ? Appearance.angel.colText
+                         : root.inirEverywhere ? Appearance.inir.colText
+                         : root.auroraEverywhere ? Appearance.m3colors.m3onSurface
+                         : Appearance.colors.colOnLayer0
+                }
+                StyledToolTip { text: Translation.tr("Manage my account") }
+            }
+
+            RippleButton {
+                implicitWidth: 32
+                implicitHeight: 32
+                buttonRadius: Appearance.angelEverywhere ? Appearance.angel.roundingSmall
+                            : root.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.full
+                colBackground: "transparent"
+                colBackgroundHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
+                                  : root.inirEverywhere ? Appearance.inir.colLayer2Hover 
                                   : root.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover
                                   : Appearance.colors.colLayer2Hover
                 onClicked: {
@@ -184,9 +228,11 @@ Item {
             RippleButton {
                 implicitWidth: 32
                 implicitHeight: 32
-                buttonRadius: root.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.full
+                buttonRadius: Appearance.angelEverywhere ? Appearance.angel.roundingSmall
+                            : root.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.full
                 colBackground: "transparent"
-                colBackgroundHover: root.inirEverywhere ? Appearance.inir.colLayer2Hover 
+                colBackgroundHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
+                                  : root.inirEverywhere ? Appearance.inir.colLayer2Hover 
                                   : root.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover
                                   : Appearance.colors.colLayer2Hover
                 onClicked: GlobalStates.controlPanelOpen = false
@@ -194,7 +240,8 @@ Item {
                     anchors.centerIn: parent
                     text: "close"
                     iconSize: 18
-                    color: root.inirEverywhere ? Appearance.inir.colTextSecondary 
+                    color: Appearance.angelEverywhere ? Appearance.angel.colTextSecondary
+                         : root.inirEverywhere ? Appearance.inir.colTextSecondary 
                          : root.auroraEverywhere ? Appearance.m3colors.m3outline
                          : Appearance.colors.colSubtext
                 }
@@ -203,8 +250,4 @@ Item {
         }
     }
 
-    Process {
-        id: lockProc
-        command: ["/usr/bin/qs", "-c", "ii", "ipc", "call", "lock", "activate"]
-    }
 }

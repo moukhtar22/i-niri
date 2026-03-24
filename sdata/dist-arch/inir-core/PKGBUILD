@@ -8,6 +8,9 @@ depends=(
   # Niri compositor
   niri
   
+  # Wallpaper daemon
+  awww-bin
+  
   # Basic utilities
   bc
   coreutils
@@ -16,33 +19,34 @@ depends=(
   wget
   ripgrep
   jq
+  python
   xdg-user-dirs
+  xdg-utils
   rsync
   git
   wl-clipboard
   libnotify
   pacman-contrib  # checkupdates for update notifications
   wlsunset
-  dunst
   
   # XDG Portals for Niri
   xdg-desktop-portal
   xdg-desktop-portal-gtk
   xdg-desktop-portal-gnome
   
-  # Polkit - any agent works (mate-polkit, gnome-polkit, lxpolkit, etc)
+  # Polkit agent (needed for auth dialogs — gnome agent works universally)
   polkit
+  polkit-gnome
   
   # Network
   networkmanager
   gnome-keyring
   
   # File manager
-  dolphin
+  nautilus
   
   # Terminal - kitty is default, configurable in Settings
   kitty
-  foot
   
   # Shell - fish is required for scripts
   fish
@@ -52,6 +56,5 @@ depends=(
   # X11 compatibility
   xwayland-satellite
   
-  # System monitor
-  mission-center
 )
+

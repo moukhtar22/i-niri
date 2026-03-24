@@ -39,7 +39,7 @@ MouseArea {
     implicitWidth: contentItem.implicitWidth
 
     Behavior on implicitHeight {
-        animation: Looks.transition.enter.createObject(this)
+        animation: NumberAnimation { duration: Looks.transition.enabled ? Looks.transition.duration.panel : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.decelerate }
     }
 
     property real dragDismissThreshold: 100
@@ -70,7 +70,7 @@ MouseArea {
         border.color: ColorUtils.applyAlpha(Looks.colors.ambientShadow, 0.1)
 
         Behavior on x {
-            animation: Looks.transition.enter.createObject(this)
+            animation: NumberAnimation { duration: Looks.transition.enabled ? Looks.transition.duration.panel : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.decelerate }
         }
 
         ColumnLayout {
@@ -189,7 +189,7 @@ MouseArea {
             }
 
             Behavior on opacity {
-                animation: Looks.transition.opacity.createObject(this)
+                animation: NumberAnimation { duration: Looks.transition.enabled ? Looks.transition.duration.normal : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.standard }
             }
         }
 
@@ -207,7 +207,7 @@ MouseArea {
             }
 
             Behavior on opacity {
-                animation: Looks.transition.opacity.createObject(this)
+                animation: NumberAnimation { duration: Looks.transition.enabled ? Looks.transition.duration.normal : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.standard }
             }
         }
     }
@@ -327,7 +327,7 @@ MouseArea {
                     rotation: root.expanded ? -180 : 0
                     color: expandButton.colForeground
                     Behavior on rotation {
-                        animation: Looks.transition.rotate.createObject(this)
+                        animation: NumberAnimation { duration: Looks.transition.enabled ? Looks.transition.duration.medium : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.standard }
                     }
                 }
             }
@@ -338,15 +338,24 @@ MouseArea {
         id: groupExpandButton
         visible: root.groupExpandControlMessage !== ""
         horizontalPadding: 12
-        implicitHeight: 28
-        implicitWidth: expandButtonText.implicitWidth + horizontalPadding * 2
+        implicitHeight: 30
+        implicitWidth: expandBtnRow.implicitWidth + horizontalPadding * 2
         onClicked: root.groupExpandToggle()
         contentItem: Item {
-            WText {
-                id: expandButtonText
+            RowLayout {
+                id: expandBtnRow
                 anchors.centerIn: parent
-                text: root.groupExpandControlMessage
-                font.pixelSize: Looks.font.pixelSize.small
+                spacing: 6
+                FluentIcon {
+                    icon: "chevron-down"
+                    implicitSize: 10
+                    color: Looks.colors.accent
+                }
+                WText {
+                    text: root.groupExpandControlMessage
+                    font.pixelSize: Looks.font.pixelSize.small
+                    color: Looks.colors.accent
+                }
             }
         }
     }

@@ -84,37 +84,30 @@ apply_term() {
 apply_terminal_configs() {
   # Generate terminal-specific config files (Kitty, Alacritty, Foot, WezTerm, Ghostty, Konsole)
   local log_file="$STATE_DIR/user/generated/terminal_colors.log"
-  
+
   if [ ! -f "$STATE_DIR/user/generated/material_colors.scss" ]; then
     echo "[terminal-colors] material_colors.scss not found. Skipping." | tee -a "$log_file" 2>/dev/null
     return
   fi
 
-  # Get enabled terminals from config, but only if actually installed
-  local enabled_terminals=()
-  if [ -f "$CONFIG_FILE" ]; then
-    local enable_kitty=$(jq -r '.appearance.wallpaperTheming.terminals.kitty // true' "$CONFIG_FILE")
-    local enable_alacritty=$(jq -r '.appearance.wallpaperTheming.terminals.alacritty // true' "$CONFIG_FILE")
-    local enable_foot=$(jq -r '.appearance.wallpaperTheming.terminals.foot // true' "$CONFIG_FILE")
-    local enable_wezterm=$(jq -r '.appearance.wallpaperTheming.terminals.wezterm // true' "$CONFIG_FILE")
-    local enable_ghostty=$(jq -r '.appearance.wallpaperTheming.terminals.ghostty // true' "$CONFIG_FILE")
-    local enable_konsole=$(jq -r '.appearance.wallpaperTheming.terminals.konsole // true' "$CONFIG_FILE")
-    local enable_starship=$(jq -r '.appearance.wallpaperTheming.terminals.starship // true' "$CONFIG_FILE")
+  # Single source of truth for all supported targets.
+  # Mirrors TERMINAL_REGISTRY in generate_terminal_configs.py.
+  # To add a new target: add it here + add generate_X_config() and registry entry in the Python script.
+  local all_supported=(kitty alacritty foot wezterm ghostty konsole starship omp btop lazygit yazi)
 
-    # Only add terminals that are both enabled AND installed
-    [[ "$enable_kitty" == "true" ]] && command -v kitty &>/dev/null && enabled_terminals+=(kitty)
-    [[ "$enable_alacritty" == "true" ]] && command -v alacritty &>/dev/null && enabled_terminals+=(alacritty)
-    [[ "$enable_foot" == "true" ]] && command -v foot &>/dev/null && enabled_terminals+=(foot)
-    [[ "$enable_wezterm" == "true" ]] && command -v wezterm &>/dev/null && enabled_terminals+=(wezterm)
-    [[ "$enable_ghostty" == "true" ]] && command -v ghostty &>/dev/null && enabled_terminals+=(ghostty)
-    [[ "$enable_konsole" == "true" ]] && command -v konsole &>/dev/null && enabled_terminals+=(konsole)
-    [[ "$enable_starship" == "true" ]] && command -v starship &>/dev/null && enabled_terminals+=(starship)
-  else
-    # Default: only generate for installed terminals + starship
-    for term in kitty alacritty foot wezterm ghostty konsole starship; do
-      command -v "$term" &>/dev/null && enabled_terminals+=("$term")
-    done
-  fi
+  # Build enabled list: config-enabled (default true) AND installed
+  local enabled_terminals=()
+  for term in "${all_supported[@]}"; do
+    local term_enabled="true"
+    if [ -f "$CONFIG_FILE" ]; then
+      term_enabled=$(jq -r ".appearance.wallpaperTheming.terminals.${term} // true" "$CONFIG_FILE" 2>/dev/null || echo "true")
+    fi
+
+    local binary_name="$term"
+    [[ "$term" == "omp" ]] && binary_name="oh-my-posh"
+
+    [[ "$term_enabled" == "true" ]] && command -v "$binary_name" &>/dev/null && enabled_terminals+=("$term")
+  done
 
   if [ ${#enabled_terminals[@]} -eq 0 ]; then
     echo "[terminal-colors] No enabled terminals found installed. Skipping." >> "$log_file" 2>/dev/null
@@ -123,7 +116,13 @@ apply_terminal_configs() {
 
   # Run the Python script to generate configs
   local python_cmd="python3"
-  local venv_python="${ILLOGICAL_IMPULSE_VIRTUAL_ENV:-$HOME/.local/state/quickshell/.venv}/bin/python"
+  local _ac_venv
+  if [[ -n "${ILLOGICAL_IMPULSE_VIRTUAL_ENV:-}" ]]; then
+    _ac_venv="$(eval echo "$ILLOGICAL_IMPULSE_VIRTUAL_ENV")"
+  else
+    _ac_venv="$HOME/.local/state/quickshell/.venv"
+  fi
+  local venv_python="$_ac_venv/bin/python3"
   if [[ -x "$venv_python" ]]; then
     python_cmd="$venv_python"
   fi
@@ -148,11 +147,10 @@ reload_terminal_colors() {
   for term in "${terminals[@]}"; do
     case "$term" in
       kitty)
-        # Kitty: reload colors via remote control (works if allow_remote_control is enabled)
+        # Kitty: SIGUSR1 triggers config reload (updates all windows and tab bar)
         if pgrep -x kitty &>/dev/null; then
-          kitty @ set-colors --all "$home/.config/kitty/current-theme.conf" 2>/dev/null && \
-            echo "[terminal-colors] Kitty: reloaded via remote control" || \
-            echo "[terminal-colors] Kitty: remote control not available (enable allow_remote_control in kitty.conf for live reload)"
+          pkill --signal SIGUSR1 -x kitty 2>/dev/null && \
+            echo "[terminal-colors] Kitty: sent SIGUSR1 reload signal"
         fi
         ;;
       foot)
@@ -200,6 +198,18 @@ reload_terminal_colors() {
           fi
         fi
         ;;
+      btop)
+        if pgrep -x btop &>/dev/null; then
+          pkill -SIGUSR2 btop 2>/dev/null && \
+            echo "[terminal-colors] btop: sent SIGUSR2 reload signal"
+        fi
+        ;;
+      omp)
+        if command -v oh-my-posh &>/dev/null; then
+          oh-my-posh enable reload &>/dev/null
+          echo "[terminal-colors] oh-my-posh: reload enabled (config will auto-reload)"
+        fi
+        ;;
     esac
   done
 }
@@ -209,30 +219,120 @@ apply_qt() {
   python "$CONFIG_DIR/scripts/kvantum/changeAdwColors.py" # apply config colors
 }
 
-apply_gtk_kde() {
-  local scss_file="$STATE_DIR/user/generated/material_colors.scss"
-  if [ ! -f "$scss_file" ]; then
+apply_code_editors() {
+  # Generate code editor themes (Zed, VSCode, etc.)
+  local log_file="$STATE_DIR/user/generated/code_editor_themes.log"
+
+  if [ ! -f "$STATE_DIR/user/generated/material_colors.scss" ]; then
+    echo "[code-editors] material_colors.scss not found. Skipping." | tee -a "$log_file" 2>/dev/null
     return
   fi
 
-  # Extract colors from scss (format: $colorname: #hex;)
-  get_color() {
-    grep "^\$$1:" "$scss_file" | cut -d: -f2 | tr -d ' ;'
-  }
+  # Get Python command
+  local python_cmd="python3"
+  local _ac_venv
+  if [[ -n "${ILLOGICAL_IMPULSE_VIRTUAL_ENV:-}" ]]; then
+    _ac_venv="$(eval echo "$ILLOGICAL_IMPULSE_VIRTUAL_ENV")"
+  else
+    _ac_venv="$HOME/.local/state/quickshell/.venv"
+  fi
+  local venv_python="$_ac_venv/bin/python3"
+  if [[ -x "$venv_python" ]]; then
+    python_cmd="$venv_python"
+  fi
 
-  local bg=$(get_color "background")
-  local fg=$(get_color "onBackground")
-  local primary=$(get_color "primary")
-  local on_primary=$(get_color "onPrimary")
-  local surface=$(get_color "surface")
-  local surface_dim=$(get_color "surfaceDim")
+  if ! command -v "$python_cmd" &>/dev/null && [[ ! -x "$python_cmd" ]]; then
+    echo "[code-editors] ERROR: Python not found ($python_cmd). Cannot generate themes." >> "$log_file" 2>/dev/null
+    return
+  fi
 
-  # Call apply-gtk-theme.sh with extracted colors
-  "$SCRIPT_DIR/apply-gtk-theme.sh" "$bg" "$fg" "$primary" "$on_primary" "$surface" "$surface_dim"
+  # Check if Zed is installed and enabled
+  local enable_zed="true"
+  if [ -f "$CONFIG_FILE" ]; then
+    enable_zed=$(jq -r 'if .appearance.wallpaperTheming | has("enableZed") then .appearance.wallpaperTheming.enableZed else true end' "$CONFIG_FILE" 2>/dev/null || echo "true")
+  fi
+
+  if [[ "$enable_zed" == "true" ]] && { command -v zed &>/dev/null || command -v zeditor &>/dev/null; }; then
+    echo "[code-editors] Generating Zed theme..." | tee -a "$log_file" 2>/dev/null
+    "$python_cmd" "$SCRIPT_DIR/generate_terminal_configs.py" \
+      --scss "$STATE_DIR/user/generated/material_colors.scss" \
+      --zed >> "$log_file" 2>&1
+
+    if [ $? -eq 0 ]; then
+      echo "[code-editors] Zed theme generated (Zed auto-reloads on file change)" >> "$log_file" 2>/dev/null
+    else
+      echo "[code-editors] ERROR: Failed to generate Zed theme" >> "$log_file" 2>/dev/null
+    fi
+  fi
+
+  # Check if VSCode editors are enabled
+  local enable_vscode="true"
+  if [ -f "$CONFIG_FILE" ]; then
+    enable_vscode=$(jq -r 'if .appearance.wallpaperTheming | has("enableVSCode") then .appearance.wallpaperTheming.enableVSCode else true end' "$CONFIG_FILE" 2>/dev/null || echo "true")
+  fi
+
+  if [[ "$enable_vscode" == "true" ]]; then
+    # Build list of enabled forks from config
+    local enabled_forks=()
+    if [ -f "$CONFIG_FILE" ]; then
+      # Read individual fork settings, default to true if not specified
+      local editors_config
+      editors_config=$(jq -r '.appearance.wallpaperTheming.vscodeEditors // {}' "$CONFIG_FILE" 2>/dev/null || echo "{}")
+      
+      # Map config keys to script fork keys
+      [[ $(echo "$editors_config" | jq -r '.code // true') == "true" ]] && [[ -d "$HOME/.config/Code" ]] && enabled_forks+=("code")
+      [[ $(echo "$editors_config" | jq -r '.codium // true') == "true" ]] && [[ -d "$HOME/.config/VSCodium" ]] && enabled_forks+=("codium")
+      [[ $(echo "$editors_config" | jq -r '.codeOss // true') == "true" ]] && [[ -d "$HOME/.config/Code - OSS" ]] && enabled_forks+=("code-oss")
+      [[ $(echo "$editors_config" | jq -r '.codeInsiders // true') == "true" ]] && [[ -d "$HOME/.config/Code - Insiders" ]] && enabled_forks+=("code-insiders")
+      [[ $(echo "$editors_config" | jq -r '.cursor // true') == "true" ]] && [[ -d "$HOME/.config/Cursor" ]] && enabled_forks+=("cursor")
+      [[ $(echo "$editors_config" | jq -r '.windsurf // true') == "true" ]] && [[ -d "$HOME/.config/Windsurf" ]] && enabled_forks+=("windsurf")
+      [[ $(echo "$editors_config" | jq -r '.windsurfNext // true') == "true" ]] && [[ -d "$HOME/.config/Windsurf - Next" ]] && enabled_forks+=("windsurf-next")
+      [[ $(echo "$editors_config" | jq -r '.qoder // true') == "true" ]] && [[ -d "$HOME/.config/Qoder" ]] && enabled_forks+=("qoder")
+      [[ $(echo "$editors_config" | jq -r '.antigravity // true') == "true" ]] && [[ -d "$HOME/.config/Antigravity" ]] && enabled_forks+=("antigravity")
+      [[ $(echo "$editors_config" | jq -r '.positron // true') == "true" ]] && [[ -d "$HOME/.config/Positron" ]] && enabled_forks+=("positron")
+      [[ $(echo "$editors_config" | jq -r '.voidEditor // true') == "true" ]] && [[ -d "$HOME/.config/Void" ]] && enabled_forks+=("void")
+      [[ $(echo "$editors_config" | jq -r '.melty // true') == "true" ]] && [[ -d "$HOME/.config/Melty" ]] && enabled_forks+=("melty")
+      [[ $(echo "$editors_config" | jq -r '.pearai // true') == "true" ]] && [[ -d "$HOME/.config/PearAI" ]] && enabled_forks+=("pearai")
+      [[ $(echo "$editors_config" | jq -r '.aide // true') == "true" ]] && [[ -d "$HOME/.config/Aide" ]] && enabled_forks+=("aide")
+    fi
+
+    if [ ${#enabled_forks[@]} -gt 0 ]; then
+      echo "[code-editors] Generating VSCode themes for: ${enabled_forks[*]}" | tee -a "$log_file" 2>/dev/null
+      "$python_cmd" "$SCRIPT_DIR/generate_terminal_configs.py" \
+        --scss "$STATE_DIR/user/generated/material_colors.scss" \
+        --vscode --vscode-forks "${enabled_forks[@]}" >> "$log_file" 2>&1
+
+      if [ $? -eq 0 ]; then
+        echo "[code-editors] VSCode themes generated (auto-reloads instantly)" >> "$log_file" 2>/dev/null
+      else
+        echo "[code-editors] ERROR: Failed to generate VSCode themes" >> "$log_file" 2>/dev/null
+      fi
+    else
+      echo "[code-editors] No enabled VSCode forks found" >> "$log_file" 2>/dev/null
+    fi
+  fi
+}
+
+apply_gtk_kde() {
+  # apply-gtk-theme.sh reads colors.json (matugen's output) directly
+  # It generates: kdeglobals, Darkly.colors, pywalfox colors
+  # GTK CSS is handled by matugen templates
+  "$SCRIPT_DIR/apply-gtk-theme.sh"
+}
+
+apply_chrome() {
+  # apply-chrome-theme.sh applies GM3 BrowserThemeColor to Chromium-based browsers
+  # Supports: Google Chrome, Chromium, Brave (and Omarchy fork with CLI theming)
+  "$SCRIPT_DIR/apply-chrome-theme.sh"
+}
+
+apply_spicetify() {
+  # apply-spicetify-theme.sh creates/updates a dedicated Spicetify theme from colors.json
+  "$SCRIPT_DIR/apply-spicetify-theme.sh"
 }
 
 # Check if terminal theming is enabled in config
-CONFIG_FILE="$XDG_CONFIG_HOME/illogical-impulse/config.json"
+CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/illogical-impulse/config.json"
 if [ -f "$CONFIG_FILE" ]; then
   enable_terminal=$(jq -r '.appearance.wallpaperTheming.enableTerminal // true' "$CONFIG_FILE" 2>/dev/null || echo "true")
   if [ "$enable_terminal" = "true" ]; then
@@ -258,16 +358,70 @@ else
   apply_gtk_kde &
 fi
 
-# Apply SDDM theming if enabled
-apply_sddm() {
-  if [ -f "$CONFIG_DIR/scripts/sddm/sync-sddm-theme.py" ]; then
-    python3 "$CONFIG_DIR/scripts/sddm/sync-sddm-theme.py" &
+
+# Apply code editor themes (Zed, etc.)
+apply_code_editors &
+
+# Apply OpenCode TUI theme
+apply_opencode_theme() {
+  local log_file="$STATE_DIR/user/generated/code_editor_themes.log"
+  local scss_file="$STATE_DIR/user/generated/material_colors.scss"
+  local generator="$SCRIPT_DIR/opencode/theme_generator.py"
+
+  if [ ! -f "$scss_file" ]; then
+    return
   fi
+
+  if [ ! -f "$generator" ]; then
+    return
+  fi
+
+  local python_cmd="python3"
+  local _ac_venv
+  if [[ -n "${ILLOGICAL_IMPULSE_VIRTUAL_ENV:-}" ]]; then
+    _ac_venv="$(eval echo "$ILLOGICAL_IMPULSE_VIRTUAL_ENV")"
+  else
+    _ac_venv="$HOME/.local/state/quickshell/.venv"
+  fi
+  local venv_python="$_ac_venv/bin/python3"
+  if [[ -x "$venv_python" ]]; then
+    python_cmd="$venv_python"
+  fi
+
+  "$python_cmd" "$generator" "$scss_file" >> "$log_file" 2>&1
 }
 
 if [ -f "$CONFIG_FILE" ]; then
-  enable_sddm=$(jq -r '.appearance.wallpaperTheming.enableSddm // false' "$CONFIG_FILE")
-  if [ "$enable_sddm" = "true" ]; then
-    apply_sddm &
+  enable_opencode=$(jq -r '.appearance.wallpaperTheming.enableOpenCode // true' "$CONFIG_FILE" 2>/dev/null || echo "true")
+  if [ "$enable_opencode" = "true" ] && command -v opencode &>/dev/null; then
+    apply_opencode_theme &
   fi
+else
+  if command -v opencode &>/dev/null; then
+    apply_opencode_theme &
+  fi
+fi
+
+# Apply Chrome/Chromium/Brave GM3 theme via managed policies
+if [ -f "$CONFIG_FILE" ]; then
+  enable_chrome=$(jq -r '.appearance.wallpaperTheming.enableChrome // true' "$CONFIG_FILE" 2>/dev/null || echo "true")
+  if [ "$enable_chrome" = "true" ]; then
+    apply_chrome &
+  fi
+else
+  apply_chrome &
+fi
+
+# Apply Spotify theme via Spicetify (opt-in)
+if [ -f "$CONFIG_FILE" ]; then
+  enable_spicetify=$(jq -r '.appearance.wallpaperTheming.enableSpicetify // false' "$CONFIG_FILE" 2>/dev/null || echo "false")
+  if [ "$enable_spicetify" = "true" ] && command -v spicetify &>/dev/null; then
+    apply_spicetify &
+  fi
+fi
+
+# Sync ii-pixel SDDM theme colors (if installed)
+SDDM_SYNC_SCRIPT="$SCRIPT_DIR/../sddm/sync-pixel-sddm.py"
+if [[ -d "/usr/share/sddm/themes/ii-pixel" && -f "$SDDM_SYNC_SCRIPT" ]]; then
+  python3 "$SDDM_SYNC_SCRIPT" &
 fi

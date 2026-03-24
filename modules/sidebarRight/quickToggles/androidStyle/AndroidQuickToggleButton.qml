@@ -25,20 +25,44 @@ GroupButton {
     baseHeight: root.baseCellHeight
 
     property bool editMode: false
+    readonly property color colDarkSurface: Appearance.angelEverywhere
+        ? ColorUtils.transparentize(Appearance.angel.colGlassCard, 0.76)
+        : Appearance.inirEverywhere ? ColorUtils.transparentize(Appearance.inir.colLayer1, 0.22)
+        : Appearance.auroraEverywhere ? ColorUtils.transparentize(
+            Appearance.colors.colLayer0Base,
+            Math.max(0.12, Appearance.aurora.subSurfaceTransparentize - 0.14)
+        )
+        : ColorUtils.transparentize(Appearance.colors.colLayer2, 0.24)
+    readonly property color colDarkSurfaceHover: Appearance.angelEverywhere
+        ? Appearance.angel.colGlassCardHover
+        : Appearance.inirEverywhere ? Appearance.inir.colLayer2Hover
+        : Appearance.auroraEverywhere ? ColorUtils.transparentize(
+            Appearance.colors.colLayer1,
+            Math.max(0.16, Appearance.aurora.subSurfaceTransparentize - 0.10)
+        )
+        : ColorUtils.transparentize(Appearance.colors.colLayer2Hover, 0.20)
+    readonly property color colDarkSurfaceActive: Appearance.angelEverywhere
+        ? Appearance.angel.colGlassCardActive
+        : Appearance.inirEverywhere ? Appearance.inir.colLayer2Active
+        : Appearance.auroraEverywhere ? ColorUtils.transparentize(
+            Appearance.colors.colLayer1,
+            Math.max(0.12, Appearance.aurora.subSurfaceTransparentize - 0.14)
+        )
+        : ColorUtils.transparentize(Appearance.colors.colLayer2Active, 0.18)
     enableImplicitWidthAnimation: !editMode && root.mouseArea.containsMouse
     enableImplicitHeightAnimation: !editMode && root.mouseArea.containsMouse
     Behavior on baseWidth {
-        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+        animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
     }
     Behavior on baseHeight {
-        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+        animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
     }
     opacity: 0
     Component.onCompleted: {
         opacity = 1
     }
     Behavior on opacity {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
     }
 
 
@@ -57,29 +81,40 @@ GroupButton {
     horizontalPadding: padding
     verticalPadding: padding
 
-    colBackground: Appearance.inirEverywhere ? Appearance.inir.colLayer2 
-        : Appearance.auroraEverywhere ? "transparent" : Appearance.colors.colLayer2
-    colBackgroundHover: Appearance.inirEverywhere ? Appearance.inir.colLayer2Hover 
-        : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface : Appearance.colors.colLayer2Hover
-    colBackgroundToggled: Appearance.inirEverywhere 
+    colBackground: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
+        : Appearance.inirEverywhere ? Appearance.inir.colLayer2 
+        : root.colDarkSurface
+    colBackgroundHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
+        : Appearance.inirEverywhere ? Appearance.inir.colLayer2Hover 
+        : root.colDarkSurfaceHover
+    colBackgroundToggled: Appearance.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colPrimary, 0.45)
+        : Appearance.inirEverywhere 
         ? Appearance.inir.colPrimaryContainer
         : Appearance.colors.colPrimary
-    colBackgroundToggledHover: Appearance.inirEverywhere 
+    colBackgroundToggledHover: Appearance.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colPrimaryHover, 0.35)
+        : Appearance.inirEverywhere 
         ? Appearance.inir.colPrimaryContainerHover
         : Appearance.colors.colPrimaryHover
-    colBackgroundToggledActive: Appearance.inirEverywhere 
+    colBackgroundToggledActive: Appearance.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colPrimaryActive, 0.30)
+        : Appearance.inirEverywhere 
         ? Appearance.inir.colPrimaryContainerActive
         : Appearance.colors.colPrimaryActive
-    buttonRadius: Appearance.inirEverywhere 
+    buttonRadius: Appearance.angelEverywhere ? Appearance.angel.roundingSmall
+        : Appearance.inirEverywhere 
         ? Appearance.inir.roundingSmall 
         : (toggled ? Appearance.rounding.large : baseHeight / 2)
-    buttonRadiusPressed: Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.normal
-    property color colText: Appearance.inirEverywhere
+    buttonRadiusPressed: Appearance.angelEverywhere ? Appearance.angel.roundingSmall
+        : Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.normal
+    property color colText: Appearance.angelEverywhere
+        ? (toggled ? Appearance.angel.colOnPrimary : Appearance.angel.colText)
+        : Appearance.inirEverywhere
         ? (toggled ? Appearance.inir.colOnPrimaryContainer : Appearance.inir.colText)
         : Appearance.auroraEverywhere
         ? (toggled ? Appearance.m3colors.m3onPrimary : Appearance.m3colors.m3onSurface)
         : toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
-    property color colIcon: Appearance.inirEverywhere
+    property color colIcon: Appearance.angelEverywhere
+        ? (toggled ? Appearance.angel.colOnPrimary : Appearance.angel.colText)
+        : Appearance.inirEverywhere
         ? (toggled ? Appearance.inir.colOnPrimaryContainer : Appearance.inir.colText)
         : Appearance.auroraEverywhere
         ? (toggled ? Appearance.m3colors.m3onPrimary : Appearance.m3colors.m3onSurface)

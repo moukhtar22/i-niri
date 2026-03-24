@@ -24,7 +24,7 @@ Rectangle {
 
     color: root.show ? Appearance.colors.colScrim : ColorUtils.transparentize(Appearance.colors.colScrim)
     Behavior on color {
-        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+        animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
     }
     visible: dialogBackground.implicitHeight > 0
 
@@ -45,12 +45,15 @@ Rectangle {
     GlassBackground {
         id: dialogBackground
         anchors.horizontalCenter: parent.horizontalCenter
-        radius: Appearance.inirEverywhere ? Appearance.inir.roundingLarge : Appearance.rounding.large
+        radius: Appearance.angelEverywhere ? Appearance.angel.roundingLarge
+            : Appearance.inirEverywhere ? Appearance.inir.roundingLarge
+            : Appearance.rounding.large
         fallbackColor: Appearance.m3colors.m3surfaceContainerHigh
         inirColor: Appearance.inir.colLayer2
         auroraTransparency: Appearance.aurora.popupTransparentize * 0.85
-        border.width: (Appearance.inirEverywhere || Appearance.auroraEverywhere) ? 1 : 0
-        border.color: Appearance.inirEverywhere ? Appearance.inir.colBorder 
+        border.width: (Appearance.angelEverywhere || Appearance.inirEverywhere || Appearance.auroraEverywhere) ? 1 : 0
+        border.color: Appearance.angelEverywhere ? Appearance.angel.colBorder
+            : Appearance.inirEverywhere ? Appearance.inir.colBorder 
             : Appearance.auroraEverywhere ? Appearance.aurora.colTooltipBorder : "transparent"
         
         property real targetY: root.height / 2 - root.backgroundHeight / 2
@@ -88,7 +91,7 @@ Rectangle {
             spacing: 16
             opacity: root.show ? 1 : 0
             Behavior on opacity {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
             }
 
         }

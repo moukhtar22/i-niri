@@ -8,25 +8,37 @@
 .mcp.json
 .zed/
 
-# AI/Dev agents (personal - not distributed)
+# Personal AI/dev tooling and local-only artifacts
+agents/
 .kiro/
 .opencode/
 .claude/
 .cursor/
-.windsurf/
-hooks/
+.qoder/
+.continue/
+.gemini/
+.roo/
+.dory/
+inir-docs/
+inir-mcp/
+context-architect/
 AGENTS.md
 **/AGENTS.md
+**/AGENTS.md.bak
 CLAUDE.md
 **/CLAUDE.md
-prompts/
-.continue/
-context-architect/
-inir-docs/
-.gemini/
-GEMINI.md
+CLAUDE.md.bak
+**/CLAUDE.md.bak
+GEMINI.md*
+Session.md*
 opencode.json
-.roo/
+hooks/
+prompts/
+mcp.json
+.cursorrules
+.windsurfrules
+.windsurf/
+.memory/
 
 # WIP documentation (not for distribution)
 docs/*_IMPLEMENTATION.md
@@ -40,6 +52,7 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+.ruff_cache/
 
 # Node
 node_modules/
@@ -61,6 +74,11 @@ tmp/
 # Session files (personal dev data)
 session-*.md
 session-ses_*.md
+/src/
+
+Project Audit and Organization.md
+
+modules/ii/overlay/floatingImage/undefined/
 
 # Credentials and cookies (NEVER commit)
 yt-cookies.txt
@@ -88,3 +106,7 @@ Thumbs.db
 *.desktop.bak
 .orchids/
 .aider*
+.kilocode/
+.omc/
+.task/
+.opencode

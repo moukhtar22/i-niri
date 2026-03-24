@@ -14,6 +14,7 @@ Singleton {
     property string distroId: "unknown"
     property string distroIcon: "linux-symbolic"
     property string username: "user"
+    property string displayName: ""
     property string homeUrl: ""
     property string documentationUrl: ""
     property string supportUrl: ""
@@ -23,13 +24,22 @@ Singleton {
     property string desktopEnvironment: ""
     property string windowingSystem: ""
 
+    function refreshIdentity(): void {
+        if (!getUsername.running) {
+            getUsername.running = true
+            return
+        }
+        if (!getDisplayName.running)
+            getDisplayName.running = true
+    }
+
     Timer {
         triggeredOnStart: true
         interval: 1
         running: true
         repeat: false
         onTriggered: {
-            getUsername.running = true
+            refreshIdentity()
             getDesktopEnvironment.running = true
             fileOsRelease.reload()
             const textOsRelease = fileOsRelease.text()
@@ -86,12 +96,33 @@ Singleton {
         }
     }
 
+    Timer {
+        interval: 15000
+        running: true
+        repeat: true
+        onTriggered: refreshIdentity()
+    }
+
     Process {
         id: getUsername
         command: ["/usr/bin/whoami"]
         stdout: SplitParser {
             onRead: data => {
                 root.username = data.trim()
+                getDisplayName.running = true
+            }
+        }
+    }
+
+    Process {
+        id: getDisplayName
+        running: false
+        command: ["/usr/bin/bash", "-lc", `getent passwd "${root.username}" | cut -d: -f5 | cut -d, -f1`]
+        stdout: StdioCollector {
+            id: displayNameCollector
+            onStreamFinished: {
+                const name = displayNameCollector.text.trim()
+                root.displayName = name.length > 0 ? name : root.username
             }
         }
     }

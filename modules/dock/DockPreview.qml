@@ -46,10 +46,40 @@ PopupWindow {
         root.open()
     }
 
+    // Toplevels are already sorted by spatial layout in DockApps.qml
+    // (via CompositorService.sortedToplevels)
+    function _sortedToplevels(): list<var> {
+        return root.appEntry?.toplevels ?? [];
+    }
+
     visible: false
     color: "transparent"
     implicitWidth: contentItem.implicitWidth + ambientShadowWidth + (visualMargin * 2)
     implicitHeight: contentItem.implicitHeight + ambientShadowWidth + (visualMargin * 2)
+
+    // Reactively update preview when toplevels change (e.g. window closed)
+    Connections {
+        target: ToplevelManager.toplevels
+        function onValuesChanged() {
+            if (!root.visible || !root.appEntry) return
+            const appId = root.appEntry.appId
+            if (!appId) return
+            // Use CompositorService.sortedToplevels for correct spatial order, 
+            // fallback to ToplevelManager if not available.
+            const allToplevels = CompositorService.sortedToplevels && CompositorService.sortedToplevels.length
+                    ? CompositorService.sortedToplevels
+                    : ToplevelManager.toplevels.values;
+
+            const current = allToplevels.filter(
+                t => t.appId && t.appId.toLowerCase() === appId
+            )
+            if (current.length === 0) {
+                root.close()
+            } else {
+                root.appEntry = Object.assign({}, root.appEntry, { toplevels: current })
+            }
+        }
+    }
 
     anchor {
         adjustment: PopupAdjustment.Slide
@@ -100,9 +130,11 @@ PopupWindow {
             fallbackColor: Appearance.colors.colSurfaceContainer
             inirColor: Appearance.inir?.colLayer2 ?? Appearance.colors.colSurfaceContainer
             auroraTransparency: Appearance.aurora?.popupTransparentize ?? 0.1
-            radius: Appearance.inirEverywhere ? (Appearance.inir?.roundingNormal ?? 12) : Appearance.rounding.normal
+            radius: Appearance.angelEverywhere ? Appearance.angel.roundingNormal
+                : Appearance.inirEverywhere ? (Appearance.inir?.roundingNormal ?? 12) : Appearance.rounding.normal
             border.width: 1
-            border.color: Appearance.inirEverywhere 
+            border.color: Appearance.angelEverywhere ? Appearance.angel.colBorder
+                : Appearance.inirEverywhere 
                 ? (Appearance.inir?.colBorder ?? "transparent")
                 : Appearance.auroraEverywhere 
                     ? (Appearance.aurora?.colTooltipBorder ?? "transparent")
@@ -130,11 +162,15 @@ PopupWindow {
 
                 Repeater {
                     model: ScriptModel {
-                        values: root.appEntry?.toplevels ?? []
+                        values: root._sortedToplevels()
                     }
                     delegate: DockWindowPreview {
                         required property var modelData
                         toplevel: modelData
+                        onWindowActivated: {
+                            if (!(Config.options?.dock?.keepPreviewOnClick ?? false))
+                                root.close()
+                        }
                     }
                 }
             }

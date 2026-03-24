@@ -5,12 +5,17 @@ Supports: Kitty, Alacritty, Foot, WezTerm, Ghostty, Konsole
 Auto-integrates into existing terminal configs
 """
 
-import sys
+import argparse
+import json
 import os
 import re
-import argparse
-from pathlib import Path
+import sys
 from datetime import datetime
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from zed.theme_generator import generate_zed_config
+from vscode.theme_generator import generate_vscode_theme, generate_all_vscode_themes, VSCODE_FORKS
 
 
 def parse_scss_colors(scss_path):
@@ -125,8 +130,17 @@ color7  {colors.get("term7", "#A89984")}
 color15 {colors.get("term15", "#EBDBB2")}
 """
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    with open(output_path, "w") as f:
+    # Write config to a secondary file
+    theme_conf = os.path.join(os.path.dirname(output_path), "theme.conf")
+    with open(theme_conf, "w") as f:
         f.write(config)
+
+    # Use atomic mv for the symlink swap (eliminates race conditions)
+    tmp_link = output_path + ".tmp"
+    if os.path.lexists(tmp_link):
+        os.remove(tmp_link)
+    os.symlink("theme.conf", tmp_link)
+    os.replace(tmp_link, output_path)
 
     # Auto-integrate into kitty.conf
     home = os.path.expanduser("~")
@@ -138,20 +152,14 @@ color15 {colors.get("term15", "#EBDBB2")}
     else:
         print(f"✓ Generated Kitty config (already integrated)")
 
-    # Live reload kitty colors via remote control socket
+    # Live reload kitty config via SIGUSR1 (updates all windows and tab bar)
     import subprocess
 
-    socket_path = "/tmp/kitty-socket"
-    if os.path.exists(socket_path):
-        try:
-            subprocess.run(
-                ["kitten", "@", "--to", f"unix:{socket_path}", "set-colors", "--all", output_path],
-                capture_output=True,
-                timeout=2,
-            )
-            print(f"  → Live-reloaded Kitty colors via socket")
-        except Exception:
-            pass
+    try:
+        subprocess.run(["pkill", "--signal", "SIGUSR1", "-x", "kitty"], capture_output=True, timeout=2)
+        print("  → Live-reloaded Kitty config (SIGUSR1)")
+    except Exception:
+        pass
 
 
 def fix_alacritty_import_order(config_path):
@@ -169,6 +177,7 @@ def fix_alacritty_import_order(config_path):
         return False, "Permission denied"
 
     import_line = 'import = ["~/.config/alacritty/colors.toml"]'
+    bare_import_pat = r"^import\s*=\s*\[.*?colors\.toml.*?\]"
     general_import_pat = r"import\s*=\s*\[.*?colors\.toml.*?\]"
 
     has_hardcoded_colors = bool(
@@ -177,7 +186,9 @@ def fix_alacritty_import_order(config_path):
 
     # Check if [general] with import is already at the top (correct state)
     lines = content.split("\n")
-    top_lines = [l.strip() for l in lines[:10] if l.strip() and not l.strip().startswith("#")]
+    top_lines = [
+        l.strip() for l in lines[:10] if l.strip() and not l.strip().startswith("#")
+    ]
 
     # Correct state: [general] is first real line, import is second, no hardcoded colors
     correct = (
@@ -240,8 +251,12 @@ def fix_alacritty_import_order(config_path):
                 in_colors_section = True
                 added_colors_comment = True
                 new_lines.append("")
-                new_lines.append("# Color definitions commented out by iNiR wallpaper theming")
-                new_lines.append("# Colors are managed via the import in [general] above")
+                new_lines.append(
+                    "# Color definitions commented out by iNiR wallpaper theming"
+                )
+                new_lines.append(
+                    "# Colors are managed via the import in [general] above"
+                )
                 new_lines.append("#")
             new_lines.append("# " + line)
             continue
@@ -384,6 +399,20 @@ urls={colors.get("term4", "#458588")[1:]}
     else:
         print(f"✓ Generated Foot config (already integrated)")
 
+    # Remove stale colors.ini include (legacy from old matugen terminal template,
+    # no longer updated — was overriding inir-colors.ini with stale colors)
+    foot_path = Path(foot_conf)
+    if foot_path.exists():
+        old_content = foot_path.read_text()
+        new_content = re.sub(
+            r"^include\s*=\s*~/.config/foot/colors\.ini\s*\n?",
+            "",
+            old_content,
+            flags=re.MULTILINE,
+        )
+        if new_content != old_content:
+            foot_path.write_text(new_content)
+
 
 def generate_wezterm_config(colors, output_path):
     """Generate WezTerm terminal color config and auto-integrate"""
@@ -393,17 +422,17 @@ def generate_wezterm_config(colors, output_path):
 return {{
   foreground = '{colors.get("term7", "#A89984")}',
   background = '{colors.get("term0", "#282828")}',
-  
+
   cursor_bg = '{colors.get("term7", "#A89984")}',
   cursor_fg = '{colors.get("term0", "#282828")}',
   cursor_border = '{colors.get("term7", "#A89984")}',
-  
+
   selection_fg = '{colors.get("term0", "#282828")}',
   selection_bg = '{colors.get("term7", "#A89984")}',
-  
+
   scrollbar_thumb = '{colors.get("term8", "#928374")}',
   split = '{colors.get("term8", "#928374")}',
-  
+
   ansi = {{
     '{colors.get("term0", "#282828")}',  -- black
     '{colors.get("term1", "#CC241D")}',  -- red
@@ -414,7 +443,7 @@ return {{
     '{colors.get("term6", "#689D6A")}',  -- cyan
     '{colors.get("term7", "#A89984")}',  -- white
   }},
-  
+
   brights = {{
     '{colors.get("term8", "#928374")}',  -- bright black
     '{colors.get("term9", "#FB4934")}',  -- bright red
@@ -425,7 +454,7 @@ return {{
     '{colors.get("term14", "#8EC07C")}', -- bright cyan
     '{colors.get("term15", "#EBDBB2")}', -- bright white
   }},
-  
+
   tab_bar = {{
     background = '{colors.get("term0", "#282828")}',
     active_tab = {{
@@ -653,37 +682,558 @@ bright_white = '{colors.get("term15", "#EBDBB2")}'
     # Auto-integrate into starship.toml
     home = os.path.expanduser("~")
     starship_conf = f"{home}/.config/starship.toml"
-    
+
     # Check if starship.toml exists
     if os.path.exists(starship_conf):
         content = Path(starship_conf).read_text()
-        
+
         # Check if palette_name is already set to ii
         if 'palette = "ii"' in content:
             print(f"✓ Generated Starship palette (already using ii palette)")
         else:
             # Add palette directive if not present
-            if 'palette =' not in content:
+            if "palette =" not in content:
                 # Add at top of file
                 new_content = 'palette = "ii"\n\n' + content
                 Path(starship_conf).write_text(new_content)
+                content = new_content
                 print(f"✓ Generated Starship palette and set as active")
             else:
-                print(f"✓ Generated Starship palette (using different palette, change to 'palette = \"ii\"' to use)")
-        
-        # Add source directive for palette file if not present
-        palette_source = f'"$HOME/.config/starship/ii-palette.toml"'
-        if palette_source not in content and 'ii-palette.toml' not in content:
-            # Prepend the source at the very top
-            source_line = f'# Import ii Material You palette\n# source = {palette_source}\n\n'
-            # Note: Starship doesn't support source/include, so we need to append the palette directly
-            # We'll append the palette content to starship.toml if palettes.ii section doesn't exist
-            if '[palettes.ii]' not in content:
-                with open(starship_conf, 'a') as f:
-                    f.write('\n' + config)
-                print(f"  → Appended ii palette to starship.toml")
+                print(
+                    f"✓ Generated Starship palette (using different palette, change to 'palette = \"ii\"' to use)"
+                )
+
+        # Update or append the [palettes.ii] section in starship.toml
+        # Starship doesn't support source/include, so palette must be inline
+        if "[palettes.ii]" in content:
+            # Replace existing palette section with updated colors
+            # Find start of [palettes.ii] and end (next section header or EOF)
+            pattern = r"\[palettes\.ii\].*?(?=\n\[|\Z)"
+            # Extract just the palette block from the generated config
+            palette_block = config.strip().split("\n")
+            # Skip comment lines at the top, keep from [palettes.ii] onward
+            palette_start = next(
+                i
+                for i, line in enumerate(palette_block)
+                if line.startswith("[palettes.ii]")
+            )
+            palette_content = "\n".join(palette_block[palette_start:])
+            new_content = re.sub(pattern, palette_content, content, flags=re.DOTALL)
+            if new_content != content:
+                Path(starship_conf).write_text(new_content)
+                print(f"  → Updated ii palette in starship.toml")
+        else:
+            with open(starship_conf, "a") as f:
+                f.write("\n" + config)
+            print(f"  → Appended ii palette to starship.toml")
     else:
-        print(f"✓ Generated Starship palette (starship.toml not found - create it and add 'palette = \"ii\"')")
+        print(
+            f"✓ Generated Starship palette (starship.toml not found - create it and add 'palette = \"ii\"')"
+        )
+
+
+def generate_btop_config(colors, output_path):
+    """Generate btop theme using Material You design tokens"""
+
+    bg = colors.get("surface", colors.get("background"))
+    surface_low = colors.get("surface_container_low")
+    surface_std = colors.get("surface_container")
+    surface_high = colors.get("surface_container_high")
+
+    on_surface = colors.get("on_surface")
+    on_surface_variant = colors.get("on_surface_variant")
+
+    outline = colors.get("outline")
+    outline_variant = colors.get("outline_variant")
+
+    primary = colors.get("primary")
+
+    primary_dim = colors.get("primary_fixed_dim")
+    secondary_dim = colors.get("secondary_fixed_dim")
+    tertiary_dim = colors.get("tertiary_fixed_dim")
+    error = colors.get("error")
+
+    config = f"""# Auto-generated by ii wallpaper theming system
+# Do not edit manually
+
+theme[main_bg]="{bg}"
+theme[main_fg]="{on_surface}"
+theme[title]="{on_surface}"
+theme[hi_fg]="{primary}"
+theme[selected_bg]="{surface_high}"
+theme[selected_fg]="{on_surface}"
+theme[inactive_fg]="{on_surface_variant}"
+theme[graph_text]="{on_surface_variant}"
+theme[meter_bg]="{surface_low}"
+theme[proc_misc]="{on_surface_variant}"
+
+theme[cpu_box]="{outline_variant}"
+theme[mem_box]="{outline_variant}"
+theme[net_box]="{outline_variant}"
+theme[proc_box]="{outline_variant}"
+theme[div_line]="{outline_variant}"
+
+theme[temp_start]="{tertiary_dim}"
+theme[temp_mid]="{secondary_dim}"
+theme[temp_end]="{error}"
+
+theme[cpu_start]="{tertiary_dim}"
+theme[cpu_mid]="{secondary_dim}"
+theme[cpu_end]="{error}"
+
+theme[free_start]="{tertiary_dim}"
+theme[free_mid]="{tertiary_dim}"
+theme[free_end]="{tertiary_dim}"
+theme[cached_start]="{primary_dim}"
+theme[cached_mid]="{primary_dim}"
+theme[cached_end]="{primary_dim}"
+theme[available_start]="{secondary_dim}"
+theme[available_mid]="{secondary_dim}"
+theme[available_end]="{secondary_dim}"
+theme[used_start]="{tertiary_dim}"
+theme[used_mid]="{secondary_dim}"
+theme[used_end]="{error}"
+
+theme[download_start]="{tertiary_dim}"
+theme[download_mid]="{tertiary_dim}"
+theme[download_end]="{tertiary_dim}"
+theme[upload_start]="{secondary_dim}"
+theme[upload_mid]="{secondary_dim}"
+theme[upload_end]="{secondary_dim}"
+
+theme[process_start]="{primary_dim}"
+theme[process_mid]="{primary_dim}"
+theme[process_end]="{primary_dim}"
+"""
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w") as f:
+        f.write(config)
+
+    # Auto-integrate: set color_theme in btop.conf
+    home = os.path.expanduser("~")
+    btop_conf = f"{home}/.config/btop/btop.conf"
+    btop_path = Path(btop_conf)
+    if btop_path.exists():
+        content = btop_path.read_text()
+        new_line = 'color_theme = "ii-auto"'
+        if re.search(r"^color_theme\s*=", content, re.MULTILINE):
+            new_content = re.sub(
+                r"^color_theme\s*=.*$", new_line, content, flags=re.MULTILINE
+            )
+            if new_content != content:
+                btop_path.write_text(new_content)
+                print(f"\u2713 Generated btop theme and updated btop.conf")
+            else:
+                print(f"\u2713 Generated btop theme (already using ii-auto)")
+        else:
+            with open(btop_conf, "a") as f:
+                f.write(f"\n{new_line}\n")
+            print(f"\u2713 Generated btop theme and added to btop.conf")
+    else:
+        btop_path.parent.mkdir(parents=True, exist_ok=True)
+        btop_path.write_text(f'color_theme = "ii-auto"\n')
+        print(f"\u2713 Generated btop theme and created btop.conf")
+
+
+def generate_omp_config(colors, output_path):
+    """Generate oh-my-posh theme using Material You design tokens"""
+
+    surface_container = colors.get("surface_container")
+    surface_container_high = colors.get("surface_container_high")
+
+    on_surface = colors.get("on_surface")
+    on_surface_variant = colors.get("on_surface_variant")
+
+    primary = colors.get("primary")
+    primary_container = colors.get("primary_container")
+    on_primary_container = colors.get("on_primary_container")
+
+    error_container = colors.get("error_container")
+    on_error_container = colors.get("on_error_container")
+
+    theme = {
+        "$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json",
+        "version": 4,
+        "blocks": [
+            {
+                "type": "prompt",
+                "alignment": "left",
+                "segments": [
+                    {
+                        "type": "executiontime",
+                        "style": "plain",
+                        "foreground": on_surface_variant,
+                        "background": surface_container_high,
+                        "template": " {{ .FormattedMs }} ",
+                        "properties": {
+                            "style": "austin",
+                            "threshold": 500
+                        }
+                    },
+                    {
+                        "type": "status",
+                        "style": "plain",
+                        "foreground": on_error_container,
+                        "background": error_container,
+                        "template": " {{ if gt .Code 0 }}✗ {{ .Code }}{{ end }} "
+                    },
+                    {
+                        "type": "path",
+                        "style": "plain",
+                        "foreground": on_surface,
+                        "background": surface_container,
+                        "template": " {{ .Path }} ",
+                        "properties": {
+                            "style": "full",
+                            "folder_separator_icon": "/"
+                        }
+                    },
+                    {
+                        "type": "git",
+                        "style": "plain",
+                        "foreground": on_primary_container,
+                        "background": primary_container,
+                        "template": " {{ .HEAD }}{{ if .Working.Changed }} ●{{ end }}{{ if .Staging.Changed }} ✚{{ end }} ",
+                        "properties": {
+                            "branch_icon": "",
+                            "fetch_status": True
+                        }
+                    }
+                ]
+            },
+            {
+                "type": "rprompt",
+                "segments": [
+                    {
+                        "type": "time",
+                        "style": "plain",
+                        "foreground": on_surface_variant,
+                        "template": " {{ .CurrentDate | date \"15:04\" }} "
+                    }
+                ]
+            },
+            {
+                "type": "prompt",
+                "alignment": "left",
+                "newline": True,
+                "segments": [
+                    {
+                        "type": "text",
+                        "style": "plain",
+                        "foreground": primary,
+                        "template": "❯ "
+                    }
+                ]
+            }
+        ]
+    }
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w") as f:
+        json.dump(theme, f, indent=2)
+
+    print(f"✓ Generated oh-my-posh theme")
+
+
+def generate_lazygit_config(colors, output_path):
+    """Generate lazygit theme config.
+
+    Writes a standalone theme YAML that can be merged into config.yml.
+    If config.yml exists, merges the gui.theme section carefully.
+    """
+    primary = colors.get("primary", "#458588")
+    fg = colors.get("term15", "#EBDBB2")
+    gray = colors.get("term8", "#928374")
+    sel_bg = colors.get("surfaceContainer", colors.get("term8", "#3C3836"))
+    red = colors.get("term1", "#CC241D")
+    yellow = colors.get("term3", "#D79921")
+    green = colors.get("term2", "#98971A")
+    blue = colors.get("term4", "#458588")
+    magenta = colors.get("term5", "#B16286")
+
+    # The theme block we want inside config.yml
+    theme_yaml = f"""    theme:
+      activeBorderColor:
+        - "{primary}"
+        - bold
+      inactiveBorderColor:
+        - "{gray}"
+      optionsTextColor:
+        - "{primary}"
+      selectedLineBgColor:
+        - "{sel_bg}"
+      selectedRangeBgColor:
+        - "{sel_bg}"
+      cherryPickedCommitFgColor:
+        - "{primary}"
+      cherryPickedCommitBgColor:
+        - "{sel_bg}"
+      markedBaseCommitFgColor:
+        - "{yellow}"
+      markedBaseCommitBgColor:
+        - "{sel_bg}"
+      unstagedChangesColor:
+        - "{red}"
+      defaultFgColor:
+        - "{fg}"
+"""
+
+    home = os.path.expanduser("~")
+    config_path = f"{home}/.config/lazygit/config.yml"
+    config_file = Path(config_path)
+
+    # Also write standalone theme file for reference
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w") as f:
+        f.write(f"# Auto-generated by ii wallpaper theming system\n")
+        f.write(f"# This is the theme section for lazygit config.yml\n")
+        f.write(f"gui:\n{theme_yaml}\n")
+
+    if config_file.exists():
+        content = config_file.read_text()
+        # Check if gui.theme section exists
+        if re.search(r"^\s*theme:", content, re.MULTILINE):
+            # Replace existing theme block
+            # Find "    theme:" and everything indented under it until next key at same/less indent
+            pattern = r"(    theme:\n(?:      .*\n)*(?:        .*\n)*)"
+            new_content = re.sub(pattern, theme_yaml + "\n", content, count=1)
+            if new_content != content:
+                config_file.write_text(new_content)
+                print(f"\u2713 Generated lazygit theme and updated config.yml")
+            else:
+                print(f"\u2713 Generated lazygit theme (config.yml unchanged)")
+        elif re.search(r"^gui:", content, re.MULTILINE):
+            # gui: exists but no theme: — insert theme after gui:
+            new_content = re.sub(
+                r"^(gui:.*)", r"\1\n" + theme_yaml, content, count=1, flags=re.MULTILINE
+            )
+            config_file.write_text(new_content)
+            print(f"\u2713 Generated lazygit theme and added to gui section")
+        else:
+            # No gui: section at all — append
+            with open(config_path, "a") as f:
+                f.write(f"\ngui:\n{theme_yaml}\n")
+            print(f"\u2713 Generated lazygit theme and appended gui section")
+    else:
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        config_file.write_text(f"gui:\n{theme_yaml}\n")
+        print(f"\u2713 Generated lazygit config with theme")
+
+
+def generate_yazi_config(colors, output_path):
+    """Generate yazi flavor for ii theming.
+
+    Creates a flavor directory at ~/.config/yazi/flavors/ii-auto.yazi/
+    with a flavor.toml that uses the material colors.
+    """
+    bg = colors.get("term0", "#282828")
+    fg = colors.get("term15", "#EBDBB2")
+    fg_dim = colors.get("term7", "#A89984")
+    gray = colors.get("term8", "#928374")
+    primary = colors.get("primary", "#458588")
+    sel_bg = colors.get("surfaceContainer", colors.get("term8", "#3C3836"))
+    red = colors.get("term1", "#CC241D")
+    green = colors.get("term2", "#98971A")
+    yellow = colors.get("term3", "#D79921")
+    blue = colors.get("term4", "#458588")
+    magenta = colors.get("term5", "#B16286")
+    cyan = colors.get("term6", "#689D6A")
+
+    config = f"""# Auto-generated by ii wallpaper theming system
+# Do not edit manually - changes will be overwritten
+
+[mgr]
+cwd = {{ fg = "{primary}" }}
+hovered         = {{ fg = "{bg}", bg = "{primary}" }}
+preview_hovered = {{ underline = true }}
+find_keyword    = {{ fg = "{yellow}", italic = true }}
+find_position   = {{ fg = "{magenta}", bg = "reset", italic = true }}
+marker_selected = {{ fg = "{green}", bg = "{green}" }}
+marker_copied   = {{ fg = "{yellow}", bg = "{yellow}" }}
+marker_cut      = {{ fg = "{red}", bg = "{red}" }}
+tab_active      = {{ fg = "{bg}", bg = "{sel_bg}" }}
+tab_inactive    = {{ fg = "{fg_dim}", bg = "{sel_bg}" }}
+tab_width       = 1
+border_symbol   = "\u2502"
+border_style    = {{ fg = "{gray}" }}
+count_copied    = {{ fg = "{bg}", bg = "{yellow}" }}
+count_cut       = {{ fg = "{bg}", bg = "{red}" }}
+count_selected  = {{ fg = "{bg}", bg = "{primary}" }}
+
+[mode]
+normal_main = {{ fg = "{bg}", bg = "{primary}", bold = true }}
+normal_alt  = {{ fg = "{bg}", bg = "{primary}", bold = true }}
+select_main = {{ fg = "{bg}", bg = "{green}", bold = true }}
+select_alt  = {{ fg = "{bg}", bg = "{green}", bold = true }}
+unset_main  = {{ fg = "{bg}", bg = "{magenta}", bold = true }}
+unset_alt   = {{ fg = "{bg}", bg = "{magenta}", bold = true }}
+
+[status]
+separator_open  = ""
+separator_close = ""
+separator_style = {{ fg = "{sel_bg}", bg = "{sel_bg}" }}
+progress_label  = {{ fg = "{fg}", bold = true }}
+progress_normal = {{ fg = "{primary}", bg = "{sel_bg}" }}
+progress_error  = {{ fg = "{red}", bg = "{sel_bg}" }}
+permissions_t   = {{ fg = "{primary}" }}
+permissions_r   = {{ fg = "{yellow}" }}
+permissions_w   = {{ fg = "{red}" }}
+permissions_x   = {{ fg = "{green}" }}
+permissions_s   = {{ fg = "{gray}" }}
+
+[input]
+border   = {{ fg = "{primary}" }}
+title    = {{}}
+value    = {{}}
+selected = {{ reversed = true }}
+
+[select]
+border   = {{ fg = "{primary}" }}
+active   = {{ fg = "{magenta}", bold = true }}
+inactive = {{}}
+
+[tasks]
+border  = {{ fg = "{primary}" }}
+title   = {{}}
+hovered = {{ underline = true }}
+
+[which]
+mask            = {{ bg = "{sel_bg}" }}
+cand            = {{ fg = "{cyan}" }}
+rest            = {{ fg = "{gray}" }}
+desc            = {{ fg = "{magenta}" }}
+separator       = "  "
+separator_style = {{ fg = "{gray}" }}
+
+[help]
+on      = {{ fg = "{magenta}" }}
+run     = {{ fg = "{cyan}" }}
+desc    = {{ fg = "{gray}" }}
+hovered = {{ bg = "{sel_bg}", bold = true }}
+footer  = {{ fg = "{sel_bg}", bg = "{fg_dim}" }}
+
+[filetype]
+rules = [
+  {{ mime = "image/*", fg = "{magenta}" }},
+  {{ mime = "video/*", fg = "{cyan}" }},
+  {{ mime = "audio/*", fg = "{cyan}" }},
+  {{ mime = "application/zip",             fg = "{red}" }},
+  {{ mime = "application/gzip",            fg = "{red}" }},
+  {{ mime = "application/x-tar",           fg = "{red}" }},
+  {{ mime = "application/x-bzip",          fg = "{red}" }},
+  {{ mime = "application/x-bzip2",         fg = "{red}" }},
+  {{ mime = "application/x-7z-compressed", fg = "{red}" }},
+  {{ mime = "application/x-rar",           fg = "{red}" }},
+  {{ name = "*",  fg = "{fg_dim}" }},
+  {{ name = "*/", fg = "{primary}" }},
+]
+"""
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w") as f:
+        f.write(config)
+
+    # Auto-integrate: set flavor in yazi's theme.toml
+    home = os.path.expanduser("~")
+    theme_toml = f"{home}/.config/yazi/theme.toml"
+    theme_path = Path(theme_toml)
+
+    flavor_line = 'use = "ii-auto"'
+    if theme_path.exists():
+        content = theme_path.read_text()
+        if "[flavor]" in content:
+            if re.search(r'^use\s*=\s*"ii-auto"', content, re.MULTILINE):
+                print(f"\u2713 Generated yazi flavor (already using ii-auto)")
+            elif re.search(r"^use\s*=", content, re.MULTILINE):
+                new_content = re.sub(
+                    r"^(use\s*=).*$",
+                    f'use = "ii-auto"',
+                    content,
+                    count=1,
+                    flags=re.MULTILINE,
+                )
+                theme_path.write_text(new_content)
+                print(f"\u2713 Generated yazi flavor and updated theme.toml")
+            else:
+                new_content = content.replace("[flavor]", f"[flavor]\n{flavor_line}")
+                theme_path.write_text(new_content)
+                print(f"\u2713 Generated yazi flavor and added use directive")
+        else:
+            with open(theme_toml, "a") as f:
+                f.write(f"\n[flavor]\n{flavor_line}\n")
+            print(f"\u2713 Generated yazi flavor and added [flavor] section")
+    else:
+        theme_path.parent.mkdir(parents=True, exist_ok=True)
+        theme_path.write_text(f"[flavor]\n{flavor_line}\n")
+        print(f"\u2713 Generated yazi flavor and created theme.toml")
+
+
+def generate_fuzzel_config(colors, output_path):
+    """Generate Fuzzel launcher theme from material colors"""
+    bg = colors.get("background", colors.get("term0", "#282828"))
+    fg = colors.get("onBackground", colors.get("term15", "#EBDBB2"))
+    surface_var = colors.get("surfaceVariant", colors.get("term8", "#928374"))
+    on_surface_var = colors.get("onSurfaceVariant", colors.get("term7", "#A89984"))
+    primary = colors.get("primary", "#458588")
+
+    # Strip '#' and add 'ff' alpha
+    def hex_alpha(c):
+        return c[1:] + "ff" if c.startswith("#") else c + "ff"
+
+    def hex_alpha_dim(c):
+        return c[1:] + "dd" if c.startswith("#") else c + "dd"
+
+    config = f"""[colors]
+background={hex_alpha(bg)}
+text={hex_alpha(fg)}
+selection={hex_alpha(surface_var)}
+selection-text={hex_alpha(on_surface_var)}
+border={hex_alpha_dim(surface_var)}
+match={hex_alpha(primary)}
+selection-match={hex_alpha(primary)}
+"""
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w") as f:
+        f.write(config)
+    print(f"\u2713 Generated Fuzzel theme")
+
+
+def generate_pywalfox_config(colors, output_path):
+    """Generate Pywalfox-compatible JSON from material colors"""
+    import json
+
+    bg = colors.get("background", colors.get("term0", "#282828"))
+    fg = colors.get("onBackground", colors.get("term15", "#EBDBB2"))
+    primary = colors.get("primary", "#458588")
+
+    # Build 16-color palette from term colors
+    palette = {}
+    for i in range(16):
+        palette[f"color{i}"] = colors.get(f"term{i}", "#000000")
+
+    # Read wallpaper path if available
+    wallpaper = ""
+    wp_path = os.path.expanduser(
+        "~/.local/state/quickshell/user/generated/wallpaper/path.txt"
+    )
+    if os.path.exists(wp_path):
+        with open(wp_path) as f:
+            wallpaper = f.read().strip()
+
+    pywalfox_data = {
+        "wallpaper": wallpaper,
+        "alpha": "100",
+        "colors": palette,
+        "special": {
+            "background": bg,
+            "foreground": fg,
+            "cursor": primary,
+        },
+    }
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w") as f:
+        json.dump(pywalfox_data, f, indent=2)
+    print(f"\u2713 Generated Pywalfox colors")
 
 
 def main():
@@ -702,9 +1252,39 @@ def main():
         "--terminals",
         type=str,
         nargs="+",
-        choices=["kitty", "alacritty", "foot", "wezterm", "ghostty", "konsole", "starship", "all"],
+        choices=[
+            "kitty",
+            "alacritty",
+            "foot",
+            "wezterm",
+            "ghostty",
+            "konsole",
+            "starship",
+            "omp",
+            "btop",
+            "lazygit",
+            "yazi",
+            "all",
+        ],
         default=["all"],
-        help="Which terminals to generate configs for",
+        help="Which terminals/tools to generate configs for",
+    )
+    parser.add_argument(
+        "--zed",
+        action="store_true",
+        help="Generate Zed editor theme",
+    )
+    parser.add_argument(
+        "--vscode",
+        action="store_true",
+        help="Generate VSCode theme (injects into settings.json)",
+    )
+    parser.add_argument(
+        "--vscode-forks",
+        type=str,
+        nargs="*",
+        default=None,
+        help=f"Specific VSCode forks to generate for. Options: {', '.join(VSCODE_FORKS.keys())}. Default: all installed",
     )
 
     args = parser.parse_args()
@@ -720,7 +1300,19 @@ def main():
     terminals = (
         args.terminals
         if "all" not in args.terminals
-        else ["kitty", "alacritty", "foot", "wezterm", "ghostty", "konsole", "starship"]
+        else [
+            "kitty",
+            "alacritty",
+            "foot",
+            "wezterm",
+            "ghostty",
+            "konsole",
+            "starship",
+            "omp",
+            "btop",
+            "lazygit",
+            "yazi",
+        ]
     )
 
     # Generate configs for requested terminals
@@ -746,6 +1338,58 @@ def main():
 
     if "starship" in terminals:
         generate_starship_config(colors, f"{home}/.config/starship/ii-palette.toml")
+
+    if "omp" in terminals:
+        colors_json_path = os.path.expanduser(
+            "~/.local/state/quickshell/user/generated/colors.json"
+        )
+        try:
+            with open(colors_json_path, "r") as f:
+                m3_colors = json.load(f)
+                omp_colors = {**colors, **m3_colors}
+                generate_omp_config(omp_colors, f"{home}/.config/oh-my-posh/ii-auto.json")
+        except FileNotFoundError:
+            print(f"Warning: {colors_json_path} not found, oh-my-posh theme may be incomplete")
+            generate_omp_config(colors, f"{home}/.config/oh-my-posh/ii-auto.json")
+
+    if "btop" in terminals:
+        # btop needs full M3 tokens from colors.json, not just terminal colors
+        colors_json_path = os.path.expanduser(
+            "~/.local/state/quickshell/user/generated/colors.json"
+        )
+        try:
+            with open(colors_json_path, "r") as f:
+                m3_colors = json.load(f)
+                # Merge M3 tokens with terminal colors
+                btop_colors = {**colors, **m3_colors}
+                generate_btop_config(btop_colors, f"{home}/.config/btop/themes/ii-auto.theme")
+        except FileNotFoundError:
+            print(f"Warning: {colors_json_path} not found, btop theme may be incomplete")
+            generate_btop_config(colors, f"{home}/.config/btop/themes/ii-auto.theme")
+
+    if "lazygit" in terminals:
+        generate_lazygit_config(colors, f"{home}/.config/lazygit/ii-theme.yml")
+
+    if "yazi" in terminals:
+        generate_yazi_config(
+            colors, f"{home}/.config/yazi/flavors/ii-auto.yazi/flavor.toml"
+        )
+
+    if args.zed:
+        generate_zed_config(
+            colors, args.scss, f"{home}/.config/zed/themes/ii-theme.json"
+        )
+
+    if args.vscode:
+        # Use the new multi-fork generation that auto-detects all installed forks
+        colors_json = os.path.expanduser(
+            "~/.local/state/quickshell/user/generated/colors.json"
+        )
+        # Parse enabled forks from --vscode-forks argument if provided
+        forks_to_generate = args.vscode_forks if hasattr(args, 'vscode_forks') and args.vscode_forks else None
+        results = generate_all_vscode_themes(colors_json, args.scss, forks_to_generate)
+        if not results:
+            print("✗ No VSCode forks found or all disabled")
 
 
 if __name__ == "__main__":

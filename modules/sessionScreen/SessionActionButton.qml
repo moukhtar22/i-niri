@@ -12,12 +12,14 @@ RippleButton {
     property real size: 120
 
     buttonRadius: (button.focus || button.down) ? size / 2 
-        : (Appearance.inirEverywhere ? Appearance.inir.roundingLarge : Appearance.rounding.verylarge)
+        : (Appearance.angelEverywhere ? Appearance.angel.roundingLarge
+            : Appearance.inirEverywhere ? Appearance.inir.roundingLarge : Appearance.rounding.verylarge)
     colBackground: button.keyboardDown 
         ? (Appearance.inirEverywhere ? Appearance.inir.colPrimaryActive : Appearance.colors.colSecondaryContainerActive)
         : button.focus 
             ? (Appearance.inirEverywhere ? Appearance.inir.colPrimary : Appearance.colors.colPrimary)
-            : (Appearance.inirEverywhere ? Appearance.inir.colLayer2 
+            : (Appearance.angelEverywhere ? Appearance.angel.colGlassCard
+                : Appearance.inirEverywhere ? Appearance.inir.colLayer2 
                 : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface 
                 : Appearance.colors.colSecondaryContainer)
     colBackgroundHover: Appearance.inirEverywhere ? Appearance.inir.colPrimaryHover : Appearance.colors.colPrimary
@@ -31,7 +33,7 @@ RippleButton {
     background.implicitWidth: size
 
     Behavior on buttonRadius {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
     }
 
     Keys.onPressed: (event) => {

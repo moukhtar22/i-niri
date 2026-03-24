@@ -5,6 +5,272 @@ All notable changes to iNiR will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.1] - 2026-03-12
+
+### Added
+- **Backdrop wallpaper transitions**: Both ii and waffle backdrops now use `WallpaperCrossfader` for smooth wallpaper transition animations matching their workspace counterparts.
+- **Animated blur toggle**: New `enableAnimatedBlur` config key for GIF/video wallpapers in both families.
+- **Blur transition suppression**: Blur fades out before wallpaper transitions so the change is visible even with windows open, then fades back in after transition completes.
+- **Waffle backdrop effects controls**: Vignette, saturation, contrast, and animated blur controls added to waffle backdrop settings.
+- **Waffle transition config**: Independent transition settings for waffle wallpapers (`waffles.background.transition`).
+- **Spicetify wallpaper theming**: Opt-in Material You color scheme for Spotify via Spicetify with live watch mode — colors update on wallpaper change without restarting Spotify (PR #80 by @yukazakiri).
+- **Migration 013**: Auto-patch kde-material-you-colors wrapper on update.
+- **Migration 014**: Malloc arena optimization (`MALLOC_ARENA_MAX=2`, `MALLOC_MMAP_THRESHOLD_=131072`) for reduced glibc memory overhead.
+- **Migration 015**: Clean orphan config keys (`blurStatic`, `videoBlurStrength` → `thumbnailBlurStrength`) from existing user configs.
+
+### Changed
+- **Blur decoupled from awww renderer**: Blur now reads from the crossfader texture regardless of who renders the visible wallpaper, fixing blur not working when parallax is disabled.
+- **blurStatic removed**: Blur only activates when windows are present on the workspace. The always-on `blurStatic` option caused rendering issues in both families and has been removed.
+- **videoBlurStrength → thumbnailBlurStrength**: Renamed for clarity; migration preserves user values.
+- **Saturation/contrast defaults**: Changed from 1.0 to 0 (neutral) for new installs. Existing users keep their values.
+- **Backend provider hardcoded**: `awww` backend is now always active (config key ignored, no UI change).
+- **Settings surfaces refreshed**: Updated quick options, control panel, and shell surfaces.
+
+### Fixed
+- **Wallpaper double-apply**: Prevent duplicate `switchwall.sh` runs with `_applyInProgress` suppression flag and 3-second timer.
+- **kde-material-you-colors stacking**: Kill previous daemon instance before launching new one to prevent orphan processes.
+- **StyledListView animations**: Use `Transition.enabled` instead of `running` on child animations to prevent animation glitches.
+- **Blur alignment**: Reverted `sourceSize÷4` to screen resolution for correct blur positioning.
+- **Blur source loading**: Keep wallpaper source always loaded to avoid style-switch freeze.
+- **Todo.qml runtime error**: Replaced invalid `Process.exec` with `Quickshell.execDetached`.
+- **Config schema sync**: Added `enableOpenCode`, `vscodeEditors` (14 editor forks), and `omp` (oh-my-posh) to schema and defaults — keys existed in theming scripts but were missing from Config.qml.
+- **Kitty tab bar colors**: Update live via SIGUSR1 and atomic symlink swap.
+- **WaffleConfig stale reference**: Removed UI control for deleted `blurStatic` config key.
+
+### Performance
+- **Animation instances**: Replaced 402 `createObject` calls with inline `Animation` instances, eliminating per-animation QObject allocation overhead.
+- **Blur GPU gating**: Style-gated `layer.enabled` and `source` on all blur Images — GPU blur work only runs when the active style uses it. Reduced `blurMax` from 100 to 64.
+- **Wallpaper caching**: `cache:false` on all wallpaper Images across both families with `sourceSize` constraints to cap decoded pixmap resolution.
+- **Thumbnail caching**: Skip `magick` subprocess when thumbnail is already loaded; cache `magick identify` results.
+- **Crossfader optimization**: `cache:false` on crossfader slots, release inactive slot texture after transition completes.
+- **ColorQuantizer gating**: Only run wallpaper ColorQuantizer when aurora/angel style is active.
+
+### Community
+- PR #80 by @yukazakiri — Spicetify wallpaper theming support
+
+## [2.13.0] - 2026-03-08
+
+### Added
+- **Wallpaper Coverflow selector**: Browse wallpapers with 3D perspective cards, folder navigation, skew view with momentum physics, and hero crossfade transitions. Full aurora/inir/angel style support.
+- **Wallpaper transitions**: Multi-type transitions between wallpapers — crossfade, slide, zoom, and blur-fade — with configurable duration and per-type settings.
+- **Bar Taskbar**: Dock apps integrated directly into the horizontal and vertical bar as a taskbar with live window previews, pin/unpin, and window management actions.
+- **Fluid Ripple shader**: New pixel-art inspired ripple effect for interactive elements with configurable visual parameters (PR #55).
+- **NVENC recording support**: Screen recorder auto-detects Nvidia GPUs and uses hardware NVENC encoding, with VAAPI fallback for AMD/Intel and software fallback chain.
+- **GPU resource monitoring**: GPU usage indicator added to bar/vertical bar resource monitors. Configurable indicators (CPU, RAM, GPU, temperature) via settings.
+- **Primary monitor selection**: Choose which monitor is primary for bar, dock, and panel targeting in Display settings.
+- **Bar scroll customization**: Configure left/right scroll actions on the bar, including workspace scroll direction inversion (PR #53).
+- **Overview center launcher**: Option to center the app launcher in the overview dashboard with refined glass surfaces.
+- **AwwwBackend service**: External wallpaper rendering via the awww daemon with automatic sync from iNiR's wallpaper config and seamless internal fallback.
+- **OpenCode theme generator**: Material You color integration for OpenCode editor via matugen pipeline.
+- **Oh-my-posh theme generator**: Material You prompt theme with wallpaper-synced colors.
+- **YT Music OAuth**: OAuth setup flow and song rating support for YouTube Music integration.
+- **Wallpaper upscale notification toggle**: Hide the "wallpaper was upscaled" notification in background settings.
+- **Screen recording settings**: Exposed wf-recorder configuration (codec, format, audio) in settings UI.
+
+### Changed
+- **CompactMediaPlayer redesign**: Cleaner blur, centered controls, unified glass surfaces in compact sidebar mode.
+- **Settings theming**: Complete aurora/inir/angel style support across all settings pages — cards, overlays, material presets, and section backgrounds.
+- **StyledComboBox rewrite**: Full shell theming with proper aurora/inir/angel style dispatch, replacing the stock Qt combo box.
+- **Dock performance**: Optimized rebuild logic and reduced binding churn for smoother animations with many windows.
+- **MprisController debounce**: Rapid signal bursts from media players are now debounced to prevent UI stutter.
+- **Network service debounce**: WiFi scan results debounced to reduce unnecessary UI rebuilds.
+- **GTK theming improvements**: GTK3 CSS support, improved GTK4 token mapping, and hardened switchwall color pipeline.
+- **btop theme generator**: Rewritten to use Material You design tokens directly.
+- **Clipboard panel**: Dark glass background for aurora/angel styles, reset count on wipe.
+- **Dark glass unification**: Consistent glass surfaces across compact sidebar controls and quick action cards.
+
+### Fixed
+- **Audio volume slider**: Restored `setSinkVolume` with ramp curve to prevent illegal volume increment on slider click.
+- **Wallpaper Skew view focus**: Fixed focus-on-reopen bug where the coverflow panel showed wrong image after external wallpaper change.
+- **FloatingImage overlay**: Simplified implementation with proper Config access (optional chaining + setNestedValue) and zero-dimension fallback.
+- **MaterialSymbol axes**: Clamped `fill` (0–1) and `opsz` (20–48) values to prevent Qt rendering warnings.
+- **Booru context menu**: Opens at button edge outside sidebar bounds; fixed Niri grab-loss dismiss.
+- **Clipboard self-trigger**: Dock previews no longer contaminate clipboard history; fixed stale `_selfCopy` flag.
+- **Booru wallpaper downloads**: Save to `~/Pictures/Wallpapers` instead of unintended directory.
+- **Animation guards**: Added `animationsEnabled` checks to Behaviors across multiple widgets to respect reduced-motion preference.
+- **Bar GPU icon**: Fixed `memory_alt` icon name; clamped media player width to prevent overflow.
+- **Close animations & keyboard focus**: Improved panel close transitions and focus handling (PR #63).
+- **Fish autosuggestion contrast**: Fixed low-contrast autosuggestion colors in fish shell (PR #69).
+- **Chrome variant theming**: Corrected Material You color mapping for Chrome theme generation (PR #70).
+- **Settings overlay background**: Solid background for material/cards/inir styles instead of transparent.
+- **Compact sidebar warnings**: Suppressed spurious Connections warnings in compact mode.
+- **Screen recording UI**: Simplified layout and fixed style issues in recording settings.
+- **Various setup fixes**: Extracted WebEngine build helper, fixed wayland-protocols makedep, SDDM local variable bug, and CRASH_HANDLER build flag.
+
+### Community
+- PR #53 by @hakimshifat — Bar scroll customization
+- PR #55 — Pixel Fluid Ripple shader
+- PR #63 — Close animations, keyboard focus, YtMusic OAuth
+- PR #69, #70 — Fish autosuggestion contrast, Chrome variant theming
+- PR #74 by @orcusforyou — Lock screen fixes
+
+## [2.12.0] - 2026-02-28
+
+### Added
+- **Overview Dashboard panel**: New control center below workspace previews with quick toggles, media player, volume/brightness sliders, weather summary, and system stats. Configurable via `overview.dashboard.*` settings.
+- **Events & Reminders system**: Full event management with date-based notifications, calendar integration with event dots, and professional add/edit dialog.
+- **Calendar event indicators**: Days with events show colored dots; clicking navigates to Events tab.
+- **Reorderable Controls sections**: Drag to reorder sidebar sections (sliders, toggles, devices, media, quick actions) in compact layout. Persisted via `sidebar.right.controlsSectionOrder`.
+- **VSCode/Cursor theme generation**: Material You integration for VS Code and Cursor editors with wallpaper-synced colors.
+- **Zed editor theme generation**: Material You theme support for Zed (PR #62).
+- **Lock screen display name**: Show user's full name (GECOS) instead of username on lock screen.
+- **Documentation site**: Next.js static site with GitHub Pages deployment, full feature documentation.
+- **Launcher search prefixes**: Document search prefix shortcuts in launcher.
+
+### Changed
+- **Dashboard moved to Overview**: DashboardWidget removed from right sidebar; functionality consolidated into OverviewDashboard in the Overview panel.
+- **Compact sidebar polish**: Simplified SectionDivider (no lines, just text), enhanced CompactMediaPlayer with cleaner blur and centered controls.
+- **README install instructions**: Updated with explicit `./setup install`, `./setup update`, and TUI menu documentation.
+- **Events reactivity**: Replaced property-based reactivity with trigger pattern (`_eventsTrigger` counter) for reliable UI updates when events change.
+- **ProfileHeader greeting**: Uses primary color instead of subtext for warmer appearance.
+
+### Fixed
+- **SDDM install script**: Improved privilege escalation (try cached sudo before pkexec), force X11 display server (kwin_wayland crashes in VMs), handle conflicting display-manager.service symlinks.
+- **Installer robustness**: Quote variables for filenames with spaces, correct pacman -Syu logic for interactive/non-interactive modes, i2c-dev module config without subshell functions.
+- **DatePicker compatibility**: Fix ComponentBehavior: Bound compatibility issues.
+- **Notifications null safety**: Filter null values in stringifyList, add null check in notifToJSON.
+- **CompactMediaPlayer**: Add fallback for undefined effectiveIdentity, use MPRIS player volume instead of system audio.
+- **Config fallbacks**: Respect false values in enableZed/enableVSCode, use fallback path when XDG_CONFIG_HOME unset.
+- **Pomodoro centering**: Properly centered in both compact and default sidebar modes.
+- **Settings border color**: Replace undefined colLayer1Border with colLayer0Border.
+
+## [2.11.1] - 2026-02-22
+
+### Changed
+- **Cheatsheet keybinds grouped by category**: Keybinds now display in separate cards per category (System, ii Shell, Window Management, etc.) with icon headers and count badges. Search still shows flat filtered results.
+- **Periodic table responsive sizing**: Element tiles dynamically scale to fit the cheatsheet panel width (36–70px) instead of hardcoded 70px. No more horizontal scrolling required.
+- **Quick Launch editor redesign**: Replaced bulky outlined text fields with compact pill-shaped inline fields. Single-row layout per shortcut with icon preview, hover effects, and animated delete button.
+- **Displays settings moved to General**: Per-monitor bar/dock visibility controls moved from Interface to General settings page, always visible regardless of monitor count. Shows monitor name and resolution.
+
+### Fixed
+- **SDDM password characters blinking**: Password shape indicators no longer re-animate when typing new characters. Replaced integer Repeater model (which recreates all delegates) with ListModel (preserves existing delegates). Matches lockscreen behavior.
+- **Cheatsheet style consistency**: Added angel and aurora style branches to keybind rows and periodic table cards for proper 5-style support.
+- **SongRec music recognition**: Updated command from deprecated `audio-file-to-recognized-song` to `recognize -j` for compatibility with newer songrec versions.
+
+## [2.11.0] - 2026-02-21
+
+### Added
+- **SDDM Pixel theme**: Material You login screen — session selector, cycling fail messages, wallpaper-synced colors. Auto-applied on fresh install.
+- **Angel global style**: Fifth visual style (neo-brutalism glass) across all shell surfaces
+- **Firefox MaterialFox theming**: Auto-generated Material You colors for Firefox via matugen template
+- **Terminal theming: btop, lazygit, yazi**: 10 TUI tools now auto-theme with wallpaper colors (foot, kitty, alacritty, starship, fuzzel, pywalfox, btop, lazygit, yazi). Individual toggles in Settings.
+- **Terminal color controls**: Saturation and brightness sliders for fine-tuning generated terminal colors
+- **Overlay theming options**: Scrim dim, background opacity, and blur toggle in Settings
+- **Waffle per-monitor wallpaper**: Full UI with monitor frame preview + thumbnail grid in Waffle settings
+
+### Changed
+- **Color pipeline centralized**: Matugen generates `colors.json` only; Python handles all app configs (GTK, KDE, terminals, Vesktop, Fuzzel) — consistent primary color across everything
+- **Qt theming via plasma-integration**: Required dependency for Material You in Qt apps. Migration 011 auto-patches existing installs. New doctor check verifies it's working.
+- **darkly → darkly-bin**: Pre-built binary on Arch saves ~5 min on fresh install
+- **Setup TUI overhaul**: Consistent `log_*/tui_*` branding across Arch, Debian, and Fedora installers
+- **GTK4 dark mode**: Template applies dark mode unconditionally
+- **Dolphin integration**: SingleClick mode + "Open terminal here" context menu via kservicemenurc
+- **quickshell-git conflict**: Installer handles existing `-git` package, prefers official repos; adds ffmpeg as dependency
+
+### Fixed
+- **Terminal colors not updating**: Root cause — venv activation failed in QML `execDetached` context when `ILLOGICAL_IMPULSE_VIRTUAL_ENV` was unset
+- **SDDM Qt5 compatibility**: Full rewrite for SDDM's Qt5 runtime (model roles, easing curves, font loading)
+- **Wallpaper theming**: Stop guessing thumbnails by basename, clear stale paths on video→image switch, kill previous switchwall before starting new
+- **Video first-frame**: `seek(0)` after pause ensures frame display
+- **Qt apps white on dark**: Fixed GTK4 CSS and terminal venv resolution for Nautilus and KDE apps
+- **Waffle notifications**: Expand direction, calendar lag, animation cleanup
+- **Pomodoro timer**: Timer editing no longer requires double-tap
+- **Settings search**: Improved result relevance — dynamic registry results scored higher, section delimiter parsing unified
+- **Capture windows**: No longer trashes clipboard during screenshot
+- **Foot colors**: Switched to `inir-colors.ini`, removed stale `colors.ini` include
+- **Matugen config**: Use user config at `~/.config/matugen/`, not non-existent defaults path
+- **Config safety audit**: 34 fixes — unsafe writes→`setNestedValue()`, unsafe reads→safe defaults
+- **Waffle video backdrop**: Show frozen first frame when animated wallpapers disabled (was showing nothing)
+- **Fresh install**: 0-byte wallpaper recovery, version.json tracking, polkit auto-detection, env vars in all shells, conflict auto-disable, dynamic wallpaper selection
+
+## [2.10.1] - 2026-02-13
+
+### Added
+- **Desktop right-click context menu**: Right-click on the desktop background opens a context menu with Mission Center, Overview/Task View, Settings, Wallpaper Selector, Terminal, Media Controls, Lock Screen, and Power Menu
+- **Bar right-click context menu (ii family)**: Right-click on the horizontal or vertical bar opens a context menu with Mission Center and Settings
+- **DesktopShellContextMenu component**: Reusable context menu widget for desktop backgrounds, respects all three global styles (Material, Aurora, iNiR)
+
+### Changed
+- **Bar context menu positioning**: Vertical bar popup opens toward screen center (right when bar is left, left when bar is right) following the dock pattern; horizontal bar popup opens above when bar is at bottom, below when at top
+- **Desktop context menu close behavior**: Left-click on desktop closes the menu; right-click repositions it — avoids layer-shell backdrop conflict on Niri
+
+## [2.10.0] - 2026-02-13
+
+### Added
+- **Multi-monitor wallpaper support**: Per-monitor wallpaper and backdrop paths via WallpaperListener service
+- **Video first-frame system**: Automatic ffmpeg extraction and caching of first-frame JPGs for video wallpapers
+- **Per-monitor aurora/glass**: Bar, dock, and sidebars use per-screen wallpaper for blur and color quantization
+- **Wallpaper selector multi-monitor targeting**: Auto-detects focused monitor, opens on target screen, per-monitor selection
+- **Per-monitor backdrop paths**: Each monitor can have its own backdrop wallpaper independent of global setting
+- **Derive theme colors from backdrop**: New toggle in settings — all color generation sources (matugen, ColorQuantizer, aurora) switch to backdrop wallpaper when enabled
+- **Card right-click swap**: Right-click on the front card toggles between main wallpaper and backdrop views
+- **Backdrop card focus borders**: Selection border overlay when backdrop card is in front and selected
+- **DockPreview toplevel reactivity**: Auto-close preview when app exits, update on toplevel changes
+- **Per-monitor random wallpapers**: Random wallpaper scripts (konachan, osu) support focused monitor targeting
+
+### Changed
+- **Card clipping**: Parent-level `layer.enabled + OpacityMask` replaces per-image masking — all children (gradients, labels, badges) now properly clip to rounded corners
+- **Card scaling quality**: `layer.smooth` on scaled cards for sharper text and badges when zoomed out
+- **Video/GIF display**: Always load AnimatedImage for GIFs (frozen when animation disabled); replaced QtMultimedia Video with first-frame Image in previews
+- **Color pipeline**: ColorQuantizer and effectiveWallpaperUrl return image-safe sources for videos (first-frame cache → config thumbnail → trigger generation)
+- **switchwall.sh**: Per-monitor wallpaper changes skip global color regeneration; `--noswitch` reads current wallpaper from config
+- **CryptoWidget**: Cache staleness check — only refresh if older than refreshInterval (default 300s)
+- **WaffleConfig**: Use `Config.setNestedValue()` instead of direct property mutation
+
+### Fixed
+- **Black peaks on cards**: Gradient and label overlays no longer escape rounded corners (`clip:true` only clips rectangular)
+- **Aurora colors for video wallpapers**: ColorQuantizer receives first-frame images instead of undecoded video URLs
+- **Backdrop changes all monitors**: Per-monitor backdrop selection now only affects the selected monitor
+- **White line above wallpaper path**: Removed hardcoded separator — `Layout.topMargin` provides sufficient spacing
+- **Derive theme colors noop**: Toggle now wires through to Appearance.qml ColorQuantizer, Wallpapers.effectiveWallpaperPath, and switchwall.sh matugen source
+
+## [2.9.1] - 2026-02-11
+
+### Added
+- **Weather location debouncing**: Wait 1.5 seconds after user finishes typing before triggering geocoding to reduce API calls
+- **Weather geocoding improvements**: Smarter display name formatting (city, country) for manual location entries
+- **Cliphist lazy image decode**: Only decode images when they become visible, reducing process spam
+- **YtMusic dependency reporting**: Show exactly which dependencies are missing and how to install them
+
+### Changed
+- **GitHub templates**: Streamlined issue and PR templates for clarity and conciseness
+- **Package dependencies**: Added missing required commands to doctor.sh and PKGBUILDs (python, xdg-utils, curl, git, swayidle, fuzzel, pacman-contrib, ddcutil, translate-shell)
+- **PACKAGES.md documentation**: Synchronized with actual package requirements
+
+### Fixed
+- **Video wallpaper blur**: Blur effect now works correctly with video wallpapers (removed video guard clause)
+- **Overlay pinned widgets**: Pinned widgets now display correctly when the overlay is closed
+- **Clipboard self-trigger**: Prevented clipboard from refreshing when copying its own entries
+- **YtMusic mpv-mpris**: Made mpv-mpris plugin optional so playback works without it
+- **YtMusic cookie path**: Fixed path for cookie file used by mpv
+- **Weather re-fetch**: Prevent duplicate location resolution on shell restart with manual coordinates
+
+## [2.9.0] - 2026-02-11
+
+### Added
+- **Shell update overlay**: New layer-shell panel with commit log, changelog preview, and local modifications detection
+- **Shell update details**: Click bar indicator to open detailed overlay instead of direct update
+- **Weather manual location**: City name input, manual lat/lon coordinates, and GPS support via geoclue
+- **Weather geocoding**: Forward geocoding (city → coords) and reverse geocoding (coords → display name) via Nominatim
+- **Waffle themes redesign**: Theme cards with live color preview circles, quick-apply, inline rename, import/export
+- **WWaffleStylePage options**: Start menu scale slider, clock format options, bar sizing controls (height, icon size, corner radius), desktop peek section
+- **Waffle pages icon audit**: Replaced generic icons with descriptive FluentIcons across all settings pages
+- **Ko-fi funding**: Added ko_fi to FUNDING.yml
+
+### Changed
+- **Waffle settings isolation**: Waffle family always opens its own Win11-style settings window, simplified IPC toggle logic
+- **Win11 visual polish**: Redesigned waffle settings widgets with shadows, compact sizing, animated transitions using Looks.transition tokens
+- **Weather priority**: Manual coords > manual city > GPS > IP auto-detect
+- **ShellUpdates service**: Added overlay state management, manifest parsing, IPC handlers (toggle/open/close/check/update/dismiss)
+
+### Fixed
+- **Config schema sync**: Added 6 missing altSwitcher properties, enableAnimation for WaffleBackground, noVisualUi and taskView.closeOnSelect defaults
+- **Settings bugs**: Fixed BarConfig layout property name, WaffleConfig bindings and spacing
+- **YtMusic persistence**: Connection state and resolvedBrowserArg now persist across restarts
+- **YtMusic cookies**: Always use --cookies-from-browser instead of intermediate cookie files, resolve Firefox fork profile paths
+- **YtMusic debugging**: Added stderr capture and logging for mpv, converted shell commands to proper array-based Process commands
+- **Waffle start menu overflow**: Added clip, Flickable wrapper, min/max height constraints, reduced recommended items from 6 to 4
+
 ## [2.8.2] - 2026-02-09
 
 ### Added
@@ -72,186 +338,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tiling Overlay**: Visual overlay for tiling operations
 - **Tools tab**: New tools section in settings
 - **GIF wallpaper support**: Native animated GIF wallpapers with performance optimizations
-- **Video wallpaper support**: Video files as wallpapers in wallpaper selector
-- **Calculator widget**: Calculator in sidebar left
-- **System monitor widget**: System stats widget in sidebar
-- **Bar media popup**: Quick media controls popup from bar
-- **YouTube Music overhaul**: New player card, track items, account sync, and library import
-- **FontSyncService**: Automatic font synchronization service
-- **CavaProcess widget**: Reusable cavo visualizer component
-- **Terminal config generator**: Auto-generate terminal color schemes from theme
-
-### Changed
-- **Anime API**: Switched from Jikan/MAL to AniList API for better reliability
-- **Themes UI**: Compact 3-column grid layout with scroll, single-select tag filters
-- **Control Panel**: Modularized into separate section components
-- **Audio service**: Simplified architecture with improved sidebar widgets
-- **Cava visualizers**: Improved with config generator script
-- **Aurora dark mode**: Better contrast and color handling
-- **Session screen**: Added blurred wallpaper background like lock screen
-
-### Fixed
-- **Vertical bar hug mode**: Fixed layout issues with hug corner style
-- **Aurora blur corners**: Fixed missing blur in vertical bar Aurora style
-- **Dock recreation**: Dock now properly recreates when bar position changes
-- **Media popup cava**: Removed problematic cava from bar media popup
-- **Hardcoded colors**: Replaced hex colors with ColorUtils for proper theming
-- **Notification widgets**: Improved notification item and action button styling
-- **Lock surfaces**: Improved backdrop and lock surface rendering
-- **YtMusic crashes**: Fixed config race condition and JSON structure issues
-- **YtMusic sync**: Resolved synchronization issues and improved UI/UX
-- **Bar Aurora corners**: Added opaque background to match bar appearance
-- **Bluetooth null guard**: Added safety check for bluetooth service
-- **Various UI fixes**: Misc improvements across bar, overview, and settings
-
-## [2.5.0] - 2026-01-03
-
-### Added
-- **Reddit tab**: Browse subreddits in sidebar left (disabled by default)
-- **Anime Schedule tab**: View anime schedule, seasonal, and top airing from Jikan API (disabled by default)
-- **NerdIconMap entries**: Added collections, photo_library, live_tv, tv, movie icons
-
-### Changed
-- Wallhaven tab icon changed to `collections` for better Nerd Font glyph in inir style
-- Card style toggle now available for inir global style
-
-### Fixed
-- Inir button colors in Reddit/Anime tabs using valid color properties
-- AnimeCard type badge and genre tags with proper inir container colors
-- Optional chaining in Workspaces.qml (`bar?.workspaces`)
-- Number style selector disabled when 'Always show numbers' is off
-
-## [2.4.0] - 2026-01-02
-
-### Added
-- **Timer pause persistence**: Pomodoro, stopwatch, and countdown now persist pause state across restarts
-- **ContextCard timer idle view**: Navigate between Focus/Timer/Stopwatch with slide animations
-- **Dock showOnDesktop option**: Control dock visibility when no window is focused
-- **Quick Launch editor**: Inline editor in settings to customize quick launch shortcuts
-- **Context card weather toggle**: Option to hide weather in context card
-- **Cover art blur transition**: Smooth blur effect when track changes
-
-### Changed
-- Region search now uses 0x0.st (uguu.se was down)
-- Settings search includes Global Style entries
-- Faster settings page preloading for search indexing
-- Search results show breadcrumb path with chevron icons
-
-### Fixed
-- Dock context menu now keeps dock visible while open
-- StyledPopup supports buttonHovered fallback for RippleButton
-- WeekStrip scroll fixed with acceptedButtons: Qt.NoButton
-- NotificationAppIcon safer image error handling
-- Aurora colors for workspaces occupied indicator
-- Calendar other-month text color in aurora style
-- ConfigSelectionArray includes option names in search
-
-## [2.3.0] - 2026-01-01
-
-### Added
-- **Dock multi-position**: Dock can now be placed at top, bottom, left, or right
-- **Aurora style**: Glass effect with wallpaper blur for panels and popups
-- **Inir style**: TUI-inspired style with accent borders and darker colors
-- **Voice search**: Voice input with Gemini transcription
-- **QuickWallpaper widget**: Quick wallpaper picker in sidebar
-- **Wallpaper fill modes**: Stretch, fit, fill, tile options
-- **Free OpenRouter models**: Dynamically loaded free AI models
-- **Weather forecast**: wttr.in fallback with forecast display
-- **Separate dock icon theme**: Independent icon theme for dock
-
-### Changed
-- Sidebar animations improved with slide effects
-- Lock screen now falls back to swaylock on Niri (avoids crash)
-- Cover art download now has retry with exponential backoff
-- Improved transparency system for aurora style
-
-### Fixed
-- Cover art URLs no longer use query strings (Qt Image compatibility)
-- Sidebar widget buttons now work during drag detection
-- Aurora style uses solid colors for popups without blur
-- Weather retries on startup network issues
-- NiriKeybinds config watcher debounced
-- Network monitor delayed until component ready
-- Dock binding loops and hover behavior
-- Lock activates before suspend when configured
-- Calendar respects locale's firstDayOfWeek
-
-## [2.2.0] - 2025-12-14
-
-### Added
-- Snapshot system for time-machine style rollbacks
-- `./setup rollback` command to restore previous states
-- Auto git fetch and pull in update command
-- Doctor now auto-starts shell if not running
-- Fish shell added to core dependencies
-- EasyEffects added to audio dependencies
-
-### Changed
-- Simplified setup to 4 commands: install, update, doctor, rollback
-- Update now checks remote for new commits before syncing
-- Update creates snapshot automatically before applying changes
-- Doctor now fixes issues automatically (uv pip, version tracking, manifest)
-- Removed redundant commands (install-deps, migrate, status, changelog, restore)
-
-### Fixed
-- Doctor now uses `uv pip` instead of `pip` for Python package checks
-- Update now properly restarts shell after sync
-- Backup directory no longer created when empty
-
-## [2.1.0] - 2025-12-14
-
-### Added
-- New versioning system with proper version tracking
-- `./setup status` command shows installed vs available version
-- `./setup changelog` command to view recent changes
-- Smart update detection - only syncs when there are actual changes
-- Version comparison with remote repository
-- Cached remote version checks (1 hour TTL)
-
-### Changed
-- Improved `./setup update` to check for changes before syncing
-- Better migration system with clearer separation from installation
-- Enhanced status output with pending migrations count
-
-### Fixed
-- Pomodoro timer now properly syncs with Config changes
-- Volume slider maintains sync with external changes (keybinds)
-- GameMode state now persists across shell restarts
-
-## [2.0.0] - 2025-12-10
-
-### Added
-- Migration system for safe config updates
-- `./setup migrate` command for interactive config migrations
-- Automatic backups before any config modification
-- `./setup restore` command to restore from backups
-- Support for both Material (ii) and Fluent (waffle) panel families
-
-### Changed
-- `./setup update` now only syncs QML code, never touches user configs
-- Migrations are now optional and interactive
-- Improved first-run detection and handling
-
-### Philosophy
-- User configs are sacred - never modified without explicit consent
-- Transparency - users see exactly what will change
-- Reversibility - automatic backups, easy restore
-
-## [1.0.0] - 2025-11-01
-
-### Added
-- Initial release of iNiR
-- Material Design (ii) panel family
-- Windows 11 style (waffle) panel family
-- System tray with smart activation
-- Notifications with Do Not Disturb
-- Media controls (MPRIS)
-- Workspace management
-- Quick settings panel
-- Lockscreen
-- Game mode for reduced latency
-- Hot-reload for development
-
----
-
-For older changes, see git history: `git log --oneline`

@@ -56,7 +56,7 @@ parser.add_argument(
     help="JSON file containg the terminal scheme for generating term colors",
 )
 parser.add_argument(
-    "--harmony", type=float, default=0.8, help="(0-1) Color hue shift towards accent"
+    "--harmony", type=float, default=0.4, help="(0-1) Color hue shift towards accent"
 )
 parser.add_argument(
     "--harmonize_threshold",
@@ -73,14 +73,20 @@ parser.add_argument(
 parser.add_argument(
     "--term_saturation",
     type=float,
-    default=0.40,
+    default=0.65,
     help="Terminal color saturation (0.0-1.0)",
 )
 parser.add_argument(
     "--term_brightness",
     type=float,
-    default=0.55,
+    default=0.60,
     help="Terminal color brightness/lightness (0.0-1.0)",
+)
+parser.add_argument(
+    "--term_bg_brightness",
+    type=float,
+    default=0.50,
+    help="Terminal background brightness (0.0-1.0, 0=darkest, 1=lightest)",
 )
 parser.add_argument(
     "--blend_bg_fg",
@@ -143,159 +149,6 @@ def harmonize(
 def boost_chroma_tone(argb: int, chroma: float = 1, tone: float = 1) -> int:
     hct = Hct.from_int(argb)
     return Hct.from_hct(hct.hue, hct.chroma * chroma, hct.tone * tone).to_int()
-
-
-def enforce_terminal_palette_spread(
-    term_colors: dict,
-    term_source_colors: dict,
-    darkmode: bool,
-    primary_color_argb: int,
-) -> None:
-    """Nudge generated terminal colors so they are less bunched together.
-
-    We keep Material You harmonization but ensure: (a) a minimum chroma floor so
-    colors don't all become muted pastels, (b) a tone delta from the background so
-    foreground colors remain legible, and (c) a small hue pull-back towards the
-    original source color if harmonization collapses hues together.
-    """
-
-    if not term_colors:
-        return
-
-    bg_hex = term_colors.get("term0") or term_source_colors.get("term0")
-    if not bg_hex:
-        return
-
-    bg_hct = Hct.from_int(hex_to_argb(bg_hex))
-    anchor_tone = bg_hct.tone
-
-    # Sets of keys to handle differently
-    chroma_keys = {
-        "term1",
-        "term2",
-        "term3",
-        "term4",
-        "term5",
-        "term6",
-        "term9",
-        "term10",
-        "term11",
-        "term12",
-        "term13",
-        "term14",
-    }
-    bright_keys = {
-        "term8",
-        "term9",
-        "term10",
-        "term11",
-        "term12",
-        "term13",
-        "term14",
-        "term15",
-    }
-
-    for key, hex_val in list(term_colors.items()):
-        source_hex = term_source_colors.get(key, hex_val)
-
-        try:
-            hct = Hct.from_int(hex_to_argb(hex_val))
-            source_hct = Hct.from_int(hex_to_argb(source_hex))
-        except Exception:
-            continue
-
-        # 1) Enforce a chroma floor so colors don't all sit near gray
-        if key in chroma_keys:
-            min_chroma = 34 if darkmode else 28
-            # Slightly higher floor for warm slots to keep them lively
-            if key in {"term1", "term3", "term5", "term9", "term11", "term13"}:
-                min_chroma += 4
-            if hct.chroma < min_chroma:
-                hct = Hct.from_hct(hct.hue, min_chroma, hct.tone)
-
-        # 2) Ensure a tone delta from the background so text is readable
-        is_bright = key in bright_keys
-        if key == "term8":
-            delta = 12  # dim bright-black only a bit away from background
-        else:
-            delta = 30 if is_bright else 22
-
-        if darkmode:
-            target_tone = clamp(anchor_tone + delta, 0, 100)
-            if hct.tone < target_tone:
-                hct = Hct.from_hct(hct.hue, hct.chroma, target_tone)
-        else:
-            target_tone = clamp(anchor_tone - delta, 0, 100)
-            if hct.tone > target_tone:
-                hct = Hct.from_hct(hct.hue, hct.chroma, target_tone)
-
-        # 3) If harmonization collapsed hues too close to the primary, pull a bit
-        #    back towards the original slot hue to preserve variety
-        hue_to_primary = difference_degrees(hct.hue, Hct.from_int(primary_color_argb).hue)
-        if hue_to_primary < 10:
-            restored_hue = sanitize_degrees_double(
-                hct.hue + (source_hct.hue - hct.hue) * 0.35
-            )
-            hct = Hct.from_hct(restored_hue, hct.chroma, hct.tone)
-
-        term_colors[key] = argb_to_hex(hct.to_int())
-
-
-def build_material_term_source(material_colors: dict, darkmode: bool) -> dict:
-    """Generate a default 16-color terminal palette from Material colors.
-
-    This avoids the static JSON hue bias (blue-ish) and anchors the palette to
-    the wallpaper-derived Material scheme. Falls back gracefully if keys are
-    missing.
-    """
-
-    def pick(name: str, fallback: str) -> str:
-        return material_colors.get(name, fallback)
-
-    # Core anchors with safe defaults
-    surface = pick("surfaceContainerLow" if darkmode else "surface", "#1E1E1E")
-    surface_high = pick("surfaceContainerHigh" if darkmode else "surfaceBright", "#2A2A2A")
-    on_surface = pick("onSurface", "#E6E1E5")
-    on_surface_var = pick("onSurfaceVariant", "#CAC4D0")
-    primary = pick("primary", "#9A82FF")
-    secondary = pick("secondary", "#89D1C5")
-    tertiary = pick("tertiary", "#F2B8C6")
-    primary_c = pick("primaryContainer", "#4F378A")
-    secondary_c = pick("secondaryContainer", "#4A635E")
-    tertiary_c = pick("tertiaryContainer", "#633B48")
-    on_primary = pick("onPrimary", "#0F0A1C")
-    on_secondary = pick("onSecondary", "#0D1F1A")
-    on_tertiary = pick("onTertiary", "#251420")
-    inverse_primary = pick("inversePrimary", primary)
-    outline = pick("outline", "#928F99")
-    outline_var = pick("outlineVariant", "#49454F")
-
-    return {
-        # Base / bright base
-        "term0": surface,
-        "term8": surface_high,
-        # Accents
-        "term1": primary,
-        "term2": secondary,
-        "term3": tertiary,
-        "term4": primary_c,
-        "term5": secondary_c,
-        "term6": tertiary_c,
-        # Neutral fg/bg
-        "term7": on_surface,
-        "term15": on_surface_var,
-        # Bright accents (on* give pop on dark bg)
-        "term9": on_primary,
-        "term10": on_secondary,
-        "term11": on_tertiary,
-        "term12": inverse_primary,
-        "term13": outline,
-        "term14": outline_var,
-    }
-
-
-def clamp(value: float, low: float, high: float) -> float:
-    return max(low, min(high, value))
 
 
 darkmode = args.mode == "dark"
@@ -385,54 +238,95 @@ else:
 
 # Terminal Colors
 if args.termscheme is not None:
-    # Start from material-derived defaults to avoid static hue bias (e.g., always blue)
-    term_source_colors = build_material_term_source(material_colors, darkmode)
-
-    # If a term scheme file is provided, use it as a structure and blend with material
-    # anchors so we keep slot intent (reds/greens) but hue-align to the wallpaper.
     with open(args.termscheme, "r") as f:
         json_termscheme = f.read()
-    file_scheme = json.loads(json_termscheme)["dark" if darkmode else "light"]
+    term_source_colors = json.loads(json_termscheme)["dark" if darkmode else "light"]
 
-    # Retint file scheme slots towards corresponding material anchors while keeping
-    # their tone/chroma relationships to preserve semantic spread.
-    for key, val in file_scheme.items():
-        target_hex = term_source_colors.get(key, val)
-        try:
-            base_hct = Hct.from_int(hex_to_argb(val))
-            target_hct = Hct.from_int(hex_to_argb(target_hex))
-        except Exception:
-            term_source_colors[key] = val
-            continue
+    # Handle both snake_case and camelCase key naming across library versions
+    primary_key = material_colors.get(
+        "primary_paletteKeyColor",
+        material_colors.get(
+            "primaryPaletteKeyColor", material_colors.get("primary", "#6750A4")
+        ),
+    )
+    primary_color_argb = hex_to_argb(primary_key)
 
-        # Keep the tone from the file (preserves bright/dim intent), use target hue,
-        # and blend chroma between target and file to avoid washed-out results.
-        blended_chroma = max(base_hct.chroma * 0.5 + target_hct.chroma * 0.5, 18)
-        retinted = Hct.from_hct(target_hct.hue, blended_chroma, base_hct.tone)
-        term_source_colors[key] = argb_to_hex(retinted.to_int())
-
-    primary_color_argb = hex_to_argb(material_colors["primary_paletteKeyColor"])
-    
     # User-configurable parameters
     user_saturation = args.term_saturation  # 0.0-1.0
     user_brightness = args.term_brightness  # 0.0-1.0
     user_harmony = args.harmony  # 0.0-1.0
-    
+    user_bg_brightness = args.term_bg_brightness  # 0.0-1.0
+
+    # Define surface colors for interpolation based on bg_brightness
+    # 0.0 = background (darkest), 0.5 = surfaceContainerLow (matches shell), 1.0 = surfaceContainerHighest (lightest)
+    surface_levels = [
+        ("background", 0.0),
+        ("surfaceContainerLowest", 0.2),
+        ("surfaceContainerLow", 0.4),
+        ("surfaceContainer", 0.6),
+        ("surfaceContainerHigh", 0.8),
+        ("surfaceContainerHighest", 1.0),
+    ]
+
+    def get_interpolated_surface(brightness):
+        """Get a surface color based on brightness (0-1)"""
+        # Find the two surface levels to interpolate between
+        for i, (name, level) in enumerate(surface_levels):
+            if brightness <= level or i == len(surface_levels) - 1:
+                if i == 0:
+                    return material_colors.get(name, "#1a1a1a")
+                # Interpolate between previous and current
+                prev_name, prev_level = surface_levels[i - 1]
+                t = (
+                    (brightness - prev_level) / (level - prev_level)
+                    if level != prev_level
+                    else 0
+                )
+                c1 = hex_to_argb(material_colors.get(prev_name, "#1a1a1a"))
+                c2 = hex_to_argb(material_colors.get(name, "#2a2a2a"))
+                # Simple RGB interpolation
+                r1, g1, b1 = (c1 >> 16) & 0xFF, (c1 >> 8) & 0xFF, c1 & 0xFF
+                r2, g2, b2 = (c2 >> 16) & 0xFF, (c2 >> 8) & 0xFF, c2 & 0xFF
+                r = int(r1 + (r2 - r1) * t)
+                g = int(g1 + (g2 - g1) * t)
+                b = int(b1 + (b2 - b1) * t)
+                return f"#{r:02X}{g:02X}{b:02X}"
+        return material_colors.get("surfaceContainerLow", "#1a1a1a")
+
     for color, val in term_source_colors.items():
         if args.scheme == "monochrome":
             term_colors[color] = val
             continue
-        if args.blend_bg_fg and color == "term0":
-            # Background: use surface color
-            harmonized = boost_chroma_tone(
-                hex_to_argb(material_colors["surfaceContainerLow"]), 0.7, 0.98
-            )
-        elif args.blend_bg_fg and color == "term15":
-            # Foreground: use onSurface
-            harmonized = boost_chroma_tone(
-                hex_to_argb(material_colors["onSurface"]), 1.5, 1
-            )
-        elif color in ["term7", "term8"]:
+
+        # Terminal background: Interpolate based on user_bg_brightness
+        # 0.5 = surfaceContainerLow (matches shell surfaces perfectly)
+        if color == "term0":
+            term_colors[color] = get_interpolated_surface(user_bg_brightness)
+            continue
+
+        # Terminal foreground: Use EXACT Material onSurface color
+        if color == "term15":
+            term_colors[color] = material_colors.get("onSurface", "#e0e0e0")
+            continue
+
+        # term8: autosuggestion color — needs contrast against term0
+        if color == "term8":
+            if darkmode:
+                term_colors[color] = material_colors.get(
+                    "outline",
+                    get_interpolated_surface(min(1.0, user_bg_brightness + 0.45)),
+                )
+            else:
+                term_colors[color] = material_colors.get(
+                    "outline_variant",
+                    material_colors.get(
+                        "outlineVariant",
+                        get_interpolated_surface(max(0.0, user_bg_brightness - 0.45)),
+                    ),
+                )
+            continue
+
+        if color == "term7":
             # Neutral colors (gray tones) - minimal harmonization
             harmonized = harmonize(
                 hex_to_argb(val),
@@ -465,9 +359,26 @@ if args.termscheme is not None:
 
         term_colors[color] = argb_to_hex(harmonized)
 
-    enforce_terminal_palette_spread(
-        term_colors, term_source_colors, darkmode, primary_color_argb
-    )
+# Fallback: derive term colors from material colors when no termscheme provided
+if not term_colors and material_colors:
+    term_colors = {
+        "term0": material_colors.get("surfaceVariant", "#282828"),
+        "term1": material_colors.get("error", "#CC241D"),
+        "term2": material_colors.get("secondary", "#98971A"),
+        "term3": material_colors.get("tertiary", "#D79921"),
+        "term4": material_colors.get("primary", "#458588"),
+        "term5": material_colors.get("tertiary", "#B16286"),
+        "term6": material_colors.get("secondary", "#689D6A"),
+        "term7": material_colors.get("onSurfaceVariant", "#A89984"),
+        "term8": material_colors.get("outline", "#928374"),
+        "term9": material_colors.get("error", "#FB4934"),
+        "term10": material_colors.get("secondary", "#B8BB26"),
+        "term11": material_colors.get("tertiary", "#FABD2F"),
+        "term12": material_colors.get("primary", "#83A598"),
+        "term13": material_colors.get("tertiary", "#D3869B"),
+        "term14": material_colors.get("secondary", "#8EC07C"),
+        "term15": material_colors.get("onSurface", "#EBDBB2"),
+    }
 
 if args.debug == False:
     print(f"$darkmode: {darkmode};")

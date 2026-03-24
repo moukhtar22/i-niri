@@ -54,6 +54,10 @@ Item {
             name: "model",
             description: Translation.tr("Choose model"),
             execute: args => {
+                if (args.length === 0 || !args[0] || args[0] === "get") {
+                    Ai.addMessage(Translation.tr("Usage: %1model MODEL_ID").arg(root.commandPrefix), Ai.interfaceRole);
+                    return;
+                }
                 Ai.setModel(args[0]);
             }
         },
@@ -88,6 +92,10 @@ Item {
             name: "key",
             description: Translation.tr("Set API key"),
             execute: args => {
+                if (args.length === 0) {
+                    Ai.addMessage(Translation.tr("Usage: %1key YOUR_API_KEY\n%1key get").arg(root.commandPrefix), Ai.interfaceRole);
+                    return;
+                }
                 if (args[0] == "get") {
                     Ai.printApiKey();
                 } else {
@@ -300,7 +308,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 opacity: messageListView.atYBeginning ? 0 : 1
                 visible: opacity > 0
                 Behavior on opacity {
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                 }
             }
             Rectangle {
@@ -314,7 +322,8 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 implicitWidth: statusRowLayout.implicitWidth + 10 * 2
                 implicitHeight: Math.max(statusRowLayout.implicitHeight, 38)
                 radius: Appearance.rounding.normal - root.padding
-                color: Appearance.inirEverywhere ? Appearance.inir.colLayer2
+                color: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
+                    : Appearance.inirEverywhere ? Appearance.inir.colLayer2
                     : Appearance.auroraEverywhere ? Appearance.aurora.colElevatedSurface : Appearance.colors.colLayer2
                 RowLayout {
                     id: statusRowLayout
@@ -358,8 +367,8 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 popin: false
                 topMargin: statusBg.implicitHeight + statusBg.anchors.topMargin * 2
 
-                touchpadScrollFactor: Config.options.interactions.scrolling.touchpadScrollFactor * 1.4
-                mouseScrollFactor: Config.options.interactions.scrolling.mouseScrollFactor * 1.4
+                touchpadScrollFactor: (Config.options?.interactions?.scrolling?.touchpadScrollFactor ?? 0.5) * 1.4
+                mouseScrollFactor: (Config.options?.interactions?.scrolling?.mouseScrollFactor ?? 1.0) * 1.4
 
                 property int lastResponseLength: 0
                 onContentHeightChanged: {
@@ -445,9 +454,11 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 }
                 delegate: ApiCommandButton {
                     id: commandButton
-                    colBackground: Appearance.auroraEverywhere 
-                        ? (suggestions.selectedIndex === index ? Appearance.aurora.colSubSurface : "transparent")
-                        : (suggestions.selectedIndex === index ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer)
+                    colBackground: Appearance.angelEverywhere
+                        ? (suggestions.selectedIndex === index ? Appearance.angel.colGlassCardHover : Appearance.angel.colGlassCard)
+                        : Appearance.auroraEverywhere 
+                            ? (suggestions.selectedIndex === index ? Appearance.aurora.colSubSurface : "transparent")
+                            : (suggestions.selectedIndex === index ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer)
                     bounce: false
                     contentItem: StyledText {
                         font.pixelSize: Appearance.font.pixelSize.smaller
@@ -499,12 +510,13 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             property real spacing: 5
             Layout.fillWidth: true
             radius: Appearance.rounding.normal - root.padding
-            color: Appearance.auroraEverywhere ? Appearance.aurora.colElevatedSurface : Appearance.colors.colLayer2
+            color: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
+                : Appearance.auroraEverywhere ? Appearance.aurora.colElevatedSurface : Appearance.colors.colLayer2
             implicitHeight: Math.max(inputFieldRowLayout.implicitHeight + inputFieldRowLayout.anchors.topMargin + commandButtonsRow.implicitHeight + commandButtonsRow.anchors.bottomMargin + spacing, 45) + (attachedFileIndicator.implicitHeight + spacing + attachedFileIndicator.anchors.topMargin)
             clip: true
 
             Behavior on implicitHeight {
-                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
             }
 
             AttachedFileIndicator {
@@ -767,8 +779,11 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 ApiInputBoxIndicator {
                     // Model indicator
                     icon: "api"
-                    text: Ai.getModel().name
-                    tooltipText: Translation.tr("Current model: %1\nSet it with %2model MODEL").arg(Ai.getModel().name).arg(root.commandPrefix)
+                    readonly property var _model: Ai.getModel()
+                    text: _model?.name ?? Translation.tr("No model")
+                    tooltipText: _model
+                        ? Translation.tr("Current model: %1\nSet it with %2model MODEL").arg(_model.name).arg(root.commandPrefix)
+                        : Translation.tr("No model selected\nSet it with %1model MODEL").arg(root.commandPrefix)
                 }
 
                 ApiInputBoxIndicator {

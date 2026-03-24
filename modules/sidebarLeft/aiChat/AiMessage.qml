@@ -27,7 +27,8 @@ Rectangle {
     implicitHeight: columnLayout.implicitHeight + root.messagePadding * 2
 
     radius: Appearance.rounding.normal
-    color: Appearance.inirEverywhere ? Appearance.inir.colLayer1
+    color: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
+        : Appearance.inirEverywhere ? Appearance.inir.colLayer1
         : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface : Appearance.colors.colLayer1
 
     function saveMessage() {
@@ -228,7 +229,7 @@ Rectangle {
                 visible: implicitHeight > 0
 
                 Behavior on implicitHeight {
-                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
                 }
                 FadeLoader {
                     id: loadingIndicatorLoader

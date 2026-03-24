@@ -18,7 +18,7 @@ import qs.modules.waffle.settings
 ApplicationWindow {
     id: root
     
-    property bool uiReady: Config.ready && ThemeService.ready
+    property bool uiReady: Config.ready
     
     property var pages: [
         {
@@ -77,7 +77,7 @@ ApplicationWindow {
     
     visible: true
     onClosing: Qt.quit()
-    title: "illogical-impulse Settings"
+    title: "Settings — illogical-impulse"
     
     Component.onCompleted: {
         Config.readWriteDelay = 0

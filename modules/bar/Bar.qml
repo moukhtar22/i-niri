@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Qt5Compat.GraphicalEffects as GE
 import Quickshell
 import Quickshell.Io
@@ -112,10 +113,10 @@ Scope {
                             rightMargin: ((Config.options?.interactions?.deadPixelWorkaround?.enable ?? false) && barRoot.anchors.right) * -1
                         }
                         Behavior on anchors.topMargin {
-                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                         }
                         Behavior on anchors.bottomMargin {
-                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                         }
 
                         states: State {
@@ -257,24 +258,35 @@ Scope {
                                                 : (-Appearance.sizes.barHeight)
                                             width: barRoot.screen?.width ?? 1920
                                             height: barRoot.screen?.height ?? 1080
-                                            source: Wallpapers.effectiveWallpaperUrl
+                                            source: barContent.wallpaperUrl
                                             fillMode: Image.PreserveAspectCrop
                                             cache: true
+                                            sourceSize.width: barRoot.screen?.width ?? 1920
+                                            sourceSize.height: barRoot.screen?.height ?? 1080
                                             asynchronous: true
                                             
-                                            layer.enabled: Appearance.effectsEnabled
-                                            layer.effect: StyledBlurEffect {
+                                            layer.enabled: Appearance.effectsEnabled && Appearance.auroraEverywhere
+                                            layer.effect: MultiEffect {
                                                 source: blurImg
+                                                anchors.fill: source
+                                                saturation: Appearance.angelEverywhere
+                                                    ? Appearance.angel.blurSaturation
+                                                    : (Appearance.effectsEnabled ? 0.2 : 0)
+                                                blurEnabled: Appearance.effectsEnabled
+                                                blurMax: 64
+                                                blur: Appearance.effectsEnabled ? 1 : 0
                                             }
                                             
                                             Rectangle {
                                                 anchors.fill: parent
-                                                color: ColorUtils.transparentize((barContent.blendedColors?.colLayer0 ?? Appearance.colors.colLayer0Base), Appearance.aurora.overlayTransparentize)
+                                                color: Appearance.angelEverywhere
+                                                    ? ColorUtils.transparentize((barContent.blendedColors?.colLayer0 ?? Appearance.colors.colLayer0Base), Appearance.angel.overlayOpacity)
+                                                    : ColorUtils.transparentize((barContent.blendedColors?.colLayer0 ?? Appearance.colors.colLayer0Base), Appearance.aurora.overlayTransparentize)
                                             }
                                         }
                                         
                                         // Mask to corner shape
-                                        layer.enabled: true
+                                        layer.enabled: Appearance.auroraEverywhere
                                         layer.effect: GE.OpacityMask {
                                             maskSource: RoundCorner {
                                                 width: blurCorner.width

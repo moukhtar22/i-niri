@@ -20,21 +20,28 @@ Essential packages for Niri + ii to function.
 | `wget` | Downloads |
 | `ripgrep` | Fast search |
 | `jq` | JSON parsing |
+| `python` | Python interpreter (scripts) |
 | `xdg-user-dirs` | User directories |
+| `xdg-utils` | xdg-settings, xdg-open |
 | `rsync` | File sync |
 | `git` | Version control |
-| `wl-clipboard` | Wayland clipboard |
+| `wl-clipboard` | Wayland clipboard (wl-copy, wl-paste) |
 | `libnotify` | Notifications |
+| `pacman-contrib` | checkupdates for update notifications |
+| `wlsunset` | Night light / blue light filter |
+| `dolphin` | File manager (KDE, optional — nautilus is default) |
 | `xdg-desktop-portal` | XDG portal base |
 | `xdg-desktop-portal-gtk` | GTK portal |
 | `xdg-desktop-portal-gnome` | GNOME portal (screenshare) |
 | `polkit` | Privilege elevation |
-| `mate-polkit` | Polkit agent |
 | `networkmanager` | Network management |
 | `gnome-keyring` | Secrets storage |
-| `dolphin` | File manager |
-| `foot` | Terminal |
+| `nautilus` | File manager |
+| `kitty` | Terminal (default) |
+| `foot` | Terminal (fallback) |
+| `fish` | Fish shell (required for scripts) |
 | `gum` | TUI for setup script |
+| `xwayland-satellite` | X11 compatibility |
 
 ---
 
@@ -69,15 +76,13 @@ Qt6 stack and Quickshell runtime.
 | `kdialog` | KDE dialogs |
 | `syntax-highlighting` | Code highlighting |
 | `qt6ct` | Qt6 config tool |
-| `kde-gtk-config` | GTK theme sync |
-| `breeze` | Breeze theme |
+| `breeze-icons` | Breeze icon theme (lightweight) |
+| `plasma-integration` | KDE platform theme (reads kdeglobals for Qt colors) |
 
 ### From AUR
 
 | Package | Purpose |
 |---------|---------|
-| `quickshell-git` | Quickshell (required) |
-| `google-breakpad` | Crash reporting |
 | `qt6-avif-image-plugin` | AVIF image support |
 
 ---
@@ -91,11 +96,18 @@ Audio stack and media controls.
 | `pipewire` | Audio server |
 | `pipewire-pulse` | PulseAudio compat |
 | `pipewire-alsa` | ALSA compat |
-| `pipewire-jack` | JACK compat |
 | `wireplumber` | Session manager |
 | `playerctl` | Media player control |
 | `libdbusmenu-gtk3` | Tray menus |
 | `pavucontrol` | Volume control GUI |
+| `mpv` | Media playback backend |
+| `mpv-mpris` | MPRIS bridge for mpv |
+| `yt-dlp` | YouTube extraction backend |
+| `socat` | IPC fallback for YTMusic control |
+| `cava` | Audio visualizer |
+| `easyeffects` | Audio effects |
+
+`pipewire-jack` and `nodejs` are optional/recommended extras depending on your audio and YTMusic setup.
 
 ---
 
@@ -131,6 +143,13 @@ Input simulation, hardware control, and idle management.
 | `ddcutil` | DDC/CI for monitors |
 | `geoclue` | Geolocation |
 | `swayidle` | Idle management (screen off, lock, suspend) |
+| `swaylock` | Screen locker |
+| `blueman` | Bluetooth manager GUI |
+| `fprintd` | Fingerprint authentication (lock screen) |
+| `libqalculate` | Calculator backend |
+| `tesseract` | OCR engine |
+| `tesseract-data-eng` | English OCR data |
+| `tesseract-data-spa` | Spanish OCR data |
 
 ---
 
@@ -149,12 +168,13 @@ Fonts, theming, and utilities.
 | `glib2` | GLib utilities |
 | `translate-shell` | Translation CLI |
 | `kvantum` | Qt theming |
-| `matugen` | Material You colors | Yes |
+| `matugen` | Material You colors |
 
 ### From AUR
 
 | Package | Purpose | Required |
 |---------|---------|----------|
+| `darkly-bin` | Darkly Qt style (Material You widget style for Qt apps) | Yes |
 | `ttf-jetbrains-mono-nerd` | JetBrains Mono Nerd | Yes (monospace) |
 | `ttf-material-symbols-variable-git` | Material icons | Yes (UI icons) |
 | `ttf-readex-pro` | Readex Pro font | No (has fallback) |
@@ -163,9 +183,7 @@ Fonts, theming, and utilities.
 | `ttf-twemoji` | Twitter emoji | No (has fallback) |
 | `adw-gtk-theme-git` | Adwaita GTK theme | Yes |
 | `capitaine-cursors` | Capitaine cursor theme | Yes |
-| `hyprpicker` | Color picker | Yes |
 | `xwayland-satellite` | Xwayland helper for legacy apps | Yes |
-| `songrec` | Music recognition | No |
 
 > **Note:** Optional fonts will be downloaded directly from GitHub if AUR packages are unavailable (e.g., due to regional restrictions). The UI will use system fallback fonts if installation fails completely.
 
@@ -178,9 +196,7 @@ Not installed by default, but useful. The shell handles their absence gracefully
 | Package | Purpose | Used by |
 |---------|---------|---------|
 | `warp-cli` | Cloudflare WARP VPN toggle | Quick toggles panel |
-| `blueman` | Bluetooth manager GUI | Bluetooth settings button |
 | `ollama` | Local LLM for AI chat | Sidebar AI assistant |
-| `mpvpaper` | Video wallpapers | Wallpaper selector |
 | `cava` | Audio visualizer | Bar widget (optional) |
 | `easyeffects` | Audio effects | Quick toggles panel |
 | `yt-dlp` | YouTube video/audio extraction | YTMusic sidebar |
