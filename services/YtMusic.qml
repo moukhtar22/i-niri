@@ -11,6 +11,7 @@ Singleton {
     id: root
 
     property bool available: false
+    property bool enabled: Config.options?.sidebar?.ytmusic?.enable ?? false
     property bool searching: false
     property bool loading: false
     property bool libraryLoading: false
@@ -127,18 +128,39 @@ Singleton {
             Component.onCompleted: {
                 if (root._isOurMpv(modelData)) {
                     root._mpvPlayer = modelData
+                    root._syncFromMpvPlayer(modelData)
                 }
             }
             
             function onIsPlayingChanged() {
                 if (root._isOurMpv(modelData)) {
                     root._mpvPlayer = modelData
+                    root._syncFromMpvPlayer(modelData)
                 }
             }
             
             function onPostTrackChanged() {
                 if (root._isOurMpv(modelData)) {
                     root._mpvPlayer = modelData
+                    root._syncFromMpvPlayer(modelData)
+                }
+            }
+
+            function onTrackTitleChanged() {
+                if (root._isOurMpv(modelData)) {
+                    root._syncFromMpvPlayer(modelData)
+                }
+            }
+
+            function onTrackArtistChanged() {
+                if (root._isOurMpv(modelData)) {
+                    root._syncFromMpvPlayer(modelData)
+                }
+            }
+
+            function onTrackArtUrlChanged() {
+                if (root._isOurMpv(modelData)) {
+                    root._syncFromMpvPlayer(modelData)
                 }
             }
             
@@ -155,10 +177,49 @@ Singleton {
         for (const player of Mpris.players.values) {
             if (root._isOurMpv(player)) {
                 root._mpvPlayer = player
+                root._syncFromMpvPlayer(player)
                 return
             }
         }
         root._mpvPlayer = null
+    }
+
+    function _extractVideoId(url): string {
+        const u = (url ?? "").toString()
+        if (!u) return ""
+        let m = u.match(/[?&]v=([A-Za-z0-9_-]{11})/)
+        if (m && m[1]) return m[1]
+        m = u.match(/youtu\.be\/([A-Za-z0-9_-]{11})/)
+        if (m && m[1]) return m[1]
+        m = u.match(/youtube\.com\/shorts\/([A-Za-z0-9_-]{11})/)
+        if (m && m[1]) return m[1]
+        return ""
+    }
+
+    function _syncFromMpvPlayer(player): void {
+        if (!player) return
+
+        const title = player.trackTitle ?? ""
+        const artist = player.trackArtist ?? ""
+        const url = player.metadata?.["xesam:url"] ?? ""
+        const art = player.trackArtUrl ?? ""
+        const pos = player.position ?? 0
+        const len = player.length ?? 0
+
+        if (title) root.currentTitle = title
+        if (artist) root.currentArtist = artist
+        if (url) root.currentUrl = url
+
+        const vid = root._extractVideoId(url)
+        if (vid) {
+            root.currentVideoId = vid
+            root.currentThumbnail = root._getThumbnailUrl(vid)
+        } else if (art && !root.currentThumbnail) {
+            root.currentThumbnail = art
+        }
+
+        if (len > 0) root.currentDuration = len
+        if (pos >= 0) root.currentPosition = pos
     }
     
     Component.onCompleted: {
@@ -182,6 +243,15 @@ Singleton {
             } else {
                 _ipcQueryProc.running = true
                 _ipcPauseQueryProc.running = true
+            }
+
+            _ipcEofQueryProc.running = true
+
+            // Covers keep-open style endings where mpv doesn't exit,
+            // so onExited never fires but eof-reached becomes true.
+            if (root._ipcEofReached && !root._autoAdvanceTriggered && root.currentVideoId !== "") {
+                root._autoAdvanceTriggered = true
+                root.playNext()
             }
         }
     }
@@ -211,9 +281,30 @@ Singleton {
             }
         }
     }
+
+    Process {
+        id: _ipcEofQueryProc
+        command: ["/bin/sh", "-c", "echo '{ \"command\": [\"get_property\", \"eof-reached\"] }' | socat - " + root.ipcSocket + " 2>/dev/null"]
+        stdout: SplitParser {
+            onRead: line => {
+                try {
+                    const res = JSON.parse(line)
+                    if (res.data !== undefined) root._ipcEofReached = !!res.data
+                } catch(e) {}
+            }
+        }
+    }
     
     property bool _ipcPaused: false
+    property bool _ipcEofReached: false
+    property bool _autoAdvanceTriggered: false
     property bool isPlaying: _mpvPlayer?.isPlaying ?? !_ipcPaused
+
+    onEnabledChanged: {
+        if (!enabled) {
+            root.stop()
+        }
+    }
 
     function search(query): void {
         if (!query.trim() || !root.available) return
@@ -237,6 +328,8 @@ Singleton {
         if (!item?.videoId || !root.available) return
         root.error = ""
         root.loading = true
+        root._autoAdvanceTriggered = false
+        root._ipcEofReached = false
         
         _fadeOutOtherPlayers()
         
@@ -293,15 +386,12 @@ Singleton {
             q.splice(index, 1)
             root.queue = q
             _persistQueue()
-            if (q.length > 0) {
-                root.activePlaylist = q
-                root.currentIndex = 0
-                root.activePlaylistSource = "queue"
-            } else {
-                root.activePlaylist = [item]
-                root.currentIndex = 0
-                root.activePlaylistSource = "single"
-            }
+            // Queue playback advances by consuming root.queue on each track end.
+            // Keep activePlaylist focused on the currently playing item to avoid
+            // index drift/skip when queue has multiple tracks.
+            root.activePlaylist = [item]
+            root.currentIndex = 0
+            root.activePlaylistSource = "queue"
             _playInternal(item)
         }
     }
@@ -319,11 +409,25 @@ Singleton {
         _playProc.running = false
         _stopProc.running = true
         root.loading = false
+        root._autoAdvanceTriggered = false
+        root._ipcEofReached = false
         root.currentVideoId = ""
         root.currentTitle = ""
         root.currentArtist = ""
+        root.currentThumbnail = ""
+        root.currentUrl = ""
+        root.currentDuration = 0
+        root.currentPosition = 0
         root.activePlaylist = []
         root.currentIndex = -1
+    }
+
+    function _didTrackEndNaturally(code: int, stderrText: string): bool {
+        if (!root.currentVideoId) return false
+        if (code === 0) return true
+        // mpv can exit with code 4 for EOF-style finishes in some streams/builds.
+        if (code === 4) return true
+        return false
     }
 
     Process {
@@ -1568,8 +1672,9 @@ print("")
             root._log("[YtMusic] mpv exited. Code:", code, "stderr:", _stderr.substring(0, 500))
             root.loading = false
             root._mpvPlayer = null
-            if (code === 0 && root.currentVideoId !== "") {
-                // Normal exit = track ended naturally, play next
+            if (root._didTrackEndNaturally(code, _stderr) && !root._autoAdvanceTriggered) {
+                // Track ended naturally, advance according to playlist/queue/repeat state
+                root._autoAdvanceTriggered = true
                 root.playNext()
             } else if (code !== 0 && code !== 4 && code !== 9 && code !== 15 && code !== 143 && code !== 137) {
                 root.error = Translation.tr("Playback failed")

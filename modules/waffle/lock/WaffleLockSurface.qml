@@ -284,7 +284,8 @@ MouseArea {
                         }
                         
                         Text {
-                            text: Weather.data?.city ?? ""
+                            text: Weather.visibleCity
+                            visible: Weather.showVisibleCity
                             font.pixelSize: Looks.font.pixelSize.small
                             font.family: Looks.font.family.ui
                             color: Looks.colors.subfg
@@ -548,8 +549,7 @@ MouseArea {
                     Image {
                         id: avatarImage
                         anchors.fill: parent
-                        // Try .face first, then AccountsService
-                        source: `file://${Directories.userAvatarPathRicersAndWeirdSystems}`
+                        source: waffleLockAvatarResolver.resolvedSource
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
                         cache: true
@@ -557,7 +557,7 @@ MouseArea {
                         mipmap: true
                         sourceSize.width: avatarCircle.width * 2
                         sourceSize.height: avatarCircle.height * 2
-                        visible: status === Image.Ready || avatarImageFallback.status === Image.Ready
+                        visible: status === Image.Ready
                         
                         layer.enabled: root.effectsSafe
                         layer.effect: OpacityMask {
@@ -568,34 +568,19 @@ MouseArea {
                             }
                         }
                     }
-                    
-                    // Fallback to AccountsService path
-                    Image {
-                        id: avatarImageFallback
-                        anchors.fill: parent
-                        source: avatarImage.status !== Image.Ready 
-                            ? `file://${Directories.userAvatarPathAccountsService}` 
-                            : ""
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        cache: true
-                        smooth: true
-                        mipmap: true
-                        sourceSize.width: avatarCircle.width * 2
-                        sourceSize.height: avatarCircle.height * 2
-                        visible: status === Image.Ready && avatarImage.status !== Image.Ready
-                        onStatusChanged: {
-                            if (status === Image.Error) {
-                                source = `file://${Directories.userAvatarPathRicersAndWeirdSystems2}`
-                            }
-                        }
-                        
-                        layer.enabled: root.effectsSafe
-                        layer.effect: OpacityMask {
-                            maskSource: Rectangle {
-                                width: avatarCircle.width
-                                height: avatarCircle.height
-                                radius: width / 2
+
+                    QtObject {
+                        id: waffleLockAvatarResolver
+                        property int avatarIndex: 0
+                        readonly property string resolvedSource: Directories.avatarSourceAt(avatarIndex)
+                        readonly property string primaryWatch: Directories.userAvatarSourcePrimary
+                        onPrimaryWatchChanged: avatarIndex = 0
+                        readonly property int imgStatus: avatarImage.status
+                        onImgStatusChanged: {
+                            if (imgStatus === Image.Error) {
+                                const nextIdx = avatarIndex + 1
+                                if (nextIdx < Directories.userAvatarPaths.length)
+                                    avatarIndex = nextIdx
                             }
                         }
                     }
@@ -608,7 +593,7 @@ MouseArea {
                         font.weight: Looks.font.weight.regular
                         font.family: Looks.font.family.ui
                         color: Looks.colors.accentFg
-                        visible: avatarImage.status !== Image.Ready && avatarImageFallback.status !== Image.Ready
+                        visible: avatarImage.status !== Image.Ready
                     }
                 }
             }

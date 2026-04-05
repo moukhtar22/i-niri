@@ -158,7 +158,8 @@ MouseArea {
                         }
 
                         Text {
-                            text: Weather.data?.city ?? ""
+                            text: Weather.visibleCity
+                            visible: Weather.showVisibleCity
                             font.pixelSize: Looks.font.pixelSize.small
                             font.family: Looks.font.family.ui
                             color: Looks.colors.subfg
@@ -405,7 +406,7 @@ MouseArea {
                     Image {
                         id: avatarImage
                         anchors.fill: parent
-                        source: `file://${Directories.userAvatarPathRicersAndWeirdSystems}`
+                        source: safeLockAvatarResolver.resolvedSource
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
                         cache: true
@@ -414,27 +415,22 @@ MouseArea {
                         sourceSize.width: avatarCircle.width * 2
                         sourceSize.height: avatarCircle.height * 2
                         visible: false
-                        onStatusChanged: {
-                            if (status === Image.Error) {
-                                source = `file://${Directories.userAvatarPathRicersAndWeirdSystems2}`
-                            }
-                        }
                     }
 
-                    Image {
-                        id: avatarImageFallback
-                        anchors.fill: parent
-                        source: avatarImage.status !== Image.Ready
-                            ? `file://${Directories.userAvatarPathAccountsService}`
-                            : ""
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        cache: true
-                        smooth: true
-                        mipmap: true
-                        sourceSize.width: avatarCircle.width * 2
-                        sourceSize.height: avatarCircle.height * 2
-                        visible: false
+                    QtObject {
+                        id: safeLockAvatarResolver
+                        property int avatarIndex: 0
+                        readonly property string resolvedSource: Directories.avatarSourceAt(avatarIndex)
+                        readonly property string primaryWatch: Directories.userAvatarSourcePrimary
+                        onPrimaryWatchChanged: avatarIndex = 0
+                        readonly property int imgStatus: avatarImage.status
+                        onImgStatusChanged: {
+                            if (imgStatus === Image.Error) {
+                                const nextIdx = avatarIndex + 1
+                                if (nextIdx < Directories.userAvatarPaths.length)
+                                    avatarIndex = nextIdx
+                            }
+                        }
                     }
 
                     ShaderEffectSource {
@@ -456,14 +452,6 @@ MouseArea {
                         visible: avatarImage.status === Image.Ready
                     }
 
-                    MultiEffect {
-                        anchors.fill: parent
-                        source: avatarImageFallback
-                        maskEnabled: true
-                        maskSource: avatarMaskSource
-                        visible: avatarImageFallback.status === Image.Ready && avatarImage.status !== Image.Ready
-                    }
-
                     Text {
                         anchors.centerIn: parent
                         text: (SystemInfo.displayName || SystemInfo.username || "?").charAt(0).toUpperCase()
@@ -471,7 +459,7 @@ MouseArea {
                         font.weight: Looks.font.weight.regular
                         font.family: Looks.font.family.ui
                         color: Looks.colors.accentFg
-                        visible: avatarImage.status !== Image.Ready && avatarImageFallback.status !== Image.Ready
+                        visible: avatarImage.status !== Image.Ready
                     }
                 }
             }
