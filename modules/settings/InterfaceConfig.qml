@@ -702,6 +702,50 @@ ContentPage {
                 }
             }
 
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: !(Config.options?.sidebar?.instantOpen ?? false)
+                spacing: 4
+
+                RowLayout {
+                    spacing: 8
+                    MaterialSymbol {
+                        text: "swipe_right"
+                        iconSize: Appearance.font.pixelSize.hugeass
+                        color: Appearance.m3colors?.m3OnSurface ?? Appearance.colors.colOnLayer1
+                    }
+                    StyledText {
+                        text: Translation.tr("Sidebar animation")
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        color: Appearance.m3colors?.m3OnSurface ?? Appearance.colors.colOnLayer1
+                    }
+                }
+
+                StyledComboBox {
+                    Layout.fillWidth: true
+                    readonly property var animOptions: [
+                        { displayName: Translation.tr("Slide"), value: "slide" },
+                        { displayName: Translation.tr("Fade"), value: "fade" },
+                        { displayName: Translation.tr("Pop"), value: "pop" },
+                        { displayName: Translation.tr("Reveal"), value: "reveal" },
+                        { displayName: Translation.tr("Swing"), value: "swing" },
+                        { displayName: Translation.tr("Drop"), value: "drop" },
+                        { displayName: Translation.tr("Elastic"), value: "elastic" }
+                    ]
+                    model: animOptions
+                    textRole: "displayName"
+                    currentIndex: {
+                        const current = Config.options?.sidebar?.animationType ?? "slide"
+                        const idx = animOptions.findIndex(o => o.value === current)
+                        return idx >= 0 ? idx : 0
+                    }
+                    onActivated: index => {
+                        if (index >= 0 && index < animOptions.length)
+                            Config.setNestedValue("sidebar.animationType", animOptions[index].value)
+                    }
+                }
+            }
+
             SettingsSwitch {
                 buttonIcon: "folder_open"
                 text: Translation.tr("Open folder after wallpaper download")
@@ -837,6 +881,46 @@ ContentPage {
                 //         text: Translation.tr("Embed web apps like Discord, YouTube Music and more in the sidebar (requires quickshell-webengine)")
                 //     }
                 // }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("YT Music")
+                tooltip: Translation.tr("Control how next-track notifications behave")
+                visible: Config.options.sidebar?.ytmusic?.enable ?? false
+
+                SettingsSwitch {
+                    buttonIcon: "music_note"
+                    text: Translation.tr("Up Next notifications")
+                    checked: Config.options.sidebar?.ytmusic?.upNextNotifications ?? true
+                    onCheckedChanged: Config.setNestedValue("sidebar.ytmusic.upNextNotifications", checked)
+                    StyledToolTip {
+                        text: Translation.tr("Show a desktop notification with the upcoming track when playback auto-advances")
+                    }
+                }
+
+                SettingsSwitch {
+                    buttonIcon: "sports_esports"
+                    text: Translation.tr("Mute while fullscreen or GameMode")
+                    enabled: Config.options.sidebar?.ytmusic?.upNextNotifications ?? true
+                    checked: Config.options.sidebar?.ytmusic?.suppressUpNextInFullscreen ?? true
+                    onCheckedChanged: Config.setNestedValue("sidebar.ytmusic.suppressUpNextInFullscreen", checked)
+                    StyledToolTip {
+                        text: Translation.tr("Suppress Up Next notifications when a fullscreen app is active or GameMode is enabled")
+                    }
+                }
+
+                ConfigSelectionArray {
+                    options: [
+                        { displayName: Translation.tr("Best"), icon: "high_quality", value: "best" },
+                        { displayName: Translation.tr("Medium (≤128 kbps)"), icon: "graphic_eq", value: "medium" },
+                        { displayName: Translation.tr("Low"), icon: "data_saver_on", value: "low" }
+                    ]
+                    currentValue: Config.options.sidebar?.ytmusic?.audioQuality ?? "best"
+                    onSelected: (newValue) => Config.setNestedValue("sidebar.ytmusic.audioQuality", newValue)
+                    StyledToolTip {
+                        text: Translation.tr("Audio quality for playback — lower quality uses less bandwidth")
+                    }
+                }
             }
 
             ContentSubsection {
@@ -2048,6 +2132,15 @@ ContentPage {
                     text: Translation.tr("Display thumbnail previews of windows in the overview")
                 }
             }
+            SettingsSwitch {
+                buttonIcon: "screen_share"
+                text: Translation.tr("Active screen only")
+                checked: Config.options?.overview?.activeScreenOnly ?? false
+                onCheckedChanged: Config.setNestedValue("overview.activeScreenOnly", checked)
+                StyledToolTip {
+                    text: Translation.tr("Show overview only on the currently focused screen (multi-monitor)")
+                }
+            }
             ConfigSpinBox {
                 icon: "loupe"
                 text: Translation.tr("Scale (%)")
@@ -2164,20 +2257,9 @@ ContentPage {
                 title: Translation.tr("Positioning")
 
                 SettingsSwitch {
-                    buttonIcon: "vertical_align_center"
-                    text: Translation.tr("Center launcher panel")
-                    checked: Config.options?.overview?.centerLauncher ?? false
-                    onCheckedChanged: Config.setNestedValue("overview.centerLauncher", checked)
-                    StyledToolTip {
-                        text: Translation.tr("Center the Super+Space launcher vertically. Disables top/bottom margin adjustments while enabled")
-                    }
-                }
-
-                SettingsSwitch {
                     buttonIcon: "dashboard_customize"
                     text: Translation.tr("Respect bar area (never overlap)")
                     checked: !Config.options.overview || Config.options.overview.respectBar !== false
-                    enabled: !(Config.options?.overview?.centerLauncher ?? false)
                     onCheckedChanged: {
                         Config.setNestedValue("overview.respectBar", checked);
                     }
@@ -2191,7 +2273,6 @@ ContentPage {
                     ConfigSpinBox {
                         icon: "vertical_align_top"
                         text: Translation.tr("Extra top margin (px)")
-                        enabled: !(Config.options?.overview?.centerLauncher ?? false)
                         value: Config.options.overview && Config.options.overview.topMargin !== undefined
                                ? Config.options.overview.topMargin
                                : 0
@@ -2208,7 +2289,6 @@ ContentPage {
                     ConfigSpinBox {
                         icon: "vertical_align_bottom"
                         text: Translation.tr("Extra bottom margin (px)")
-                        enabled: !(Config.options?.overview?.centerLauncher ?? false)
                         value: Config.options.overview && Config.options.overview.bottomMargin !== undefined
                                ? Config.options.overview.bottomMargin
                                : 0

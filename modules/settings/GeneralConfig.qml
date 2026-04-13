@@ -151,9 +151,12 @@ ContentPage {
                 }
             }
 
-            SettingsDivider {}
+            SettingsDivider {
+                visible: Quickshell.screens.length > 1
+            }
 
             ContentSubsection {
+                visible: Quickshell.screens.length > 1
                 title: Translation.tr("Bar visibility")
                 tooltip: Translation.tr("Choose which monitors show the bar. All enabled = shown everywhere.")
 
@@ -168,6 +171,8 @@ ContentPage {
                             required property var modelData
                             required property int index
                             readonly property string screenName: modelData.name ?? ""
+                            property bool _ready: false
+                            Component.onCompleted: _ready = true
                             Layout.fillWidth: true
                             buttonIcon: "web_asset"
                             text: screenName || ("Monitor " + (index + 1))
@@ -176,17 +181,19 @@ ContentPage {
                                 return list.length === 0 || list.includes(screenName)
                             }
                             onCheckedChanged: {
+                                if (!_ready) return
                                 const screens = Quickshell.screens
                                 let current = [...(Config.options?.bar?.screenList ?? [])]
+                                const allNames = screens.map(s => s?.name ?? "").filter(n => n.length > 0)
+                                current = current.filter(n => allNames.includes(n))
                                 if (current.length === 0 && !checked) {
-                                    current = screens.map(s => s.name).filter(Boolean)
+                                    current = allNames
                                 }
                                 if (checked && !current.includes(screenName)) {
                                     current.push(screenName)
                                 } else if (!checked) {
                                     current = current.filter(n => n !== screenName)
                                 }
-                                const allNames = screens.map(s => s.name).filter(Boolean)
                                 if (allNames.length > 0 && allNames.every(n => current.includes(n))) {
                                     current = []
                                 }
@@ -198,6 +205,7 @@ ContentPage {
             }
 
             ContentSubsection {
+                visible: Quickshell.screens.length > 1
                 title: Translation.tr("Dock visibility")
                 tooltip: Translation.tr("Choose which monitors show the dock. All enabled = shown everywhere.")
 
@@ -212,6 +220,8 @@ ContentPage {
                             required property var modelData
                             required property int index
                             readonly property string screenName: modelData.name ?? ""
+                            property bool _ready: false
+                            Component.onCompleted: _ready = true
                             Layout.fillWidth: true
                             buttonIcon: "call_to_action"
                             text: screenName || ("Monitor " + (index + 1))
@@ -220,17 +230,19 @@ ContentPage {
                                 return list.length === 0 || list.includes(screenName)
                             }
                             onCheckedChanged: {
+                                if (!_ready) return
                                 const screens = Quickshell.screens
                                 let current = [...(Config.options?.dock?.screenList ?? [])]
+                                const allNames = screens.map(s => s?.name ?? "").filter(n => n.length > 0)
+                                current = current.filter(n => allNames.includes(n))
                                 if (current.length === 0 && !checked) {
-                                    current = screens.map(s => s.name).filter(Boolean)
+                                    current = allNames
                                 }
                                 if (checked && !current.includes(screenName)) {
                                     current.push(screenName)
                                 } else if (!checked) {
                                     current = current.filter(n => n !== screenName)
                                 }
-                                const allNames = screens.map(s => s.name).filter(Boolean)
                                 if (allNames.length > 0 && allNames.every(n => current.includes(n))) {
                                     current = []
                                 }
@@ -743,6 +755,16 @@ ContentPage {
                     }
                     StyledToolTip {
                         text: Translation.tr("Show different geometric shapes instead of bullets for password input")
+                    }
+                }
+
+                SettingsSwitch {
+                    buttonIcon: "play_circle"
+                    text: Translation.tr("Animate video/GIF wallpapers")
+                    checked: Config.options?.lock?.enableAnimation ?? false
+                    onCheckedChanged: Config.setNestedValue("lock.enableAnimation", checked)
+                    StyledToolTip {
+                        text: Translation.tr("Play video and GIF wallpapers on the lock screen instead of showing a still frame. May increase GPU/battery usage.")
                     }
                 }
             }
