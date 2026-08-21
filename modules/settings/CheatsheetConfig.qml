@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import qs.services
+import qs.services.deferred
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
@@ -89,7 +90,7 @@ ContentPage {
 
             MaterialSymbol {
                 text: root._statusType === "error" ? "error"
-                    : root._statusType === "removed" ? "remove_circle"
+                    : root._statusType === "removed" ? "do_not_disturb_on"
                     : "check_circle"
                 iconSize: Appearance.font.pixelSize.normal
                 color: root._statusType === "error" ? Appearance.colors.colError
@@ -407,7 +408,7 @@ ContentPage {
         radius: Appearance.rounding.small
         color: Appearance.colors.colSurfaceContainerHigh ?? Appearance.colors.colLayer1
         border.width: 1
-        border.color: Appearance.m3colors.m3outlineVariant ?? ColorUtils.transparentize(Appearance.colors.colOnLayer1, 0.85)
+        border.color: Appearance.colors.colOutlineVariant ?? ColorUtils.transparentize(Appearance.colors.colOnLayer1, 0.85)
 
         StyledText {
             id: keyLabel
@@ -458,7 +459,7 @@ ContentPage {
                 bottom: parent.bottom
                 bottomMargin: kbRow.showDivider ? 1 : 0
             }
-            color: kbRowHover.containsMouse && kbRow.editState === "display"
+            color: kbRowHover.hovered && kbRow.editState === "display"
                 ? Appearance.colors.colLayer1Hover
                 : "transparent"
             radius: Appearance.rounding.small
@@ -471,11 +472,8 @@ ContentPage {
             }
         }
 
-        MouseArea {
+        HoverHandler {
             id: kbRowHover
-            anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.NoButton
         }
 
         ColumnLayout {
@@ -537,7 +535,7 @@ ContentPage {
                 Row {
                     visible: kbRow.canEdit && kbRow.editState === "display"
                     spacing: 2
-                    opacity: kbRowHover.containsMouse ? 1.0 : 0.0
+                    opacity: kbRowHover.hovered ? 1.0 : 0.0
 
                     Behavior on opacity {
                         NumberAnimation {

@@ -64,7 +64,7 @@ Item {
                     buttonRadius: Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.full
                     colBackground: "transparent"
                     colBackgroundHover: Appearance.inirEverywhere ? Appearance.inir.colLayer2Hover
-                        : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface : Appearance.colors.colLayer2Hover
+                        : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover : Appearance.colors.colLayer2Hover
                     colRipple: Appearance.inirEverywhere ? Appearance.inir.colLayer2Active
                         : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceActive : Appearance.colors.colLayer2Active
                     opacity: Notepad.text.trim() !== "" ? 1 : 0
@@ -79,7 +79,7 @@ Item {
                     contentItem: Item {
                         MaterialSymbol {
                             anchors.centerIn: parent
-                            text: "delete_outline"
+                            text: "delete"
                             iconSize: 14
                             color: Appearance.inirEverywhere ? Appearance.inir.colTextSecondary : Appearance.colors.colSubtext
                         }
@@ -115,6 +115,7 @@ Item {
                         width: parent.width
                         text: root.editing ? root.draft : Notepad.text
                         placeholderText: Translation.tr("Type something...")
+                        renderType: Text.NativeRendering
                         wrapMode: TextEdit.Wrap
                         font.pixelSize: Appearance.font.pixelSize.small
                         font.family: Appearance.font.family.main
@@ -176,7 +177,7 @@ Item {
                     buttonRadius: Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.small
                     colBackground: "transparent"
                     colBackgroundHover: Appearance.inirEverywhere ? Appearance.inir.colLayer2Hover
-                        : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface : Appearance.colors.colLayer2Hover
+                        : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover : Appearance.colors.colLayer2Hover
                     colRipple: Appearance.inirEverywhere ? Appearance.inir.colLayer2Active
                         : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceActive : Appearance.colors.colLayer2Active
                     onClicked: {

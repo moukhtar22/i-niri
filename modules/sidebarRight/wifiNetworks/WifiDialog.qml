@@ -16,10 +16,20 @@ WindowDialog {
         text: Translation.tr("Connect to Wi-Fi")
     }
     WindowDialogSeparator {
-        visible: !Network.wifiScanning
+        opacity: !Network.wifiScanning ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity {
+            enabled: Appearance.animationsEnabled
+            NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+        }
     }
     StyledIndeterminateProgressBar {
-        visible: Network.wifiScanning
+        opacity: Network.wifiScanning ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity {
+            enabled: Appearance.animationsEnabled
+            NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+        }
         Layout.fillWidth: true
         Layout.topMargin: -8
         Layout.bottomMargin: -8
@@ -59,6 +69,28 @@ WindowDialog {
                 right: parent?.right
                 leftMargin: 8
                 rightMargin: 8
+            }
+        }
+
+        // Empty state: no networks and not scanning
+        ColumnLayout {
+            anchors.centerIn: parent
+            spacing: 6
+            visible: Network.wifiNetworks.length === 0 && !Network.wifiScanning
+
+            MascotImage {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: 100
+                Layout.preferredHeight: 100
+                pose: "network-offline"
+                surface: "wifi"
+                fallbackSurface: "emptyStates"
+            }
+            StyledText {
+                Layout.alignment: Qt.AlignHCenter
+                text: Translation.tr("No networks found")
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colSubtext
             }
         }
     }

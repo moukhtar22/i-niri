@@ -11,6 +11,11 @@ import QtQuick;
  */
 Singleton {
     id: root
+
+    function _log(...args): void {
+        if (Quickshell.env("QS_DEBUG") === "1") console.log(...args);
+    }
+
     property Component booruResponseDataComponent: BooruResponseData {}
 
     signal tagSuggestion(string query, var suggestions)
@@ -18,7 +23,29 @@ Singleton {
 
     property string failMessage: Translation.tr("That didn't work. Tips:\n- Check your tags and NSFW settings\n- If you don't have a tag in mind, type a page number")
     property var responses: []
+    readonly property int responseLimit: 20
     property int runningRequests: 0
+
+    function _destroyResponsesLater(items) {
+        const doomed = (items || []).filter(item => item !== null && item !== undefined)
+        if (doomed.length === 0)
+            return
+        Qt.callLater(() => {
+            for (let i = 0; i < doomed.length; ++i) {
+                if (typeof doomed[i].destroy === "function")
+                    doomed[i].destroy()
+            }
+        })
+    }
+
+    function _appendResponse(response) {
+        const next = [...root.responses, response]
+        const removed = []
+        while (next.length > root.responseLimit)
+            removed.push(next.shift())
+        root.responses = next
+        root._destroyResponsesLater(removed)
+    }
     property var defaultUserAgent: Config.options?.networking?.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
     property var providerList: Object.keys(providers).filter(provider => provider !== "system" && providers[provider].api)
     property var providers: {
@@ -105,7 +132,7 @@ Singleton {
                         "height": item.height,
                         "aspect_ratio": item.width / item.height,
                         "tags": item.tags.join(" "),
-                        "rating": "safe", // Zerochan doesn't have nsfw
+                        "rating": "s", // Zerochan doesn't have nsfw
                         "is_nsfw": false,
                         "md5": item.md5,
                         "preview_url": item.thumbnail,
@@ -187,37 +214,40 @@ Singleton {
                 })
             }
         },
+
+        // https://docs.waifu.im/docs/getting-started
         "waifu.im": {
             "name": "waifu.im",
             "url": "https://waifu.im",
-            "api": "https://api.waifu.im/search",
+            "api": "https://api.waifu.im/images/",
             "description": Translation.tr("Waifus only | Excellent quality, limited quantity"),
             "mapFunc": (response) => {
-                response = response.images
+                response = response.items
                 return response.map(item => {
                     return {
-                        "id": item.image_id,
+                        "id": item.id,
                         "width": item.width,
                         "height": item.height,
                         "aspect_ratio": item.width / item.height,
                         "tags": item.tags.map(tag => {return tag.name}).join(" "),
-                        "rating": item.is_nsfw ? "e" : "s",
-                        "is_nsfw": item.is_nsfw,
-                        "md5": item.md5,
-                        "preview_url": item.sample_url ?? item.url, // preview_url just says access denied (maybe i fucked up and sent too many requests idk)
+                        "rating": item.isNsfw ? "e" : "s",
+                        "is_nsfw": item.isNsfw,
+                        "md5": Qt.md5(item.perceptualHash),
+                        "preview_url": item.url,
                         "sample_url": item.url,
                         "file_url": item.url,
                         "file_ext": item.extension,
-                        "source": getWorkingImageSource(item.source) ?? item.url,
+                        "source": item.source ? getWorkingImageSource(item.source) : item.url, // source sometimes might be null, so we gotta take care of it
                     }
                 })
             },
-            "tagSearchTemplate": "https://api.waifu.im/tags",
+            "tagSearchTemplate": "https://api.waifu.im/tags?Name={{query}}",
             "tagMapFunc": (response) => {
-                return [...response.versatile.map(item => {return {"name": item}}), 
-                    ...response.nsfw.map(item => {return {"name": item}})]
+                return response.items.map(tag => ({ "name": tag.slug }))
             }
         },
+
+        // https://t.alcy.cc/docs.html
         "t.alcy.cc": {
             "name": "Alcy",
             "url": "https://t.alcy.cc",
@@ -225,16 +255,24 @@ Singleton {
             "description": Translation.tr("Large images | God tier quality, no NSFW."),
             "fixedTags": [
                 {
-                    "name": "ycy",
+                    "name": "pc",
                     "count": "General"
                 },
                 {
-                    "name": "moez",
+                    "name": "moe",
                     "count": "Moe"
                 },
                 {
-                    "name": "ysz",
+                    "name": "ys",
                     "count": "Genshin Impact"
+                },
+                {
+                    "name": "tx",
+                    "count": "General"
+                },
+                {
+                    "name": "lai",
+                    "count": "Menhera-chan"
                 },
                 {
                     "name": "fj",
@@ -248,28 +286,27 @@ Singleton {
                     "name": "xhl",
                     "count": "Shiggy"
                 },
-            ],
-            "manualParseFunc": (responseText) => {
-                // Alcy just returns image links, each on a new line
-                const lines = responseText.trim().split('\n');
-                return lines.map(line => {
+            ], 
+            "mapFunc": (response) => {
+                let items = response.data
+                if (!Array.isArray(items)) items = [items]
+                return items.map(item => {
                     return {
-                        "id": Qt.md5(line),
-                        // Alcy doesn't provide dimensions and images are often of god resolution
-                        "width": 1000,
-                        "height": 1000,
-                        "aspect_ratio": 1,
+                        "id": item.id,
+                        "width": 1920,
+                        "height": 1080,
+                        "aspect_ratio": 1920 / 1080,
                         "tags": "[no tags]",
                         "rating": "s",
                         "is_nsfw": false,
-                        "md5": Qt.md5(line),
-                        "preview_url": line,
-                        "sample_url": line,
-                        "file_url": line,
-                        "file_ext": line.split('.').pop(),
-                        "source": "",
+                        "md5": Qt.md5(item.link),
+                        "preview_url": item.link,
+                        "sample_url": item.link,
+                        "file_url": item.link,
+                        "file_ext": item.link.split('.').pop(),
+                        "source": item.link
                     }
-                });
+                })
             },
         }
     }
@@ -294,17 +331,19 @@ Singleton {
     }
 
     function clearResponses() {
-        responses = []
+        const previous = root.responses
+        root.responses = []
+        root._destroyResponsesLater(previous)
     }
 
     function addSystemMessage(message) {
-        responses = [...responses, root.booruResponseDataComponent.createObject(null, {
+        root._appendResponse(root.booruResponseDataComponent.createObject(null, {
             "provider": "system",
             "tags": [],
             "page": -1,
             "images": [],
             "message": `${message}`
-        })]
+        }))
     }
 
     function constructRequestUrl(tags, nsfw=true, limit=20, page=1) {
@@ -328,17 +367,37 @@ Singleton {
             params.push("p=" + page)
         }
         else if (currentProvider === "waifu.im") {
-            var tagsArray = tagString.split(" ");
-            tagsArray.forEach(tag => {
-                params.push("included_tags=" + encodeURIComponent(tag));
+            // https://docs.waifu.im/docs/getting-started#filter-by-tags
+            // All tags: https://api.waifu.im/tags
+            //
+            // Tags filter request should be like this:
+            // https://api.waifu.im/images?IncludedTags=waifu&IncludedTags=maid
+            tags.filter(tag => tag.length > 0).forEach(tag => {
+                params.push("IncludedTags=" + encodeURIComponent(tag.toLowerCase()));
             });
-            params.push("limit=" + Math.min(limit, 30)) // Only admin can do > 30
-            params.push("is_nsfw=" + (nsfw ? "null" : "false")) // null is random
+
+            // https://docs.waifu.im/docs/getting-started#pagination
+            //
+            // There is no limit. You can request all the images at once. 
+            // Although, the number of pages may differ when requesting different ratings/categories.
+            params.push("PageSize=" + limit)
+            
+            // https://docs.waifu.im/docs/getting-started#nsfw-content
+            //
+            // With this, both SFW and NSFW images will be shown as the default 
+            // while only NSFW images will be shown when NSFW mode is enabled,
+            // meaning no only SFW mode, so i'll be disabling this.
+            // params.push("IsNsfw=" + (nsfw ? "True" : "All")) // All is random
+            //
+            // Show only SFW images by default and only NSFW images in NSFW mode.
+            // Change 'True' to 'All' to see both SFW and NSFW images in NSFW mode.
+            if (nsfw) { params.push("IsNsfw=True") }
         }
         else if (currentProvider === "t.alcy.cc") {
-            url += tagString
-            params.push("json")
-            params.push("quantity=" + limit)
+            // https://t.alcy.cc/docs.html
+            url += "json"
+            let tag = tags[0] || "pc" // Alcy only takes one tag as param. Use `pc` as the default one if no tags are provided
+            params.push(tag + "=" + limit)
         }
         else {
             params.push("tags=" + encodeURIComponent(tagString))
@@ -360,7 +419,7 @@ Singleton {
 
     function makeRequest(tags, nsfw=false, limit=20, page=1) {
         var url = constructRequestUrl(tags, nsfw, limit, page)
-        console.log("[Booru] Making request to " + url)
+        _log("[Booru] Making request to " + url)
 
         const newResponse = root.booruResponseDataComponent.createObject(null, {
             "provider": currentProvider,
@@ -393,14 +452,14 @@ Singleton {
                     newResponse.message = root.failMessage
                 } finally {
                     root.runningRequests--;
-                    root.responses = [...root.responses, newResponse]
+                    root._appendResponse(newResponse)
                 }
             }
             else if (xhr.readyState === XMLHttpRequest.DONE) {
                 console.log("[Booru] Request failed with status: " + xhr.status)
                 newResponse.message = root.failMessage
                 root.runningRequests--;
-                root.responses = [...root.responses, newResponse]
+                root._appendResponse(newResponse)
             }
             root.responseFinished()
         }
@@ -419,7 +478,7 @@ Singleton {
             root.runningRequests++;
             xhr.send()
         } catch (error) {
-            console.log("Could not set User-Agent:", error)
+            _log("Could not set User-Agent:", error)
         } 
     }
 
@@ -458,7 +517,6 @@ Singleton {
                 console.log("[Booru] Request failed with status: " + xhr.status)
             }
         }
-
         try {
             // Required for danbooru
             if (currentProvider == "danbooru") {
@@ -466,7 +524,7 @@ Singleton {
             }
             xhr.send()
         } catch (error) {
-            console.log("Could not set User-Agent:", error)
+            _log("Could not set User-Agent:", error)
         } 
     }
 }

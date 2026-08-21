@@ -1,4 +1,5 @@
 import qs.modules.common
+import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.services
 import QtQuick
@@ -6,14 +7,14 @@ import QtQuick.Effects
 import Qt5Compat.GraphicalEffects as GE
 import Quickshell
 
-// Reusable glass/acrylic background component
-// For correct blur positioning, parent must set screenX/screenY to component's screen position
+// Hidden instances release their blur FBO; decoded wallpaper pixmaps remain shared.
 Rectangle {
     id: root
     
     property color fallbackColor: Appearance.colors.colLayer1
     property color inirColor: Appearance.inir.colLayer1
     property real auroraTransparency: Appearance.aurora.popupTransparentize
+    property bool wallpaperBackdropEnabled: true
     
     // Screen-relative position for blur alignment (set by parent)
     property real screenX: 0
@@ -24,11 +25,22 @@ Rectangle {
     readonly property bool angelEverywhere: Appearance.angelEverywhere
     readonly property bool auroraEverywhere: Appearance.auroraEverywhere
     readonly property bool inirEverywhere: Appearance.inirEverywhere
-    readonly property string wallpaperUrl: Wallpapers.effectiveWallpaperUrl
+    // Bypasses the style gate, which is what its callers always documented it as
+    // doing. It used to be AND-ed inside the backend check, so a surface asking
+    // for a backdrop outside aurora — island glass, or a backdrop the user turned
+    // on explicitly — silently got nothing. The effects gate still applies.
+    property bool forceBackdrop: false
+    // Blur radius as a fraction of blurMax. 1 is the house default every existing
+    // caller inherits; lower values are for surfaces that expose it to the user.
+    property real blurStrength: 1
+    readonly property bool useWallpaperBackdrop: root.forceBackdrop
+        ? Appearance.effectsEnabled
+        : (Appearance.blurBackendFor("panels", Appearance.blurTopology.unsupported) === "wallpaper"
+            && root.wallpaperBackdropEnabled)
     
-    color: auroraEverywhere ? "transparent"
-        : inirEverywhere ? inirColor
-        : fallbackColor
+    color: root.useWallpaperBackdrop ? "transparent"
+        : root.inirEverywhere ? root.inirColor
+        : root.fallbackColor
     
     property bool hovered: false
 
@@ -37,7 +49,9 @@ Rectangle {
 
     clip: true
     
-    layer.enabled: auroraEverywhere && !inirEverywhere
+    // Hidden persistent surfaces must not retain their mask FBO. The decoded
+    // wallpaper stays in Qt's shared image cache, so remapping remains warm.
+    layer.enabled: root.useWallpaperBackdrop && root.visible
     layer.effect: GE.OpacityMask {
         maskSource: Rectangle {
             width: root.width
@@ -46,26 +60,29 @@ Rectangle {
         }
     }
     
+    // Blurred wallpaper backdrop for aurora/angel styles.
+    // OPTIMIZATION: layer.enabled is only active when the GlassBackground is
+    // actually visible, reducing GPU memory when panels are hidden.
     Image {
         id: blurredWallpaper
         x: -root.screenX
         y: -root.screenY
         width: root.screenWidth
         height: root.screenHeight
-        visible: root.auroraEverywhere && !root.inirEverywhere && status === Image.Ready
-        source: (root.auroraEverywhere && !root.inirEverywhere) ? root.wallpaperUrl : ""
+        visible: root.useWallpaperBackdrop && status === Image.Ready
+        source: root.useWallpaperBackdrop ? Wallpapers.effectiveWallpaperUrl : ""
         fillMode: Image.PreserveAspectCrop
         // All GlassBackground instances share the same wallpaper URL and sourceSize,
         // so Qt's QPixmapCache serves a single decoded pixmap to all of them.
-        // The old wallpaper is evicted naturally when the source URL changes.
         cache: true
         asynchronous: true
-        // Constrain decoded size: this Image is always heavily blurred so full
-        // native resolution is wasted.  Screen dimensions are more than enough.
+        // Constrain decoded size to screen dimensions — the blur doesn't need more.
         sourceSize.width: root.screenWidth
         sourceSize.height: root.screenHeight
 
-        layer.enabled: Appearance.effectsEnabled && root.auroraEverywhere && !root.inirEverywhere
+        // CRITICAL: Only enable blur layer when VISIBLE AND enabled.
+        // This releases the FBO when the panel is hidden, saving ~16 MiB per instance.
+        layer.enabled: Appearance.effectsEnabled && root.useWallpaperBackdrop && root.visible
         layer.effect: MultiEffect {
             source: blurredWallpaper
             anchors.fill: source
@@ -73,16 +90,16 @@ Rectangle {
                 ? (Appearance.angel.blurSaturation * Appearance.angel.colorStrength)
                 : (Appearance.effectsEnabled ? 0.2 : 0)
             blurEnabled: Appearance.effectsEnabled
-            blurMax: 100
+            blurMax: 64
             blur: Appearance.effectsEnabled
-                ? (root.angelEverywhere ? Appearance.angel.blurIntensity : 1)
+                ? (root.angelEverywhere ? Appearance.angel.blurIntensity : root.blurStrength)
                 : 0
         }
     }
 
     Rectangle {
         anchors.fill: parent
-        visible: root.auroraEverywhere && !root.inirEverywhere
+        visible: root.useWallpaperBackdrop
         color: root.angelEverywhere
             ? ColorUtils.transparentize(Appearance.colors.colLayer0Base, Appearance.angel.overlayOpacity)
             : ColorUtils.transparentize(Appearance.colors.colLayer0Base, root.auroraTransparency)

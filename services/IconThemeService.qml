@@ -3,11 +3,16 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 
 Singleton {
     id: root
+
+    function _log(...args): void {
+        if (Quickshell.env("QS_DEBUG") === "1") console.log(...args);
+    }
 
     property var availableThemes: []
     property string currentTheme: ""
@@ -16,71 +21,19 @@ Singleton {
     property bool _initialized: false
     property bool _restartQueued: false
 
-    // Smart icon resolution: handles broken absolute paths from Electron apps
+    // Smart icon resolution: preserve app-provided identity whenever possible.
+    // Only repair the duplicated Electron resources path that is known-broken.
     function smartIconName(icon, appId) {
-        if (!icon) return appId || "application-x-executable";
+        if (!icon) {
+            const guessed = AppSearch.lookupDesktopEntry(appId)?.icon ?? AppSearch.guessIcon(appId);
+            return guessed || appId || "application-x-executable";
+        }
         
-        // Block known bad paths to avoid Qt warnings
-        // Electron apps running from Downloads/tmp often report invalid absolute paths
         if (icon.startsWith("/") || icon.startsWith("file://")) {
             const path = icon.startsWith("file://") ? icon.substring(7) : icon;
 
-            // Check for volatile/non-permanent paths first
-            const volatilePaths = ["/Descargas/", "/Downloads/", "/tmp/", "/var/tmp/", "/home/"];
-            const isVolatile = volatilePaths.some(vp => {
-                if (vp === "/home/") {
-                    // Only consider /home/ volatile if it's inside a download-like folder
-                    // (not permanent locations like .local/share/icons, Steam, etc.)
-                    return path.includes("/Descargas/") || path.includes("/Downloads/") || 
-                           path.includes("/tmp/") || (path.includes("/resources/") && !path.includes("/.local/share/Steam/"));
-                }
-                return path.includes(vp);
-            });
-            
-            // Known Electron app patterns - return proper icon name
-            if (path.includes("/Windsurf/") || path.includes("/windsurf/")) {
-                return "visual-studio-code";
-            }
-            if (path.includes("/Code/") || path.includes("/code/") || path.includes("/VSCode/")) {
-                return "visual-studio-code";
-            }
-            if (path.includes("/Cursor/") || path.includes("/cursor/")) {
-                return "visual-studio-code";
-            }
-            if (path.includes("/Zed/") || path.includes("/zed/")) {
-                return "dev.zed.Zed";
-            }
-            if (path.includes("/Discord/") || path.includes("/discord/")) {
-                return "discord";
-            }
-            if (path.includes("/Slack/") || path.includes("/slack/")) {
-                return "slack";
-            }
-            if (path.includes("/Obsidian/") || path.includes("/obsidian/")) {
-                return "obsidian";
-            }
-            if (path.includes("/Spotify/") || path.includes("/spotify/")) {
-                return "spotify";
-            }
-
-            // Try to fix common broken Electron paths
-            // Example: .../resources/app/resources/linux/code.png -> .../resources/linux/code.png
             if (path.indexOf("/resources/app/resources/") !== -1) {
                 return path.replace("/resources/app/resources/", "/resources/");
-            }
-
-            // For other volatile paths, extract base name
-            if (isVolatile || path.includes("/resources/")) {
-                const fileName = path.split("/").pop();
-                let baseName = fileName;
-                if (baseName.includes(".")) {
-                    baseName = baseName.split(".").slice(0, -1).join(".");
-                }
-                // Try common icon name mappings
-                if (baseName === "code") return "visual-studio-code";
-                if (baseName === "discord") return "discord";
-                if (baseName === "slack") return "slack";
-                return baseName || appId || "application-x-executable";
             }
         }
         
@@ -142,7 +95,7 @@ Singleton {
         const savedTheme = Config.ready ? (Config.options?.appearance?.iconTheme ?? "") : ""
         if (savedTheme && String(savedTheme).trim().length > 0) {
             root.currentTheme = String(savedTheme).trim()
-            console.log("[IconThemeService] Restoring saved icon theme:", root.currentTheme)
+            _log("[IconThemeService] Restoring saved icon theme:", root.currentTheme)
             gsettingsSetProc.themeName = root.currentTheme
             gsettingsSetProc.skipRestart = true
             gsettingsSetProc.running = false
@@ -161,7 +114,7 @@ Singleton {
             return;
 
         const themeStr = String(themeName).trim()
-        console.log("[IconThemeService] Setting icon theme:", themeStr)
+        _log("[IconThemeService] Setting icon theme:", themeStr)
 
         // Update UI immediately; actual system change follows via gsettings.
         root.currentTheme = themeStr
@@ -191,7 +144,7 @@ Singleton {
         repeat: false
         onTriggered: {
             root._restartQueued = false
-            console.log("[IconThemeService] Restarting shell now...")
+            _log("[IconThemeService] Restarting shell now...")
             Quickshell.execDetached(["/usr/bin/bash", Quickshell.shellPath("scripts/restart-shell.sh")])
         }
     }
@@ -209,7 +162,7 @@ Singleton {
         property bool skipRestart: false
         command: ["/usr/bin/gsettings", "set", "org.gnome.desktop.interface", "icon-theme", gsettingsSetProc.themeName]
         onExited: (exitCode, exitStatus) => {
-            console.log("[IconThemeService] gsettings set exited:", exitCode, "theme:", gsettingsSetProc.themeName)
+            _log("[IconThemeService] gsettings set exited:", exitCode, "theme:", gsettingsSetProc.themeName)
             // Sync to KDE/Qt apps via kdeglobals
             kdeGlobalsUpdateProc.themeName = gsettingsSetProc.themeName
             kdeGlobalsUpdateProc.skipRestart = gsettingsSetProc.skipRestart
@@ -277,7 +230,7 @@ with open(config_path, "w") as f:
             kwriteconfigProc.themeName
         ]
         onExited: (exitCode, exitStatus) => {
-            console.log("[IconThemeService] kwriteconfig exited:", exitCode, "theme:", kwriteconfigProc.themeName)
+            _log("[IconThemeService] kwriteconfig exited:", exitCode, "theme:", kwriteconfigProc.themeName)
             // Also sync to qt5ct and qt6ct
             qt5ctProc.themeName = kwriteconfigProc.themeName
             qt5ctProc.running = false
@@ -318,7 +271,7 @@ else:
 `
         ]
         onExited: (exitCode, exitStatus) => {
-            console.log("[IconThemeService] qt5ct updated:", exitCode === 0 ? "success" : "failed")
+            _log("[IconThemeService] qt5ct updated:", exitCode === 0 ? "success" : "failed")
         }
     }
 
@@ -352,7 +305,7 @@ else:
 `
         ]
         onExited: (exitCode, exitStatus) => {
-            console.log("[IconThemeService] qt6ct updated:", exitCode === 0 ? "success" : "failed")
+            _log("[IconThemeService] qt6ct updated:", exitCode === 0 ? "success" : "failed")
             // Also sync to GTK settings.ini files
             gtkSettingsProc.themeName = qt6ctProc.themeName
             gtkSettingsProc.running = false
@@ -368,28 +321,42 @@ else:
             "/usr/bin/python3",
             "-c",
             `
-import os, re
+import configparser
+import datetime
+import os
+import shutil
 
 theme = "${gtkSettingsProc.themeName}"
 
 for subdir in ["gtk-3.0", "gtk-4.0"]:
     path = os.path.expanduser(f"~/.config/{subdir}/settings.ini")
-    if not os.path.isfile(path):
-        continue
-    with open(path, "r") as f:
-        content = f.read()
-    content = re.sub(
-        r"^gtk-icon-theme-name=.*$",
-        f"gtk-icon-theme-name={theme}",
-        content,
-        flags=re.MULTILINE,
-    )
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    config = configparser.ConfigParser(interpolation=None)
+    config.optionxform = str
+    valid = False
+    if os.path.isfile(path):
+        try:
+            config.read(path)
+            valid = config.has_section("Settings")
+        except configparser.Error:
+            valid = False
+
+    if not valid:
+        if os.path.isfile(path) and os.path.getsize(path) > 0:
+            stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            shutil.copy2(path, f"{path}.corrupt-{stamp}.bak")
+        config = configparser.ConfigParser(interpolation=None)
+        config.optionxform = str
+        config["Settings"] = {}
+
+    config["Settings"]["gtk-icon-theme-name"] = theme
     with open(path, "w") as f:
-        f.write(content)
+        config.write(f, space_around_delimiters=False)
 `
         ]
         onExited: (exitCode, exitStatus) => {
-            console.log("[IconThemeService] GTK settings.ini updated:", exitCode === 0 ? "success" : "failed")
+            _log("[IconThemeService] GTK settings.ini updated:", exitCode === 0 ? "success" : "failed")
         }
     }
 

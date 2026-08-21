@@ -1,3 +1,4 @@
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
@@ -33,9 +34,10 @@ QuickToggleButton {
             width: 16
             height: 16
             colorize: true
-            color: root.toggled ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer1
+            color: root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer1
 
             Behavior on color {
+                enabled: Appearance.animationsEnabled
                 animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
             }
         }
@@ -84,7 +86,7 @@ QuickToggleButton {
         id: registrationProc
         command: [root.warpCliPath, "registration", "new"]
         onExited: (exitCode, exitStatus) => {
-            console.log("Warp registration exited with code and status:", exitCode, exitStatus)
+            if (Quickshell.env("QS_DEBUG") === "1") console.log("Warp registration exited with code and status:", exitCode, exitStatus)
             if (exitCode === 0) {
                 connectProc.running = true
             } else {
@@ -151,7 +153,8 @@ QuickToggleButton {
         id: warpPollTimer
         interval: 5000
         repeat: true
-        running: true
+        triggeredOnStart: true
+        running: GlobalStates.sidebarRightOpen
         onTriggered: root.refreshStatus()
     }
 

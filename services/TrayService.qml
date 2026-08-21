@@ -1,7 +1,9 @@
 pragma Singleton
 
 import qs.modules.common
+import qs.modules.common.functions
 import qs.services
+import qs.services.deferred
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -95,7 +97,7 @@ Singleton {
         }
         
         // No window found - launch app (use login shell for proper PATH including ~/.local/bin)
-        Quickshell.execDetached(["/usr/bin/bash", "-lc", appInfo.launch]);
+        ShellExec.execCmd(appInfo.launch);
         return true;
     }
     
@@ -143,7 +145,7 @@ Singleton {
             
             // For harmless apps (like Spotify usually), try launching to restore
             root._log(`[TrayService] Window not found for ${id}, executing launch: ${appInfo.launch}`);
-            Quickshell.execDetached(["/usr/bin/bash", "-lc", appInfo.launch]);
+            ShellExec.execCmd(appInfo.launch);
             return true;
         }
         
@@ -225,7 +227,11 @@ Singleton {
 
     Timer {
         id: xembedProxyDelayedStartTimer
-        interval: 600
+        // Legacy XEmbed tray apps can publish before the proxy owns the tray
+        // selection and do not necessarily register again. Keep this
+        // asynchronous, but start on the next event-loop turn instead of
+        // leaving a 600 ms race window.
+        interval: 0
         repeat: false
         onTriggered: {
             xembedProxyCheckProc.running = false;
@@ -254,9 +260,18 @@ Singleton {
             onRead: (line) => root._log("[xembedsniproxy]", line)
         }
         command: [
-            "/usr/bin/env",
-            "QT_NO_XDG_DESKTOP_PORTAL=1",
-            "QT_QPA_PLATFORM=xcb",
+            "/usr/bin/systemd-run",
+            "--user",
+            "--quiet",
+            "--unit=inir-xembedsniproxy",
+            "--collect",
+            "--service-type=exec",
+            "--property=BindsTo=inir.service",
+            "--property=After=inir.service",
+            "--property=Restart=on-failure",
+            "--property=RestartSec=1s",
+            "--setenv=QT_NO_XDG_DESKTOP_PORTAL=1",
+            "--setenv=QT_QPA_PLATFORM=xcb",
             "/usr/bin/xembedsniproxy"
         ]
         onExited: (exitCode, exitStatus) => {

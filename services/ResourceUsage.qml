@@ -14,15 +14,19 @@ Singleton {
 
     property bool _runningRequested: false
     property bool _initRequested: false
+    property int _persistentConsumers: 0
 
     // Auto-stop polling when nothing requested it recently.
     // This prevents the service from running forever after briefly opening a panel.
+    // Persistent consumers (bar, vertical bar) prevent auto-stop entirely.
     readonly property int _autoStopDelayMs: Config.options?.resources?.autoStopDelay ?? 15000
-    property real memoryTotal: 1
+    readonly property int _diskUpdateIntervalMs: 30000
+    // 0 + zero-guard avoids fake "100%" before first poll.
+    property real memoryTotal: 0
     property real memoryFree: 0
     property real memoryUsed: memoryTotal - memoryFree
-    property real memoryUsedPercentage: memoryUsed / memoryTotal
-    property real swapTotal: 1
+    property real memoryUsedPercentage: memoryTotal > 0 ? (memoryUsed / memoryTotal) : 0
+    property real swapTotal: 0
     property real swapFree: 0
     property real swapUsed: swapTotal - swapFree
     property real swapUsedPercentage: swapTotal > 0 ? (swapUsed / swapTotal) : 0
@@ -95,6 +99,23 @@ Singleton {
                 fi
             done
 
+            # Intel (i915/xe) has no global sysfs busy counter — utilization only via the
+            # i915 PMU, which intel_gpu_top reads. Probe it once: it succeeds only when the
+            # PMU is accessible (perf_event_paranoid <= 1, CAP_PERFMON, or render-group access).
+            # If the probe can't read busy data we fall through rather than spawn it every poll.
+            is_intel=""
+            for vendor_file in /sys/class/drm/card*/device/vendor; do
+                [ -f "$vendor_file" ] || continue
+                [ "$(cat "$vendor_file" 2>/dev/null)" = "0x8086" ] && is_intel=1 && break
+            done
+            if [ -n "$is_intel" ] && command -v intel_gpu_top >/dev/null 2>&1; then
+                igt_path=$(command -v intel_gpu_top)
+                if timeout 2 "$igt_path" -J -s 500 2>/dev/null | grep -q '"busy"'; then
+                    echo "intel:$igt_path"
+                    exit 0
+                fi
+            fi
+
             if [ -n "$nvidia_path" ]; then
                 echo "nvidia-smi:$nvidia_path"
                 exit 0
@@ -110,6 +131,9 @@ Singleton {
                 } else if (line.startsWith("nvidia-smi:")) {
                     root._gpuUsageSource = "nvidia-smi";
                     root._nvidiaSmiPath = line.slice(11);
+                } else if (line.startsWith("intel:")) {
+                    root._gpuUsageSource = "intel";
+                    root._intelGpuTopPath = line.slice(6);
                 } else if (line === "none") {
                     root._gpuUsageSource = "none";
                 }
@@ -132,6 +156,27 @@ Singleton {
                 root.gpuUsage = !isNaN(rawUsage) ? root.clampPercentToUnit(rawUsage / 100) : 0;
                 if (!isNaN(rawTemp))
                     root.gpuTemp = rawTemp;
+            }
+        }
+    }
+
+    Process {
+        id: intelGpuProc
+        // One short PMU sample (~one 500ms period, killed by timeout). intel_gpu_top -J emits
+        // per-engine "busy" percentages; aggregate GPU usage = the busiest engine this window.
+        command: ["/usr/bin/bash", "-c", "timeout 1 " + root._intelGpuTopPath + " -J -s 500 2>/dev/null"]
+        running: false
+        stdout: StdioCollector {
+            id: intelGpuCollector
+            onStreamFinished: {
+                const re = /"busy"\s*:\s*([\d.]+)/g;
+                let m, maxBusy = -1;
+                while ((m = re.exec(intelGpuCollector.text)) !== null) {
+                    const v = parseFloat(m[1]);
+                    if (!isNaN(v) && v > maxBusy)
+                        maxBusy = v;
+                }
+                root.gpuUsage = maxBusy < 0 ? 0 : root.clampPercentToUnit(maxBusy / 100);
             }
         }
     }
@@ -173,13 +218,40 @@ Singleton {
             detectHybridGpu.running = true;
             findCpuMaxFreqProc.running = true;
         }
-        autoStopTimer.restart();
+        if (root._persistentConsumers === 0)
+            autoStopTimer.restart();
         pollTimer.restart();
+        // Prime values now instead of waiting one updateInterval — but only once.
+        // Multiple consumers calling ensureRunning() in their Component.onCompleted
+        // would race their reload() ops and drop in-flight reads (FileView warnings).
+        if (!root._primed) {
+            root._primed = true;
+            root._pollSensors();
+            root._pollDisk();
+        }
+    }
+
+    property bool _primed: false
+
+    // Register a persistent consumer (always-visible panel like bar).
+    // While any persistent consumer is registered, auto-stop is disabled.
+    function keepAlive(): void {
+        root._persistentConsumers++;
+        autoStopTimer.stop();
+        ensureRunning();
+    }
+
+    function releaseKeepAlive(): void {
+        root._persistentConsumers = Math.max(0, root._persistentConsumers - 1);
+        if (root._persistentConsumers === 0 && root._runningRequested)
+            autoStopTimer.restart();
     }
 
     function stop(): void {
         root._runningRequested = false;
+        root._primed = false;
         pollTimer.stop();
+        diskPollTimer.stop();
         autoStopTimer.stop();
     }
 
@@ -188,8 +260,98 @@ Singleton {
         interval: root._autoStopDelayMs
         repeat: false
         onTriggered: {
-            root.stop();
+            if (root._persistentConsumers === 0)
+                root.stop();
         }
+    }
+
+    function _pollSensors(): void {
+        autoStopTimer.restart();
+
+        // Determine whether GPU polling should be skipped this cycle.
+        // On hybrid (iGPU+dGPU) systems, querying GPU data via nvidia-smi or hwmon
+        // prevents the discrete GPU from entering runtime suspend, wasting ~9-10W at idle.
+        // Reading runtime_status is a pure kernel sysfs read — it does NOT wake the hardware.
+        const gpuMonitorEnabled = Config.options?.resources?.monitorGpu ?? true;
+        let skipGpu = !gpuMonitorEnabled;
+        if (!skipGpu && root._dGpuRuntimeStatusPath !== "") {
+            fileDGpuRuntimeStatus.reload();
+            skipGpu = fileDGpuRuntimeStatus.text().trim() === "suspended";
+        }
+
+        // Reload files
+        fileMeminfo.reload();
+        fileStat.reload();
+        fileCpuTemp.reload();
+        if (!skipGpu) {
+            if (root._gpuUsageSource !== "nvidia-smi")
+                fileGpuTemp.reload();
+            if (root._gpuUsageSource === "sysfs")
+                fileGpuUsage.reload();
+        }
+
+        // Empty text() on first call collapses to 0% via the percentage guards.
+        const textMeminfo = fileMeminfo.text();
+        memoryTotal = Number(textMeminfo.match(/MemTotal: *(\d+)/)?.[1] ?? 0);
+        memoryFree = Number(textMeminfo.match(/MemAvailable: *(\d+)/)?.[1] ?? 0);
+        swapTotal = Number(textMeminfo.match(/SwapTotal: *(\d+)/)?.[1] ?? 0);
+        swapFree = Number(textMeminfo.match(/SwapFree: *(\d+)/)?.[1] ?? 0);
+
+        // Parse CPU usage
+        const textStat = fileStat.text();
+        const cpuLine = textStat.match(/^cpu\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/);
+        if (cpuLine) {
+            const stats = cpuLine.slice(1).map(Number);
+            const total = stats.reduce((a, b) => a + b, 0);
+            // idle (stats[3]) + iowait (stats[4]) = not working
+            const idle = stats[3] + stats[4];
+
+            if (previousCpuStats) {
+                const totalDiff = total - previousCpuStats.total;
+                const idleDiff = idle - previousCpuStats.idle;
+                cpuUsage = totalDiff > 0 ? (1 - idleDiff / totalDiff) : 0;
+            }
+
+            previousCpuStats = {
+                total,
+                idle
+            };
+        }
+
+        // Parse temperatures (millidegrees to degrees)
+        const cpuTempRaw = parseInt(fileCpuTemp.text()) || 0;
+        cpuTemp = Math.round(cpuTempRaw / 1000);
+        // GPU temp: skip when suspended/disabled to avoid hwmon reads waking a suspended dGPU
+        if (!skipGpu && root._gpuUsageSource !== "nvidia-smi") {
+            const gpuTempRaw = parseInt(fileGpuTemp.text()) || 0;
+            gpuTemp = Math.round(gpuTempRaw / 1000);
+        }
+
+        // Parse GPU usage — skip entirely when dGPU is suspended or monitoring is disabled
+        if (skipGpu) {
+            gpuUsage = 0;
+        } else if (root._gpuUsageSource === "sysfs") {
+            const gpuBusyPercent = parseInt(fileGpuUsage.text());
+            if (isNaN(gpuBusyPercent)) {
+                gpuUsage = 0;
+            } else {
+                gpuUsage = root.clampPercentToUnit(gpuBusyPercent / 100);
+            }
+        } else if (root._gpuUsageSource === "nvidia-smi" && !nvidiaGpuProc.running) {
+            nvidiaGpuProc.running = true;
+        } else if (root._gpuUsageSource === "intel" && !intelGpuProc.running) {
+            intelGpuProc.running = true;
+        } else if (root._gpuUsageSource === "none") {
+            gpuUsage = 0;
+        }
+
+        root.updateHistories();
+
+    }
+
+    function _pollDisk(): void {
+        if (!diskProc.running)
+            diskProc.running = true;
     }
 
     Timer {
@@ -197,89 +359,15 @@ Singleton {
         interval: Config.options?.resources?.updateInterval ?? 3000
         running: root._runningRequested
         repeat: true
-        onTriggered: {
-            autoStopTimer.restart();
+        onTriggered: root._pollSensors()
+    }
 
-            // Determine whether GPU polling should be skipped this cycle.
-            // On hybrid (iGPU+dGPU) systems, querying GPU data via nvidia-smi or hwmon
-            // prevents the discrete GPU from entering runtime suspend, wasting ~9-10W at idle.
-            // Reading runtime_status is a pure kernel sysfs read — it does NOT wake the hardware.
-            const gpuMonitorEnabled = Config.options?.resources?.monitorGpu ?? true;
-            let skipGpu = !gpuMonitorEnabled;
-            if (!skipGpu && root._dGpuRuntimeStatusPath !== "") {
-                fileDGpuRuntimeStatus.reload();
-                skipGpu = fileDGpuRuntimeStatus.text().trim() === "suspended";
-            }
-
-            // Reload files
-            fileMeminfo.reload();
-            fileStat.reload();
-            fileCpuTemp.reload();
-            if (!skipGpu) {
-                if (root._gpuUsageSource !== "nvidia-smi")
-                    fileGpuTemp.reload();
-                if (root._gpuUsageSource === "sysfs")
-                    fileGpuUsage.reload();
-            }
-
-            // Parse memory and swap usage
-            const textMeminfo = fileMeminfo.text();
-            memoryTotal = Number(textMeminfo.match(/MemTotal: *(\d+)/)?.[1] ?? 1);
-            memoryFree = Number(textMeminfo.match(/MemAvailable: *(\d+)/)?.[1] ?? 0);
-            swapTotal = Number(textMeminfo.match(/SwapTotal: *(\d+)/)?.[1] ?? 1);
-            swapFree = Number(textMeminfo.match(/SwapFree: *(\d+)/)?.[1] ?? 0);
-
-            // Parse CPU usage
-            const textStat = fileStat.text();
-            const cpuLine = textStat.match(/^cpu\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/);
-            if (cpuLine) {
-                const stats = cpuLine.slice(1).map(Number);
-                const total = stats.reduce((a, b) => a + b, 0);
-                // idle (stats[3]) + iowait (stats[4]) = not working
-                const idle = stats[3] + stats[4];
-
-                if (previousCpuStats) {
-                    const totalDiff = total - previousCpuStats.total;
-                    const idleDiff = idle - previousCpuStats.idle;
-                    cpuUsage = totalDiff > 0 ? (1 - idleDiff / totalDiff) : 0;
-                }
-
-                previousCpuStats = {
-                    total,
-                    idle
-                };
-            }
-
-            // Parse temperatures (millidegrees to degrees)
-            const cpuTempRaw = parseInt(fileCpuTemp.text()) || 0;
-            cpuTemp = Math.round(cpuTempRaw / 1000);
-            // GPU temp: skip when suspended/disabled to avoid hwmon reads waking a suspended dGPU
-            if (!skipGpu && root._gpuUsageSource !== "nvidia-smi") {
-                const gpuTempRaw = parseInt(fileGpuTemp.text()) || 0;
-                gpuTemp = Math.round(gpuTempRaw / 1000);
-            }
-
-            // Parse GPU usage — skip entirely when dGPU is suspended or monitoring is disabled
-            if (skipGpu) {
-                gpuUsage = 0;
-            } else if (root._gpuUsageSource === "sysfs") {
-                const gpuBusyPercent = parseInt(fileGpuUsage.text());
-                if (isNaN(gpuBusyPercent)) {
-                    gpuUsage = 0;
-                } else {
-                    gpuUsage = root.clampPercentToUnit(gpuBusyPercent / 100);
-                }
-            } else if (root._gpuUsageSource === "nvidia-smi" && !nvidiaGpuProc.running) {
-                nvidiaGpuProc.running = true;
-            } else if (root._gpuUsageSource === "none") {
-                gpuUsage = 0;
-            }
-
-            root.updateHistories();
-
-            // Update disk usage
-            diskProc.running = true;
-        }
+    Timer {
+        id: diskPollTimer
+        interval: root._diskUpdateIntervalMs
+        running: root._runningRequested
+        repeat: true
+        onTriggered: root._pollDisk()
     }
 
     FileView {
@@ -316,6 +404,7 @@ Singleton {
     property string _gpuUsagePath: ""
     property string _gpuUsageSource: "none"
     property string _nvidiaSmiPath: ""
+    property string _intelGpuTopPath: ""
     // Hybrid GPU: path to dGPU power/runtime_status (empty = not hybrid or detection pending)
     property string _dGpuRuntimeStatusPath: ""
 
@@ -325,51 +414,94 @@ Singleton {
 
     Process {
         id: detectTempSensors
-        // Detect CPU and GPU temperature sensors
-        // Extended support for older hardware, laptops, and various platforms
+        // Detect CPU and GPU temperature sensors using priority-based selection.
+        // On Intel, acpitz/pch report near-constant values; coretemp is the real sensor.
         command: ["/usr/bin/bash", "-c", `
-            cpu_found=""
-            gpu_found=""
+            cpu_path=""
+            gpu_path=""
+            cpu_priority=0
 
             for hwmon in /sys/class/hwmon/hwmon*; do
-                name=$(cat $hwmon/name 2>/dev/null)
+                [ -f "$hwmon/name" ] || continue
+                name=$(cat "$hwmon/name" 2>/dev/null)
 
-                # Find best temp input (prefer temp1, but check others)
-                temp_input=""
-                for t in $hwmon/temp*_input; do
-                    [ -f "$t" ] && temp_input="$t" && break
-                done
-                [ -z "$temp_input" ] && continue
+                temp=""
+                # For k10temp/zenpower: prefer Tdie over Tctl (Tctl has artificial offset on some Ryzen)
+                if [ "$name" = "k10temp" ] || [ "$name" = "zenpower" ]; then
+                    for f in "$hwmon"/temp*_label; do
+                        [ -f "$f" ] || continue
+                        label=$(cat "$f" 2>/dev/null)
+                        if [ "$label" = "Tdie" ]; then
+                            temp=$(echo "$f" | sed 's/_label/_input/')
+                            break
+                        fi
+                    done
+                fi
+                # Fallback: first available temp input
+                if [ -z "$temp" ]; then
+                    for f in "$hwmon/temp1_input" $hwmon/temp*_input; do
+                        [ -f "$f" ] && temp="$f" && break
+                    done
+                fi
+                [ -z "$temp" ] && continue
 
-                # CPU sensors - extended list for various hardware
+                # CPU sensors ranked by accuracy
+                priority_level=0
                 case "$name" in
-                    coretemp|k10temp|zenpower|cpu_thermal|fam15h_power|acpitz|thinkpad|dell_smm|hp_wmi|asus_ec|it87|nct6775|w83627ehf|lm75|lm78|lm85|via_cputemp|pch_*)
-                        [ -z "$cpu_found" ] && echo "cpu:$temp_input" && cpu_found=1
-                        ;;
+                    coretemp|k10temp|zenpower|cpu_thermal|fam15h_power|via_cputemp) priority_level=3 ;;
+                    thinkpad|dell_smm|hp_wmi|asus_ec|it87|nct6775|w83627ehf|lm75|lm78|lm85) priority_level=2 ;;
+                    acpitz|pch_*) priority_level=1 ;;
                 esac
 
-                # GPU sensors
+                if [ "$priority_level" -gt "$cpu_priority" ]; then
+                    cpu_priority=$priority_level
+                    cpu_path="$temp"
+                fi
+
                 case "$name" in
                     amdgpu|radeon|nvidia|nouveau|i915|xe|panfrost|lima|v3d|vc4)
-                        [ -z "$gpu_found" ] && echo "gpu:$temp_input" && gpu_found=1
+                        # For amdgpu: prefer 'edge' over 'junction' (junction is hotspot, always higher)
+                        if [ -z "$gpu_path" ]; then
+                            gpu_edge=""
+                            for lf in "$hwmon"/temp*_label; do
+                                [ -f "$lf" ] || continue
+                                gl=$(cat "$lf" 2>/dev/null)
+                                [ "$gl" = "edge" ] && gpu_edge="$lf" && break
+                            done
+                            if [ -n "$gpu_edge" ]; then
+                                gpu_path=$(echo "$gpu_edge" | sed 's/_label/_input/')
+                            else
+                                gpu_path="$temp"
+                            fi
+                        fi
                         ;;
                 esac
             done
 
             # Fallback to thermal_zone if hwmon didn't find sensors
-            for tz in /sys/class/thermal/thermal_zone*; do
-                [ -f "$tz/temp" ] || continue
-                type=$(cat $tz/type 2>/dev/null | tr '[:upper:]' '[:lower:]')
+            if [ -z "$cpu_path" ] || [ -z "$gpu_path" ]; then
+                for tz in /sys/class/thermal/thermal_zone*; do
+                    [ -f "$tz/temp" ] || continue
+                    type=$(cat "$tz/type" 2>/dev/null | tr '[:upper:]' '[:lower:]')
 
-                case "$type" in
-                    *cpu*|x86_pkg_temp|acpitz|*soc*|*core*|*package*|*processor*|int3400*|pch*|b0d4*)
-                        [ -z "$cpu_found" ] && echo "cpu:$tz/temp" && cpu_found=1
-                        ;;
-                    *gpu*|*radeon*|*amdgpu*|*nvidia*)
-                        [ -z "$gpu_found" ] && echo "gpu:$tz/temp" && gpu_found=1
-                        ;;
-                esac
-            done
+                    if [ -z "$cpu_path" ]; then
+                        case "$type" in
+                            *cpu*|x86_pkg_temp|acpitz|*soc*|*core*|*package*|*processor*|int3400*|pch*|b0d4*)
+                                cpu_path="$tz/temp" ;;
+                        esac
+                    fi
+
+                    if [ -z "$gpu_path" ]; then
+                        case "$type" in
+                            *gpu*|*radeon*|*amdgpu*|*nvidia*)
+                                gpu_path="$tz/temp" ;;
+                        esac
+                    fi
+                done
+            fi
+
+            [ -n "$cpu_path" ] && echo "cpu:$cpu_path"
+            [ -n "$gpu_path" ] && echo "gpu:$gpu_path"
         `]
         stdout: SplitParser {
             onRead: line => {
@@ -399,13 +531,13 @@ Singleton {
             for card in /sys/class/drm/card*/; do
                 name=$(basename "$card")
                 echo "$name" | grep -qE '^card[0-9]+$' || continue
-                bvga_file="${card}device/boot_vga"
+                bvga_file="\${card}device/boot_vga"
                 [ -f "$bvga_file" ] || continue
                 bvga=$(cat "$bvga_file" 2>/dev/null)
                 if [ "$bvga" = "1" ]; then
                     igpu_found=1
                 elif [ "$bvga" = "0" ]; then
-                    runtime="${card}device/power/runtime_status"
+                    runtime="\${card}device/power/runtime_status"
                     [ -f "$runtime" ] && dgpu_runtime="$runtime"
                 fi
             done

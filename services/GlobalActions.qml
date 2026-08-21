@@ -5,6 +5,7 @@ import qs
 import qs.modules.common
 import qs.modules.common.functions
 import qs.services
+import qs.services.deferred
 import QtQuick
 import Qt.labs.folderlistmodel
 import Quickshell
@@ -33,6 +34,10 @@ Singleton {
 
     function runLauncher(args): void {
         Quickshell.execDetached([Quickshell.shellPath("scripts/inir")].concat(args ?? []))
+    }
+
+    function applyGlobalStyle(styleId: string): void {
+        ThemeService.setGlobalStyle(styleId)
     }
 
     function fuzzyQuery(query: string): list<var> {
@@ -82,14 +87,20 @@ Singleton {
     }
 
     readonly property list<string> categories: [
-        "system", "appearance", "tools", "settings", "media", "custom"
+        "system", "appearance", "tools", "settings", "media", "setup", "custom"
     ]
 
     // ── IPC ─────────────────────────────────────────────────────────────
     IpcHandler {
         target: "globalActions"
 
-        function run(actionId: string, args: string): string {
+        function run(actionId: string): string {
+            if (root.runById(actionId, ""))
+                return "ok"
+            return "error: action not found: " + actionId
+        }
+
+        function runWithArgs(actionId: string, args: string): string {
             if (root.runById(actionId, args ?? ""))
                 return "ok"
             return "error: action not found: " + actionId
@@ -193,6 +204,15 @@ Singleton {
             execute: () => { GlobalStates.settingsOverlayOpen = true }
         },
         {
+            id: "toggle-dashboard",
+            name: Translation.tr("Dashboard"),
+            description: Translation.tr("Open the welcome hub: clock, notifications, media, agenda and more"),
+            icon: "space_dashboard",
+            category: "system",
+            keywords: ["dashboard", "hub", "home", "welcome", "widgets", "overview"],
+            execute: () => { GlobalStates.dashboardOpen = !GlobalStates.dashboardOpen }
+        },
+        {
             id: "open-network-settings",
             name: Translation.tr("Network Settings"),
             description: Translation.tr("Open network connection manager"),
@@ -236,9 +256,7 @@ Singleton {
             icon: "dark_mode",
             category: "appearance",
             keywords: ["dark", "theme", "night", "mode"],
-            execute: () => {
-                Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", "dark", "--noswitch"])
-            }
+            execute: () => MaterialThemeLoader.setDarkMode(true)
         },
         {
             id: "light-mode",
@@ -247,9 +265,7 @@ Singleton {
             icon: "light_mode",
             category: "appearance",
             keywords: ["light", "theme", "day", "mode"],
-            execute: () => {
-                Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", "light", "--noswitch"])
-            }
+            execute: () => MaterialThemeLoader.setDarkMode(false)
         },
         {
             id: "accent-color",
@@ -304,7 +320,7 @@ Singleton {
             icon: "format_paint",
             category: "appearance",
             keywords: ["style", "material", "theme"],
-            execute: () => { Config.setNestedValue("appearance.globalStyle", "material") }
+            execute: () => { root.applyGlobalStyle("material") }
         },
         {
             id: "style-cards",
@@ -313,7 +329,7 @@ Singleton {
             icon: "dashboard",
             category: "appearance",
             keywords: ["style", "cards", "theme"],
-            execute: () => { Config.setNestedValue("appearance.globalStyle", "cards") }
+            execute: () => { root.applyGlobalStyle("cards") }
         },
         {
             id: "style-aurora",
@@ -322,7 +338,7 @@ Singleton {
             icon: "auto_awesome",
             category: "appearance",
             keywords: ["style", "aurora", "theme", "blur"],
-            execute: () => { Config.setNestedValue("appearance.globalStyle", "aurora") }
+            execute: () => { root.applyGlobalStyle("aurora") }
         },
         {
             id: "style-inir",
@@ -331,7 +347,7 @@ Singleton {
             icon: "terminal",
             category: "appearance",
             keywords: ["style", "inir", "theme"],
-            execute: () => { Config.setNestedValue("appearance.globalStyle", "inir") }
+            execute: () => { root.applyGlobalStyle("inir") }
         },
         {
             id: "style-angel",
@@ -340,7 +356,25 @@ Singleton {
             icon: "stars",
             category: "appearance",
             keywords: ["style", "angel", "theme", "glass"],
-            execute: () => { Config.setNestedValue("appearance.globalStyle", "angel") }
+            execute: () => { root.applyGlobalStyle("angel") }
+        },
+        {
+            id: "style-zzz",
+            name: Translation.tr("Style: ZZZ"),
+            description: Translation.tr("Switch to ZZZ style"),
+            icon: "bolt",
+            category: "appearance",
+            keywords: ["style", "zzz", "zenless", "theme", "yellow", "hazard"],
+            execute: () => { root.applyGlobalStyle("zzz") }
+        },
+        {
+            id: "style-cookie",
+            name: Translation.tr("Style: Cookie Shapes"),
+            description: Translation.tr("Switch to Cookie Shapes style"),
+            icon: "cookie",
+            category: "appearance",
+            keywords: ["style", "cookie", "shapes", "theme", "expressive", "morph"],
+            execute: () => { root.applyGlobalStyle("cookie") }
         },
     ]
 
@@ -365,22 +399,24 @@ Singleton {
             category: "tools",
             keywords: ["color", "picker", "eyedropper", "hex"],
             execute: () => {
-                Quickshell.execDetached(["/usr/bin/hyprpicker", "-a"])
+                ShellExec.execDetachedArgs(["/usr/bin/hyprpicker", "-a"], "Pick color")
             }
         },
         {
             id: "screen-record",
             name: Translation.tr("Toggle Screen Recording"),
-            description: Translation.tr("Start or stop screen recording with wf-recorder"),
+            description: Translation.tr("Start or stop fullscreen recording with the configured audio profile"),
             icon: "videocam",
             category: "tools",
-            keywords: ["record", "screen", "video", "capture", "wf-recorder"],
+            keywords: ["record", "screen", "video", "capture", "wf-recorder", "audio", "microphone", "mic"],
             execute: () => {
-                if (RecorderStatus.isRecording) {
-                    Quickshell.execDetached(["/usr/bin/pkill", "-SIGINT", "wf-recorder"])
-                } else {
-                    Quickshell.execDetached(["/usr/bin/bash", Directories.recordScriptPath])
-                }
+                const args = ["/usr/bin/bash", Directories.recordScriptPath]
+                if (RecorderStatus.isRecording)
+                    args.push("--stop")
+                else
+                    args.push("--fullscreen", "--sound")
+                Quickshell.execDetached(args)
+                RecorderStatus.scheduleQuickCheck()
             }
         },
         {
@@ -413,7 +449,7 @@ Singleton {
             execute: () => {
                 const enabledWidgets = Config.options?.sidebar?.right?.enabledWidgets ?? ["calendar", "todo", "notepad", "calculator", "sysmon", "timer"]
                 const notepadIndex = Math.max(0, enabledWidgets.indexOf("notepad"))
-                GlobalStates.sidebarRightOpen = true
+                GlobalStates.openSidebarRight("")
                 if (Persistent?.states?.sidebar?.bottomGroup) {
                     Persistent.states.sidebar.bottomGroup.collapsed = false
                     Persistent.states.sidebar.bottomGroup.tab = notepadIndex
@@ -816,6 +852,67 @@ Singleton {
         },
     ]
 
+    // ── SETUP: One-shot recipes auto-discovered from scripts/setup/*.sh ─
+    //
+    // Maintainers add, edit or remove a script in scripts/setup/; the
+    // launcher rebuilds itself reactively. No QML edits required.
+    // See scripts/setup/README.md for the @meta header contract and the
+    // _scan.sh JSON output format.
+    property var _setupTargets: []
+
+    FolderListModel {
+        id: setupScriptsFolder
+        folder: Qt.resolvedUrl(`file://${Directories.scriptsPath}/setup`)
+        nameFilters: ["*.sh"]
+        showDirs: false; showHidden: false; sortField: FolderListModel.Name
+        onCountChanged: { setupScanner.running = false; setupScanner.running = true }
+    }
+
+    Process {
+        id: setupScanner
+        command: ["/usr/bin/bash", `${Directories.scriptsPath}/setup/_scan.sh`]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try { root._setupTargets = JSON.parse(this.text || "[]") }
+                catch (e) { root._setupTargets = [] }
+            }
+        }
+    }
+
+    Component.onCompleted: { setupScanner.running = false; setupScanner.running = true }
+
+    function _safeTerminal(): string {
+        const t = (Config.options?.apps?.terminal ?? "kitty").trim()
+        return /^[A-Za-z0-9._+-]+$/.test(t) ? t : "kitty"
+    }
+
+    function _runSetup(target): void {
+        const path = `${Directories.scriptsPath}/setup/${target.slug}.sh`
+        const term = root._safeTerminal()
+        ShellExec.execDetachedArgs(term === "wezterm"
+            ? [term, "start", "--always-new-process", "--", "/usr/bin/bash", path]
+            : [term, "-e", "/usr/bin/bash", path], `Setup ${target.name}`)
+        Quickshell.execDetached(["/usr/bin/notify-send",
+            "-a", "Setup", "-i", target.icon || "download",
+            "-h", `string:x-canonical-private-synchronous:setup-${target.slug}`,
+            "--", target.name, Translation.tr("Starting setup in terminal…")])
+    }
+
+    readonly property var _setupActions: _setupTargets.map(t => {
+        const display = t.slug.charAt(0).toUpperCase() + t.slug.slice(1)
+        const name = t.name || Translation.tr("Setup %1").arg(display)
+        const target = { slug: t.slug, name: name, icon: t.icon || "download" }
+        return {
+            id: `setup-${t.slug}`,
+            name: name,
+            description: t.description || Translation.tr("Run the %1 setup recipe").arg(t.slug),
+            icon: target.icon,
+            category: "setup",
+            keywords: ["setup", "install", t.slug].concat(t.keywords ? t.keywords.split(/\s+/) : []),
+            execute: () => root._runSetup(target)
+        }
+    })
+
     // ── User Script Provider ────────────────────────────────────────────
     property var _userScriptActions: {
         const actions = []
@@ -832,9 +929,9 @@ Singleton {
                     icon: "code",
                     category: "custom",
                     keywords: ["custom", "script", "user", actionName],
-                    execute: ((path) => (args) => {
-                        Quickshell.execDetached([path, ...(args ? args.split(" ") : [])])
-                    })(resolvedPath)
+                    execute: ((path, label) => (args) => {
+                        ShellExec.execDetachedArgs([path, ...(args ? args.split(" ") : [])], `Run ${label}`)
+                    })(resolvedPath, actionName)
                 })
             }
         }
@@ -859,6 +956,7 @@ Singleton {
         if (cfg?.enableMedia ?? true)      result = result.concat(_mediaActions)
         if (cfg?.enableSettings ?? true)   result = result.concat(_settingsActions)
         if (cfg?.enablePackages ?? true)   result = result.concat(_packageActions)
+        if (cfg?.enableSetup ?? true)      result = result.concat(_setupActions)
         if (cfg?.enableCustom ?? true)     result = result.concat(_userScriptActions)
         return result
     }

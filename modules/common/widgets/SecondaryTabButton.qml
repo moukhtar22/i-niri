@@ -99,7 +99,7 @@ TabButton {
         implicitHeight: 37
         implicitWidth: tabContent.implicitWidth + root.horizontalContentPadding * 2
         color: (root.hovered ? root.colBackgroundHover : root.colBackground)
-        layer.enabled: true
+        layer.enabled: ripple.opacity > 0
         layer.effect: OpacityMask {
             maskSource: Rectangle {
                 width: buttonBackground.width
@@ -165,6 +165,7 @@ TabButton {
                     text: buttonIcon
                     iconSize: Appearance.font.pixelSize.huge
                     fill: selected ? 1 : 0
+                    animateFill: true
                     color: selected ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
                     Behavior on color {
                         animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }

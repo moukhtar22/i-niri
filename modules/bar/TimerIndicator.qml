@@ -1,6 +1,7 @@
 import qs
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
@@ -73,17 +74,24 @@ MouseArea {
     }
 
     readonly property color accentColor: {
+        if (Appearance.zzzEverywhere) {
+            if (pomodoroActive)
+                return (TimerService?.pomodoroBreak ?? false) ? Appearance.zzz.secondary : Appearance.zzz.accent
+            if (countdownActive)
+                return Appearance.zzz.secondary
+            return Appearance.zzz.ink
+        }
         if (pomodoroActive) {
             return (TimerService?.pomodoroBreak ?? false)
-                ? (Appearance.colors.colTertiary ?? Appearance.m3colors.m3tertiary)
+                ? Appearance.colors.colTertiary
                 : Appearance.colors.colPrimary
         }
         if (countdownActive)
-            return Appearance.m3colors.m3secondary
+            return Appearance.colors.colSecondary
         return Appearance.colors.colOnLayer1
     }
 
-    visible: anyActive || showPinnedIdle
+    visible: implicitWidth > 0
     implicitWidth: (anyActive || showPinnedIdle) ? pill.width + 4 : 0
     implicitHeight: Appearance.sizes.barHeight
 
@@ -91,7 +99,7 @@ MouseArea {
     cursorShape: Qt.PointingHandCursor
 
     function openTimerPanel(): void {
-        GlobalStates.sidebarRightOpen = true
+        GlobalStates.openSidebarRight(root.QsWindow.window?.screen?.name ?? "")
 
         if (Persistent?.states?.sidebar?.bottomGroup) {
             Persistent.states.sidebar.bottomGroup.tab = 3
@@ -133,9 +141,11 @@ MouseArea {
     }
 
     Behavior on implicitWidth {
+        enabled: Appearance.animationsEnabled
         NumberAnimation {
             duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Easing.OutCubic
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
         }
     }
 
@@ -209,12 +219,30 @@ MouseArea {
             Layout.alignment: Qt.AlignVCenter
         }
 
-        MaterialSymbol {
-            visible: root.paused
-            text: "pause"
-            iconSize: Appearance.font.pixelSize.small
-            color: Appearance.inirEverywhere ? Appearance.inir.colTextMuted : Appearance.colors.colOnLayer1Inactive
+        Item {
             Layout.alignment: Qt.AlignVCenter
+            implicitWidth: root.paused ? pauseIcon.implicitWidth : 0
+            implicitHeight: pauseIcon.implicitHeight
+            opacity: root.paused ? 1 : 0
+            visible: opacity > 0
+            clip: true
+
+            Behavior on implicitWidth {
+                enabled: Appearance.animationsEnabled
+                animation: NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve }
+            }
+            Behavior on opacity {
+                enabled: Appearance.animationsEnabled
+                animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+            }
+
+            MaterialSymbol {
+                id: pauseIcon
+                anchors.centerIn: parent
+                text: "pause"
+                iconSize: Appearance.font.pixelSize.small
+                color: Appearance.inirEverywhere ? Appearance.inir.colTextMuted : Appearance.colors.colOnLayer1Inactive
+            }
         }
     }
 

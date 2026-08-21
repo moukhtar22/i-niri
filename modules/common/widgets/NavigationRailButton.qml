@@ -65,8 +65,11 @@ TabButton {
 
             Rectangle {
                 id: bubbleBackground
-                color: Appearance.colors.colPrimary
-                radius: Appearance.rounding.full
+                color: Appearance.zzzEverywhere ? Appearance.zzz.accent : Appearance.colors.colPrimary
+                radius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.full
+                // Organic morph on style/shape switch (organic-transitions)
+                Behavior on radius { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve } }
+                Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
                 implicitWidth: bubbleText.implicitWidth + 24
                 implicitHeight: root.baseHighlightHeight
 
@@ -76,7 +79,11 @@ TabButton {
                     text: root.buttonText
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.weight: Font.Medium
-                    color: Appearance.colors.colOnPrimary
+                    color: Appearance.zzzEverywhere ? Appearance.zzz.onSticker : Appearance.colors.colOnPrimary
+                    Behavior on color {
+                        enabled: Appearance.animationsEnabled
+                        ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                    }
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -104,31 +111,14 @@ TabButton {
             anchors.bottom: itemIconBackground.bottom
             // When collapsed, only show icon area; when expanded, show full width with text
             implicitWidth: root.expanded ? root.visualWidth : root.baseSize
-            radius: Appearance.angelEverywhere ? Appearance.angel.roundingSmall
+            radius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius
+                : Appearance.angelEverywhere ? Appearance.angel.roundingSmall
                 : Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.full
-            color: Appearance.angelEverywhere
-                ? (toggled
-                    ? (root.showToggledHighlight
-                        ? (root.down ? Appearance.angel.colGlassCardActive : root.hovered ? Appearance.angel.colGlassCardHover : Appearance.angel.colGlassCard)
-                        : "transparent")
-                    : (root.down ? Appearance.angel.colGlassCardActive : root.hovered ? Appearance.angel.colGlassCardHover : "transparent"))
-                : Appearance.inirEverywhere
-                ? (toggled
-                    ? (root.showToggledHighlight
-                        ? (root.down ? Appearance.inir.colLayer2Active : root.hovered ? Appearance.inir.colLayer2Hover : Appearance.inir.colLayer2)
-                        : "transparent")
-                    : (root.down ? Appearance.inir.colLayer2Active : root.hovered ? Appearance.inir.colLayer2Hover : "transparent"))
-                : Appearance.auroraEverywhere
-                    ? (toggled ?
-                        root.showToggledHighlight ?
-                            (root.down ? Appearance.aurora.colSubSurfaceActive : root.hovered ? Appearance.aurora.colSubSurface : Appearance.aurora.colElevatedSurface)
-                            : "transparent" :
-                        (root.down ? Appearance.aurora.colSubSurfaceActive : root.hovered ? Appearance.aurora.colSubSurface : "transparent"))
-                    : (toggled ?
-                        root.showToggledHighlight ?
-                            (root.down ? Appearance.colors.colSecondaryContainerActive : root.hovered ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer)
-                            : (root.down ? Appearance.colors.colLayer1Active : root.hovered ? Appearance.colors.colLayer1Hover : ColorUtils.transparentize(Appearance.m3colors.m3primary, 0.92)) :
-                        (root.down ? Appearance.colors.colLayer1Active : root.hovered ? Appearance.colors.colLayer1Hover : "transparent"))
+            // Organic morph on style/shape switch (organic-transitions)
+            Behavior on radius { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve } }
+            // Bgless doctrine (shell-wide nav rails): no plate at rest, hover, press
+            // or selection. State is carried entirely by the icon colour + weight.
+            color: "transparent"
 
             states: State {
                 name: "expanded"
@@ -157,6 +147,7 @@ TabButton {
             }
 
             Behavior on color {
+                enabled: Appearance.animationsEnabled
                 animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
             }
         }
@@ -175,13 +166,28 @@ TabButton {
                 anchors.centerIn: parent
                 iconSize: 24
                 fill: toggled ? 1 : 0
+                animateFill: true
                 font.weight: (toggled || root.hovered) ? Font.DemiBold : Font.Normal
                 text: buttonIcon
-                color: toggled
-                    ? (root.showToggledHighlight ? Appearance.m3colors.m3onSecondaryContainer : Appearance.m3colors.m3primary)
-                    : Appearance.colors.colOnLayer1
+                // Bgless: active icon carries the accent itself (no plate behind).
+                color: Appearance.zzzEverywhere
+                    ? (toggled ? Appearance.zzz.accent : (root.hovered ? Appearance.zzz.ink : Appearance.zzz.inkMuted))
+                    : Appearance.angelEverywhere
+                    ? (toggled ? Appearance.angel.colPrimary : (root.hovered ? Appearance.angel.colText : Appearance.angel.colTextSecondary))
+                    : Appearance.inirEverywhere
+                    ? (toggled ? Appearance.inir.colPrimary : (root.hovered ? Appearance.inir.colText : Appearance.inir.colTextSecondary))
+                    : (toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1)
+
+                // Bgless press feedback: the glyph dips on press so a click reads
+                // as registered without any plate behind it.
+                scale: root.down ? 0.82 : 1
+                Behavior on scale {
+                    enabled: Appearance.animationsEnabled
+                    NumberAnimation { duration: Appearance.animation.clickBounce.duration; easing.type: Appearance.animation.clickBounce.type; easing.bezierCurve: Appearance.animation.clickBounce.bezierCurve }
+                }
 
                 Behavior on color {
+                    enabled: Appearance.animationsEnabled
                     animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                 }
             }
@@ -190,20 +196,34 @@ TabButton {
         StyledText {
             id: itemText
             // Only show text when expanded - when collapsed, use PopupToolTip instead
-            visible: root.expanded
+            visible: opacity > 0
             opacity: root.expanded ? 1 : 0
+            width: root.expanded ? implicitWidth : 0
+            clip: true
             anchors {
                 left: itemIconBackground.right
                 verticalCenter: itemIconBackground.verticalCenter
             }
             text: buttonText
             font.pixelSize: Appearance.font.pixelSize.small
-            color: Appearance.colors.colOnLayer1
+            color: Appearance.zzzEverywhere ? Appearance.zzz.ink : Appearance.colors.colOnLayer1
+            Behavior on color {
+                enabled: Appearance.animationsEnabled
+                ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+            }
 
             Behavior on opacity {
                 NumberAnimation {
                     duration: Appearance.animation.elementMoveFast.duration
                     easing.type: Appearance.animation.elementMoveFast.type
+                }
+            }
+            Behavior on width {
+                enabled: Appearance.animationsEnabled
+                NumberAnimation {
+                    duration: Appearance.animation.elementResize.duration
+                    easing.type: Appearance.animation.elementResize.type
+                    easing.bezierCurve: Appearance.animation.elementResize.bezierCurve
                 }
             }
         }

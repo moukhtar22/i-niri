@@ -161,12 +161,13 @@ Item {
         opacity: root.isFocused || root.hovered ? 1.0 : 0.7
 
         Behavior on opacity {
-            NumberAnimation { duration: 150 }
+            NumberAnimation { duration: Looks.transition.enabled ? Looks.transition.duration.normal : 0 }
         }
 
         WRectangularShadow {
             target: windowRect
-            visible: root.hovered || root.Drag.active
+            visible: Looks.effectsEnabled
+                && (root.hovered || root.isFocused || root.Drag.active)
         }
 
         // Content container (title bar + preview)

@@ -6,6 +6,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
+import qs.modules.common.widgets
 import qs.modules.waffle.looks
 
 WBarAttachedPanelContent {
@@ -14,6 +15,9 @@ WBarAttachedPanelContent {
     readonly property string action: GlobalStates.osdMediaAction
     readonly property var player: MprisController.activePlayer
     readonly property bool hasPlayer: player !== null
+    readonly property string effectiveArtUrl: MprisController.isYtMusicActive ? YtMusic.currentThumbnail : (player?.trackArtUrl ?? "")
+    readonly property string effectiveTitle: MprisController.isYtMusicActive ? YtMusic.currentTitle : (player?.trackTitle ?? "")
+    readonly property string effectiveArtist: MprisController.isYtMusicActive ? YtMusic.currentArtist : (player?.trackArtist ?? "")
 
     property Timer timer: Timer {
         id: autoCloseTimer
@@ -23,50 +27,48 @@ WBarAttachedPanelContent {
         onTriggered: root.close()
     }
 
-    // Restart timer when action changes (user pressed play/pause/next/prev again)
+    // Restart for every explicit media action, including repeated identical actions.
     Connections {
         target: GlobalStates
-        function onOsdMediaActionChanged() {
+        function onOsdMediaActionTriggered(action: string) {
             if (GlobalStates.osdMediaOpen)
                 autoCloseTimer.restart()
         }
     }
 
     contentItem: WPane {
+        anchors.centerIn: parent
+        borderColor: Looks.colors.ambientShadow
         screenX: root.panelScreenX + root.visualMargin
         screenY: root.panelScreenY + root.visualMargin
         screenWidth: root._screenW
         screenHeight: root._screenH
         contentItem: Item {
-            implicitWidth: 300
-            implicitHeight: 90
-
-            Rectangle {
-                anchors.fill: parent
-                color: Looks.colors.bgPanelFooter
-            }
+            implicitWidth: contentRow.implicitWidth + 20
+            implicitHeight: contentRow.implicitHeight + 20
 
             RowLayout {
+                id: contentRow
                 anchors.fill: parent
                 anchors.margins: 10
                 spacing: 12
 
-                // Album art (larger, like ModernFlyouts)
+                // Album art — fills height, stays square
                 Rectangle {
-                    Layout.preferredWidth: 70
-                    Layout.preferredHeight: 70
+                    Layout.fillHeight: true
+                    implicitWidth: height
                     radius: Looks.radius.medium
                     color: Looks.colors.bg1Base
 
                     Image {
                         id: artImage
                         anchors.fill: parent
-                        source: root.player?.trackArtUrl ?? ""
+                        source: MediaArtwork.displaySource
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
-                        cache: true
+                        cache: false
                         sourceSize: Qt.size(140, 140)
-                        visible: status === Image.Ready
+                        visible: MediaArtwork.ready && status === Image.Ready
 
                         layer.enabled: visible
                         layer.effect: OpacityMask {
@@ -82,7 +84,7 @@ WBarAttachedPanelContent {
                     Rectangle {
                         anchors.fill: parent
                         radius: Looks.radius.medium
-                        color: ColorUtils.transparentize(Looks.colors.bg0, 0.3)
+                        color: ColorUtils.transparentize(Looks.colors.bg0Opaque, 0.3)
                         visible: root.action !== ""
 
                         FluentIcon {
@@ -99,30 +101,29 @@ WBarAttachedPanelContent {
                         icon: "music-note-2"
                         implicitSize: 28
                         color: Looks.colors.subfg
-                        visible: artImage.status !== Image.Ready && root.action === ""
+                        visible: (!MediaArtwork.ready || artImage.status !== Image.Ready) && root.action === ""
                     }
                 }
 
-                // Info column
+                // Info + controls
                 ColumnLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     spacing: 4
 
-                    // Title
                     WText {
                         Layout.fillWidth: true
-                        text: StringUtils.cleanMusicTitle(root.player?.trackTitle) ?? Translation.tr("No media")
+                        text: StringUtils.cleanMusicTitle(root.effectiveTitle) || Translation.tr("No media")
                         font.pixelSize: Looks.font.pixelSize.normal
                         font.weight: Font.DemiBold
+                        color: Looks.colors.fg
                         elide: Text.ElideRight
                         maximumLineCount: 1
                     }
 
-                    // Artist
                     WText {
                         Layout.fillWidth: true
-                        text: root.player?.trackArtist ?? ""
+                        text: root.effectiveArtist
                         font.pixelSize: Looks.font.pixelSize.small
                         color: Looks.colors.subfg
                         elide: Text.ElideRight
@@ -132,13 +133,13 @@ WBarAttachedPanelContent {
 
                     Item { Layout.fillHeight: true }
 
-                    // Mini controls row
                     RowLayout {
                         spacing: 2
 
                         WBorderlessButton {
                             implicitWidth: 28
                             implicitHeight: 28
+                            enabled: MprisController.canGoPrevious
                             contentItem: FluentIcon {
                                 anchors.centerIn: parent
                                 icon: "previous"
@@ -146,9 +147,8 @@ WBarAttachedPanelContent {
                                 color: Looks.colors.fg
                             }
                             onClicked: {
-                                GlobalStates.osdMediaAction = "previous"
                                 MprisController.previous()
-                                autoCloseTimer.restart()
+                                GlobalStates.showMediaAction("previous")
                             }
                         }
 
@@ -162,15 +162,16 @@ WBarAttachedPanelContent {
                                 color: Looks.colors.fg
                             }
                             onClicked: {
-                                GlobalStates.osdMediaAction = root.player?.isPlaying ? "pause" : "play"
+                                const wasPlaying = root.player?.isPlaying ?? false
                                 MprisController.togglePlaying()
-                                autoCloseTimer.restart()
+                                GlobalStates.showMediaAction(wasPlaying ? "pause" : "play")
                             }
                         }
 
                         WBorderlessButton {
                             implicitWidth: 28
                             implicitHeight: 28
+                            enabled: MprisController.canGoNext
                             contentItem: FluentIcon {
                                 anchors.centerIn: parent
                                 icon: "next"
@@ -178,15 +179,11 @@ WBarAttachedPanelContent {
                                 color: Looks.colors.fg
                             }
                             onClicked: {
-                                GlobalStates.osdMediaAction = "next"
                                 MprisController.next()
-                                autoCloseTimer.restart()
+                                GlobalStates.showMediaAction("next")
                             }
                         }
 
-                        Item { Layout.fillWidth: true }
-
-                        // Current state indicator
                         FluentIcon {
                             icon: root.player?.isPlaying ? "speaker" : "speaker-mute"
                             implicitSize: 12

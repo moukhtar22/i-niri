@@ -105,15 +105,15 @@ Item {
 
     ParallelAnimation {
         id: openAnim
-        NumberAnimation { target: root; property: "contentOpacity"; from: 0; to: 1; duration: 200; easing.type: Easing.OutCubic }
-        NumberAnimation { target: root; property: "contentScale"; from: 0.95; to: 1; duration: 200; easing.type: Easing.OutCubic }
+        NumberAnimation { target: root; property: "contentOpacity"; from: 0; to: 1; duration: Looks.transition.enabled ? Looks.transition.duration.medium : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.decelerate }
+        NumberAnimation { target: root; property: "contentScale"; from: 0.95; to: 1; duration: Looks.transition.enabled ? Looks.transition.duration.medium : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.decelerate }
     }
 
     SequentialAnimation {
         id: closeAnim
         ParallelAnimation {
-            NumberAnimation { target: root; property: "contentOpacity"; to: 0; duration: 150; easing.type: Easing.InCubic }
-            NumberAnimation { target: root; property: "contentScale"; to: 0.95; duration: 150; easing.type: Easing.InCubic }
+            NumberAnimation { target: root; property: "contentOpacity"; to: 0; duration: Looks.transition.enabled ? Looks.transition.duration.normal : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.accelerate }
+            NumberAnimation { target: root; property: "contentScale"; to: 0.95; duration: Looks.transition.enabled ? Looks.transition.duration.normal : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.accelerate }
         }
         ScriptAction { script: root.closed() }
     }
@@ -283,7 +283,7 @@ Item {
                 target: skewPresetItem
                 property: "opacity"
                 from: 0; to: 1
-                duration: 400
+                duration: Looks.transition.enabled ? Looks.transition.duration.page : 0
                 easing.type: Easing.OutCubic
             }
 
@@ -493,7 +493,7 @@ Item {
                             color: Qt.rgba(0, 0, 0, ListView.isCurrentItem ? 0.0 : 0.4)
 
                             Behavior on color {
-                                ColorAnimation { duration: 200 }
+                                ColorAnimation { duration: Looks.transition.enabled ? Looks.transition.duration.medium : 0 }
                             }
                         }
 
@@ -512,7 +512,8 @@ Item {
                             WText {
                                 id: focusedLabel
                                 anchors.centerIn: parent
-                                text: "FOCUSED"
+                                text: Translation.tr("Focused")
+                                font.capitalization: Font.AllUppercase
                                 font.pixelSize: 9
                                 font.weight: Font.DemiBold
                                 color: Looks.colors.accentFg
@@ -582,7 +583,7 @@ Item {
                             opacity: ListView.isCurrentItem ? 1 : 0
 
                             Behavior on opacity {
-                                NumberAnimation { duration: 200 }
+                                NumberAnimation { duration: Looks.transition.enabled ? Looks.transition.duration.medium : 0 }
                             }
 
                             Column {
@@ -653,7 +654,8 @@ Item {
                             WText {
                                 id: floatLabel
                                 anchors.centerIn: parent
-                                text: "FLOAT"
+                                text: Translation.tr("Float")
+                                font.capitalization: Font.AllUppercase
                                 font.pixelSize: 9
                                 font.weight: Font.DemiBold
                                 color: Qt.rgba(1, 1, 1, 0.92)
@@ -726,6 +728,7 @@ Item {
                         // Shadow behind card
                         WRectangularShadow {
                             target: cardPane
+                            visible: Looks.effectsEnabled
                         }
 
                         // Main card using WPane
@@ -733,13 +736,15 @@ Item {
                             id: cardPane
                             anchors.fill: parent
                             radius: Looks.radius.large
-                            color: root.selectedIndex === index ? Looks.colors.accent : Looks.colors.bgPanelFooter
-                            border.width: root.selectedIndex === index ? 0 : 1
-                            border.color: Looks.colors.bg2Border
+                            color: root.selectedIndex === index
+                                ? Looks.colors.accent : Looks.colors.bgPanelFooter
+                            border.width: 1
+                            border.color: root.selectedIndex === index
+                                ? Looks.colors.accent : Looks.colors.bg2Border
                             scale: cardMouse.pressed ? 0.95 : (cardMouse.containsMouse ? 1.02 : 1.0)
                             
                             Behavior on scale {
-                                NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+                                NumberAnimation { duration: Looks.transition.enabled ? Looks.transition.duration.normal : 0; easing.type: Easing.OutCubic }
                             }
                             Behavior on color {
                                 animation: ColorAnimation { duration: Looks.transition.enabled ? 70 : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.standard }
@@ -755,7 +760,7 @@ Item {
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
                                     radius: Looks.radius.medium
-                                    color: root.selectedIndex === index 
+                                    color: root.selectedIndex === index
                                         ? ColorUtils.transparentize(Looks.colors.accentFg, 0.9)
                                         : Looks.colors.bg1Base
 
@@ -777,7 +782,8 @@ Item {
                                     text: modelData?.appName ?? "Window"
                                     font.pixelSize: Looks.font.pixelSize.normal
                                     font.weight: Looks.font.weight.strong
-                                    color: root.selectedIndex === index ? Looks.colors.accentFg : Looks.colors.fg
+                                    color: root.selectedIndex === index
+                                        ? Looks.colors.accentFg : Looks.colors.fg
                                     elide: Text.ElideMiddle
                                 }
 
@@ -788,7 +794,7 @@ Item {
                                     width: wsCardText.implicitWidth + 12
                                     height: 20
                                     radius: Looks.radius.small
-                                    color: root.selectedIndex === index 
+                                    color: root.selectedIndex === index
                                         ? ColorUtils.transparentize(Looks.colors.accentFg, 0.8)
                                         : Looks.colors.bg2
 
@@ -797,7 +803,8 @@ Item {
                                         anchors.centerIn: parent
                                         text: Translation.tr("WS") + " " + (modelData?.workspaceIdx ?? "")
                                         font.pixelSize: Looks.font.pixelSize.small
-                                        color: root.selectedIndex === index ? Looks.colors.accentFg : Looks.colors.subfg
+                                        color: root.selectedIndex === index
+                                            ? Looks.colors.accentFg : Looks.colors.subfg
                                     }
                                 }
                             }
@@ -843,6 +850,7 @@ Item {
 
                 WRectangularShadow {
                     target: parent
+                    visible: Looks.effectsEnabled
                 }
 
                 RowLayout {

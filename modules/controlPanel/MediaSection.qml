@@ -16,8 +16,13 @@ import "root:"
 Item {
     id: root
     Layout.fillWidth: true
-    implicitHeight: visible ? card.implicitHeight : 0
-    visible: hasPlayer
+    implicitHeight: hasPlayer ? card.implicitHeight : 0
+    visible: implicitHeight > 0
+
+    Behavior on implicitHeight {
+        enabled: Appearance.animationsEnabled
+        NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve }
+    }
     readonly property bool compactMode: Config.options?.controlPanel?.compactMode ?? true
     
     readonly property MprisPlayer player: MprisController.activePlayer
@@ -32,103 +37,11 @@ Item {
     readonly property bool effectiveIsPlaying: isYtMusicActive ? YtMusic.isPlaying : (player?.isPlaying ?? false)
 
     property string artDownloadLocation: Directories.coverArt
-    property string artFileName: effectiveArtUrl ? Qt.md5(effectiveArtUrl) : ""
-    property string artFilePath: artFileName ? `${artDownloadLocation}/${artFileName}` : ""
-    property bool downloaded: false
-    property string displayedArtFilePath: downloaded ? Qt.resolvedUrl(artFilePath) : ""
-    property int _downloadRetryCount: 0
-    readonly property int _maxRetries: 3
+    readonly property bool downloaded: MediaArtwork.ready
+    property string displayedArtFilePath: MediaArtwork.displaySource
 
     function checkAndDownloadArt() {
-        if (!effectiveArtUrl) {
-            downloaded = false
-            _downloadRetryCount = 0
-            return
-        }
-        artExistsChecker.running = true
-    }
-
-    function retryDownload() {
-        if (_downloadRetryCount < _maxRetries && player?.trackArtUrl) {
-            _downloadRetryCount++
-            retryTimer.start()
-        }
-    }
-
-    Timer {
-        id: retryTimer
-        interval: 1000 * root._downloadRetryCount
-        repeat: false
-        onTriggered: {
-            if (root.effectiveArtUrl && !root.downloaded) {
-                coverArtDownloader.targetFile = root.effectiveArtUrl
-                coverArtDownloader.artFilePath = root.artFilePath
-                coverArtDownloader.running = true
-            }
-        }
-    }
-
-    onArtFilePathChanged: {
-        _downloadRetryCount = 0
-        checkAndDownloadArt()
-    }
-    
-    Connections {
-        target: root.player
-        function onTrackArtUrlChanged() {
-            if (!root.isYtMusicActive) {
-                root._downloadRetryCount = 0
-                root.checkAndDownloadArt()
-            }
-        }
-    }
-
-    Connections {
-        target: YtMusic
-        function onCurrentThumbnailChanged() {
-            if (root.isYtMusicActive) {
-                root._downloadRetryCount = 0
-                root.checkAndDownloadArt()
-            }
-        }
-    }
-
-    Process {
-        id: artExistsChecker
-        command: ["/usr/bin/test", "-f", root.artFilePath]
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode === 0) {
-                root.downloaded = true
-                root._downloadRetryCount = 0
-            } else {
-                root.downloaded = false
-                coverArtDownloader.targetFile = root.effectiveArtUrl ?? ""
-                coverArtDownloader.artFilePath = root.artFilePath
-                coverArtDownloader.running = true
-            }
-        }
-    }
-
-    Process {
-        id: coverArtDownloader
-        property string targetFile
-        property string artFilePath
-        command: ["/usr/bin/bash", "-c", `
-            if [ -f '${artFilePath}' ]; then exit 0; fi
-            mkdir -p '${root.artDownloadLocation}'
-            tmp='${artFilePath}.tmp'
-            /usr/bin/curl -sSL --connect-timeout 10 --max-time 30 '${targetFile}' -o "$tmp" && \
-            [ -s "$tmp" ] && /usr/bin/mv -f "$tmp" '${artFilePath}' || { rm -f "$tmp"; exit 1; }
-        `]
-        onExited: (exitCode) => {
-            if (exitCode === 0) {
-                root.downloaded = true
-                root._downloadRetryCount = 0
-            } else {
-                root.downloaded = false
-                root.retryDownload()
-            }
-        }
+        MediaArtwork.refresh()
     }
 
     // Cava audio visualizer
@@ -173,12 +86,24 @@ Item {
         radius: Appearance.angelEverywhere ? Appearance.angel.roundingNormal
              : root.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
         color: Appearance.angelEverywhere ? "transparent"
-             : root.inirEverywhere ? Appearance.inir.colLayer1 
+             : Appearance.zzzEverywhere ? Appearance.colors.colLayer1
+             : root.inirEverywhere ? Appearance.inir.colLayer1
              : root.auroraEverywhere ? ColorUtils.transparentize(root.blendedColors?.colLayer0 ?? Appearance.colors.colLayer0, 0.7)
              : (root.blendedColors?.colLayer0 ?? Appearance.colors.colLayer0)
-        border.width: Appearance.angelEverywhere ? 0 : (root.inirEverywhere ? 1 : 0)
+        border.width: Appearance.angelEverywhere ? 0
+                    : Appearance.zzzEverywhere ? 1
+                    : (root.inirEverywhere ? 1 : 0)
         border.color: Appearance.angelEverywhere ? "transparent"
+                    : Appearance.zzzEverywhere ? Appearance.zzz.hairline
                     : root.inirEverywhere ? Appearance.inir.colBorder : "transparent"
+        Behavior on border.width {
+            enabled: Appearance.animationsEnabled
+            NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+        }
+        Behavior on border.color {
+            enabled: Appearance.animationsEnabled
+            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+        }
         clip: true
 
         AngelPartialBorder { targetRadius: card.radius; coverage: 0.5 }
@@ -195,11 +120,15 @@ Item {
             source: root.displayedArtFilePath
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
-            cache: true
+            cache: false
             smooth: true
             mipmap: true
-            opacity: root.inirEverywhere ? 0.15 : (root.auroraEverywhere ? 0.25 : 0.5)
-            visible: root.displayedArtFilePath !== ""
+            opacity: root.displayedArtFilePath !== "" ? (root.inirEverywhere ? 0.15 : (root.auroraEverywhere ? 0.25 : 0.5)) : 0
+            visible: opacity > 0
+            Behavior on opacity {
+                enabled: Appearance.animationsEnabled
+                NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+            }
 
             layer.enabled: Appearance.effectsEnabled
             layer.effect: MultiEffect {
@@ -270,7 +199,7 @@ Item {
                     source: root.displayedArtFilePath
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
-                    cache: true
+                    cache: false
                     smooth: true
                     mipmap: true
                     sourceSize.width: root.coverArtSize * 2
@@ -281,7 +210,12 @@ Item {
                     anchors.fill: parent
                     color: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
                         : root.inirEverywhere ? root.jiraColLayer2 : (root.blendedColors?.colLayer1 ?? Appearance.colors.colLayer1)
-                    visible: !root.downloaded
+                    opacity: !root.downloaded ? 1 : 0
+                    visible: opacity > 0
+                    Behavior on opacity {
+                        enabled: Appearance.animationsEnabled
+                        NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                    }
                     
                     MaterialSymbol {
                         anchors.centerIn: parent
@@ -314,8 +248,12 @@ Item {
                     color: Appearance.angelEverywhere ? Appearance.angel.colTextSecondary
                         : root.inirEverywhere ? root.jiraColTextSecondary : (root.blendedColors?.colSubtext ?? Appearance.colors.colSubtext)
                     elide: Text.ElideRight
-                    visible: text !== ""
-                    opacity: 0.7
+                    opacity: text !== "" ? 0.7 : 0
+                    visible: opacity > 0
+                    Behavior on opacity {
+                        enabled: Appearance.animationsEnabled
+                        NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                    }
                 }
 
                 Item { Layout.fillHeight: true }
@@ -333,11 +271,17 @@ Item {
                             wavy: root.player?.isPlaying ?? false
                             animateWave: root.player?.isPlaying ?? false
                             highlightColor: Appearance.angelEverywhere ? Appearance.angel.colPrimary
-                                : root.inirEverywhere ? root.jiraColPrimary : (root.blendedColors?.colPrimary ?? Appearance.colors.colPrimary)
+                                : root.inirEverywhere ? root.jiraColPrimary
+                                : Appearance.zzzEverywhere ? Appearance.zzz.accentSoft
+                                : (root.blendedColors?.colPrimary ?? Appearance.colors.colPrimary)
                             trackColor: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
-                                : root.inirEverywhere ? Appearance.inir.colLayer2 : (root.blendedColors?.colSecondaryContainer ?? Appearance.colors.colSecondaryContainer)
+                                : root.inirEverywhere ? Appearance.inir.colLayer2
+                                : Appearance.zzzEverywhere ? Appearance.zzz.metricTrack
+                                : (root.blendedColors?.colSecondaryContainer ?? Appearance.colors.colSecondaryContainer)
                             handleColor: Appearance.angelEverywhere ? Appearance.angel.colPrimary
-                                : root.inirEverywhere ? root.jiraColPrimary : (root.blendedColors?.colPrimary ?? Appearance.colors.colPrimary)
+                                : root.inirEverywhere ? root.jiraColPrimary
+                                : Appearance.zzzEverywhere ? "transparent"
+                                : (root.blendedColors?.colPrimary ?? Appearance.colors.colPrimary)
                             value: root.player?.length > 0 ? root.player.position / root.player.length : 0
                             onMoved: root.player.position = value * root.player.length
                             scrollable: true
@@ -351,9 +295,13 @@ Item {
                             wavy: root.player?.isPlaying ?? false
                             animateWave: root.player?.isPlaying ?? false
                             highlightColor: Appearance.angelEverywhere ? Appearance.angel.colPrimary
-                                : root.inirEverywhere ? root.jiraColPrimary : (root.blendedColors?.colPrimary ?? Appearance.colors.colPrimary)
+                                : root.inirEverywhere ? root.jiraColPrimary
+                                : Appearance.zzzEverywhere ? Appearance.zzz.accentSoft
+                                : (root.blendedColors?.colPrimary ?? Appearance.colors.colPrimary)
                             trackColor: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
-                                : root.inirEverywhere ? Appearance.inir.colLayer2 : (root.blendedColors?.colSecondaryContainer ?? Appearance.colors.colSecondaryContainer)
+                                : root.inirEverywhere ? Appearance.inir.colLayer2
+                                : Appearance.zzzEverywhere ? Appearance.zzz.metricTrack
+                                : (root.blendedColors?.colSecondaryContainer ?? Appearance.colors.colSecondaryContainer)
                             value: root.player?.length > 0 ? root.player.position / root.player.length : 0
                         }
                     }
@@ -378,6 +326,7 @@ Item {
                     RippleButton {
                         implicitWidth: root.controlButtonSize
                         implicitHeight: root.controlButtonSize
+                        enabled: MprisController.canGoPrevious
                         buttonRadius: Appearance.angelEverywhere ? Appearance.angel.roundingSmall
                             : root.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.full
                         colBackground: "transparent"
@@ -446,6 +395,7 @@ Item {
                     RippleButton {
                         implicitWidth: root.controlButtonSize
                         implicitHeight: root.controlButtonSize
+                        enabled: MprisController.canGoNext
                         buttonRadius: Appearance.angelEverywhere ? Appearance.angel.roundingSmall
                             : root.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.full
                         colBackground: "transparent"

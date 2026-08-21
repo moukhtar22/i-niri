@@ -318,7 +318,7 @@ FocusScope {
                         visible: hasMemory
                         implicitWidth: memLabel.implicitWidth + 8
                         implicitHeight: 20
-                        radius: 4
+                        radius: Appearance.rounding.unsharpen
                         color: Appearance.colors.colSecondaryContainer
 
                         StyledText {
@@ -383,7 +383,7 @@ FocusScope {
 
                     Behavior on Layout.preferredHeight {
                         enabled: Appearance.animationsEnabled
-                        NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve }
                     }
 
                     ColumnLayout {

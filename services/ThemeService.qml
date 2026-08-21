@@ -16,7 +16,7 @@ Singleton {
     property bool ready: false
     readonly property string currentTheme: Config.options?.appearance?.theme ?? "auto"
     readonly property bool isAutoTheme: currentTheme === "auto"
-    readonly property bool isStandaloneSettingsWindow: (Quickshell.env("QS_NO_RELOAD_POPUP") ?? "") === "1"
+    readonly property bool isStandaloneSettingsWindow: (Quickshell.env("INIR_STANDALONE_WINDOW") ?? "") === "1"
     readonly property bool defaultApplyExternal: !isStandaloneSettingsWindow
     readonly property bool vesktopEnabled: (Config.options?.appearance?.wallpaperTheming?.enableVesktop ?? true) !== false
     readonly property var wallpaperThemingCfg: Config.options?.appearance?.wallpaperTheming ?? null
@@ -42,6 +42,7 @@ Singleton {
         termHarmony: terminalAdjCfg?.harmony ?? 0.4,
         termBackgroundBrightness: terminalAdjCfg?.backgroundBrightness ?? 0.5,
         softenColors: Config.options?.appearance?.softenColors ?? true,
+        autoDarkLightMode: wallpaperThemingCfg?.autoDarkLightMode ?? false,
     })
     property string _lastLiveRegenSignature: ""
     property string _lastPanelFamily: ""
@@ -95,6 +96,41 @@ Singleton {
         root._log("[ThemeService] setTheme completed");
     }
 
+    // ── Global style ────────────────────────────────────────────────────
+    // Single owner of "what does selecting style X write to config". This
+    // lived in three places (both settings families and the action registry)
+    // that had already drifted: waffle ignored the per-style corner defaults
+    // entirely, and the action registry had no cookie branch at all, so cookie
+    // silently inherited material's corner style.
+
+    function cornerStyleForGlobalStyle(styleId: string): int {
+        const styles = Config.options?.appearance?.globalStyleCornerStyles
+        switch (styleId) {
+        case "cards": return styles?.cards ?? 3
+        case "aurora": return styles?.aurora ?? 1
+        case "inir": return styles?.inir ?? 1
+        case "angel": return styles?.angel ?? 1
+        case "zzz": return styles?.zzz ?? 0
+        case "cookie": return styles?.cookie ?? 1
+        default: return styles?.material ?? 1
+        }
+    }
+
+    function setGlobalStyle(styleId: string): void {
+        root._log("[ThemeService] setGlobalStyle:", styleId)
+        const cards = styleId === "cards"
+        let cornerStyle = root.cornerStyleForGlobalStyle(styleId)
+        // Hug (0) leaves no float gap for angel's escalonado shadows to land in.
+        if (styleId === "angel" && cornerStyle === 0)
+            cornerStyle = 1
+        Config.setNestedValues({
+            "appearance.globalStyle": styleId,
+            "dock.cardStyle": cards,
+            "sidebar.cardStyle": cards,
+            "bar.cornerStyle": cornerStyle
+        })
+    }
+
     function _triggerVesktopThemeGeneration(): void {
         root._log("[ThemeService] Triggering Vesktop theme generation wrapper")
         Qt.callLater(() => {
@@ -111,14 +147,11 @@ Singleton {
             root._log("[ThemeService] Delegating to MaterialThemeLoader");
             MaterialThemeLoader.reapplyTheme();
 
-            // Apply terminal colors if they exist (from previous generation)
+            // Apply terminal colors if they exist (from previous generation).
+            // MaterialThemeLoader owns the run: spawning applycolor.sh here as
+            // well doubled every user action into two parallel module waves.
             if (applyExternal) {
-                Qt.callLater(() => {
-                    Quickshell.execDetached([
-                        "/usr/bin/bash",
-                        Directories.scriptsPath + "/colors/applycolor.sh"
-                    ]);
-                });
+                MaterialThemeLoader.requestExternalApply();
             }
 
             if (applyExternal && vesktopEnabled) {
@@ -163,6 +196,12 @@ Singleton {
             return
         }
 
+        // Sync the live-regen signature now so the debounce path that
+        // tails an explicit regen call (config write + manual call from a
+        // settings widget) doesn't fire a redundant second switchwall.sh
+        // once the cooldown lifts.
+        root._lastLiveRegenSignature = root.liveRegenSignature
+        root._lastPanelFamily = root.panelFamily
         root._regenPending = false
         regenCooldownTimer.stop()
         root._lastRegenTimestamp = now
@@ -219,11 +258,15 @@ Singleton {
             liveRegenerateDebounce.restart()
         }
         function onReadyChanged() {
-            if (Config.ready) {
-                root._lastLiveRegenSignature = ""
-                root._lastPanelFamily = root.panelFamily
-                liveRegenerateDebounce.restart()
-            }
+            if (!Config.ready) return
+            // Prime the signature to current value so the first config write
+            // doesn't get treated as a delta-from-empty.  The forced regen on
+            // shell startup is still done explicitly by shell.qml via
+            // ThemeService.applyCurrentTheme() — no need to do it here too.
+            // Standalone settings windows must NEVER run a phantom regen on
+            // open: they're observers, not orchestrators.
+            root._lastLiveRegenSignature = root.liveRegenSignature
+            root._lastPanelFamily = root.panelFamily
         }
     }
 
@@ -251,13 +294,10 @@ Singleton {
         interval: 100  // > Config FileView 50ms flush timer
         repeat: false
         running: false
-        onTriggered: {
-            const paletteType = Config.options?.appearance?.palette?.type ?? "auto"
-            const command = [Directories.wallpaperSwitchScriptPath, "--noswitch"]
-            if (paletteType !== "auto")
-                command.push("--type", paletteType)
-            Quickshell.execDetached(command)
-        }
+        // Route through regenerateAutoTheme so the signature stays in sync —
+        // this prevents the configChanged debounce 260ms later from firing a
+        // duplicate switchwall.sh.
+        onTriggered: root.regenerateAutoTheme()
     }
 
     // Theme Scheduling

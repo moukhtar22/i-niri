@@ -47,6 +47,8 @@ if [[ -n "${ONLY_MISSING_DEPS:-}" ]]; then
     [syntax-highlighting]="syntax-highlighting"
     [kirigami]="kirigami"
     [kdialog]="kdialog"
+    [millennium]="millennium-bin"
+    [missioncenter]="mission-center"
   )
 
   _miss_installflags="--needed"
@@ -147,15 +149,23 @@ install_pkgbuild_deps() {
     return 0
   fi
   
-  log_info "Installing: ${depends[*]}"
+  local missing_deps=()
+  mapfile -t missing_deps < <(pacman -T "${depends[@]}" 2>/dev/null || true)
+
+  if [[ ${#missing_deps[@]} -eq 0 ]]; then
+    log_success "Already satisfied: ${depends[*]}"
+    return 0
+  fi
+
+  log_info "Installing missing: ${missing_deps[*]}"
   
   local installflags="--needed"
   $ask || installflags="$installflags --noconfirm"
   
   # Install via pacman first (for official repos)
-  pkg_sudo pacman -S $installflags "${depends[@]}" 2>/dev/null || {
+  pkg_sudo pacman -S $installflags "${missing_deps[@]}" 2>/dev/null || {
     # Some packages may be AUR-only, try with AUR helper
-    $AUR_HELPER -S $installflags "${depends[@]}"
+    $AUR_HELPER -S $installflags "${missing_deps[@]}"
   }
 }
 
@@ -201,30 +211,61 @@ for qs_conflict in quickshell-git quickshell-bin; do
 done
 
 #####################################################################################
-# Pre-install: resolve Noctalia shell package conflicts (CachyOS)
-# CachyOS ships noctalia-qs / noctalia-shell / cachyos-niri-noctalia which own
-# overlapping Quickshell configs and compositor integration files.
+# Pre-install: resolve Quickshell-based shell conflicts
+# Other shells ship their own Quickshell fork or own overlapping configs.
+# Order matters: meta-packages first, then shells, then runtimes, so pacman
+# doesn't complain about dangling dependents.
 #####################################################################################
-for noctalia_pkg in noctalia-qs noctalia-shell cachyos-niri-noctalia; do
-  if pacman -Qi "$noctalia_pkg" &>/dev/null 2>&1; then
-    log_warning "$noctalia_pkg is installed and conflicts with iNiR"
+_qs_shell_conflicts=(
+  # Noctalia (CachyOS default Niri shell) — meta first, then shell, then runtime
+  cachyos-niri-noctalia
+  noctalia-shell
+  noctalia-qs
+  noctalia-qs-git
+  # DankMaterialShell
+  dms-shell
+  dms-shell-git
+  # Caelestia
+  caelestia-shell
+  caelestia-shell-git
+  # BMS
+  bms-shell-bin
+)
+
+_qs_shell_found=false
+for _qs_pkg in "${_qs_shell_conflicts[@]}"; do
+  if pacman -Qi "$_qs_pkg" &>/dev/null 2>&1; then
+    _qs_shell_found=true
+    log_warning "$_qs_pkg is installed and conflicts with iNiR"
+
+    # Stop related services before removal
+    systemctl --user stop "${_qs_pkg}.service" 2>/dev/null || true
+    systemctl --user disable "${_qs_pkg}.service" 2>/dev/null || true
+
     if $ask; then
-      if tui_confirm "Remove $noctalia_pkg? (required for iNiR)"; then
-        log_info "Removing $noctalia_pkg..."
-        v pkg_sudo pacman -Rdd --noconfirm "$noctalia_pkg" 2>/dev/null \
-          || v pkg_sudo pacman -R --noconfirm "$noctalia_pkg" \
-          || log_warning "Could not remove $noctalia_pkg — install may fail"
+      if tui_confirm "Remove $_qs_pkg? (required for iNiR)"; then
+        log_info "Removing $_qs_pkg..."
+        v pkg_sudo pacman -Rdd --noconfirm "$_qs_pkg" 2>/dev/null \
+          || v pkg_sudo pacman -R --noconfirm "$_qs_pkg" \
+          || log_warning "Could not remove $_qs_pkg — install may fail"
       else
-        log_warning "Keeping $noctalia_pkg — iNiR may not work correctly"
+        log_warning "Keeping $_qs_pkg — iNiR may not work correctly"
       fi
     else
-      log_info "Non-interactive: removing $noctalia_pkg"
-      pkg_sudo pacman -Rdd --noconfirm "$noctalia_pkg" 2>/dev/null \
-        || pkg_sudo pacman -R --noconfirm "$noctalia_pkg" 2>/dev/null \
-        || log_warning "Could not remove $noctalia_pkg — install may fail"
+      log_info "Non-interactive: removing $_qs_pkg"
+      pkg_sudo pacman -Rdd --noconfirm "$_qs_pkg" 2>/dev/null \
+        || pkg_sudo pacman -R --noconfirm "$_qs_pkg" 2>/dev/null \
+        || log_warning "Could not remove $_qs_pkg — install may fail"
     fi
   fi
 done
+
+# After removing a shell that provides quickshell (e.g. noctalia-qs), the
+# quickshell slot is empty.  Sync the package db so pacman can install the
+# upstream quickshell cleanly.
+if $_qs_shell_found; then
+  pkg_sudo pacman -Sy 2>/dev/null || true
+fi
 tui_info "Installing official repo packages..."
 
 # These packages are now in official Arch repos (extra) - NO AUR, NO COMPILATION!
@@ -242,6 +283,7 @@ OFFICIAL_PACKAGES=(
   cliphist
   gum
   starship
+  eza
   xwayland-satellite
   
   # Emoji font (CRITICAL — overview search, notifications, etc.)
@@ -263,6 +305,9 @@ OFFICIAL_PACKAGES=(
   qt6ct
   kvantum
   plasma-integration   # Provides QT_QPA_PLATFORMTHEME=kde plugin (reads kdeglobals colors)
+
+  # Browser media integration
+  plasma-browser-integration   # Provides browser MPRIS sessions and artwork
 
   # KDE Frameworks needed by darkly-bin Qt style (lightweight, NOT Plasma)
   frameworkintegration
@@ -289,6 +334,9 @@ v pkg_sudo pacman -S $installflags "${OFFICIAL_PACKAGES[@]}"
 #####################################################################################
 tui_info "Installing AUR packages..."
 
+REQUIRED_AUR_PACKAGES=(
+)
+
 AUR_PACKAGES=(
   # Qt6 extras (not in official repos)
   qt6-avif-image-plugin
@@ -308,6 +356,7 @@ CRITICAL_FONTS=(
   ttf-jetbrains-mono-nerd
   ttf-roboto-flex
   ttf-oxanium
+  ttf-gabarito-git
 )
 
 # Optional fonts (have system fallbacks)
@@ -322,6 +371,7 @@ OPTIONAL_FONTS=(
 # These are used as fallback when AUR packages are unavailable
 declare -A FONT_FALLBACK_URLS=(
   ["otf-space-grotesk"]="https://github.com/floriankarsten/space-grotesk/raw/master/fonts/ttf/SpaceGrotesk%5Bwght%5D.ttf"
+  ["ttf-gabarito-git"]="https://github.com/google/fonts/raw/main/ofl/gabarito/Gabarito%5Bwght%5D.ttf"
   ["ttf-readex-pro"]="https://raw.githubusercontent.com/ThomasJockin/readexpro/master/fonts/variable/Readexpro%5BHEXP%2Cwght%5D.ttf"
   ["ttf-rubik-vf"]="https://github.com/googlefonts/rubik/raw/main/fonts/variable/Rubik%5Bwght%5D.ttf"
   ["ttf-oxanium"]="https://github.com/google/fonts/raw/main/ofl/oxanium/Oxanium%5Bwght%5D.ttf"
@@ -348,6 +398,9 @@ install_font_fallback() {
   return 1
 }
 
+# Millennium (Steam theming) is opt-in — not installed automatically.
+# Users who want Steam Material-Theme can install millennium-bin manually.
+
 # Add other AUR packages based on flags
 if $INSTALL_FONTS; then
   AUR_PACKAGES+=(
@@ -369,6 +422,14 @@ fi
 # Reset installflags for AUR helper
 installflags="--needed"
 $ask || installflags="$installflags --noconfirm"
+
+if [[ ${#REQUIRED_AUR_PACKAGES[@]} -gt 0 ]]; then
+  log_info "Installing required AUR packages: ${REQUIRED_AUR_PACKAGES[*]}"
+  if ! v $AUR_HELPER -S $installflags "${REQUIRED_AUR_PACKAGES[@]}"; then
+    log_error "Failed to install required AUR packages: ${REQUIRED_AUR_PACKAGES[*]}"
+    return 1
+  fi
+fi
 
 # Install main AUR packages (these are the only ones that need AUR)
 if [[ ${#AUR_PACKAGES[@]} -gt 0 ]]; then
@@ -423,7 +484,7 @@ tui_info "Registering dependencies with pacman..."
 _meta_dir="./sdata/dist-arch/inir-deps"
 if [[ -f "$_meta_dir/PKGBUILD" ]]; then
   # Update pkgver from VERSION file
-  _inir_ver="$(cat ./VERSION 2>/dev/null || echo '2.21.0')"
+  _inir_ver="$(cat ./VERSION 2>/dev/null || echo '2.29.1')"
   sed -i "s/^pkgver=.*/pkgver=${_inir_ver}/" "$_meta_dir/PKGBUILD"
 
   (
@@ -462,7 +523,7 @@ unset _meta_dir _inir_ver
 # See: https://github.com/snowarch/iNiR/issues/93
 #####################################################################################
 if command -v qs >/dev/null 2>&1; then
-  qs_abi_output="$(qs --version 2>&1 || true)"
+  qs_abi_output="$(timeout 5 env QT_QPA_PLATFORM=offscreen qs --version 2>&1 || true)"
   if echo "$qs_abi_output" | grep -qiE "built against Qt|Qt.*mismatch|incompatible Qt"; then
     log_warning "Qt/Quickshell ABI mismatch detected!"
     log_warning "Quickshell was built against a different Qt version than what is installed."

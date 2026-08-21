@@ -71,6 +71,10 @@ if [[ -n "${ONLY_MISSING_DEPS:-}" ]]; then
     [wl-copy]="wl-clipboard"
     [wl-paste]="wl-clipboard"
     [fuzzel]="fuzzel"
+    [gum]="gum"
+    [hyprpicker]="hyprpicker"
+    [xwayland-satellite]="xwayland-satellite"
+    [missioncenter]="io.missioncenter.MissionCenter"
   )
 
   _deb_miss_cmds=()
@@ -407,11 +411,13 @@ DEBIAN_AUDIO_PKGS=(
   pipewire-alsa
   wireplumber
   playerctl
+  plasma-browser-integration
   libdbusmenu-gtk3-4
   pavucontrol
   easyeffects
   mpv
   yt-dlp
+  python3-ytmusicapi
   socat
 )
 

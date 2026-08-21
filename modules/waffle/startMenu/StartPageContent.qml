@@ -52,20 +52,29 @@ WPanelPageColumn {
                 }
             }
 
-            // Pinned grid - 6 columns like Windows 11
-            Grid {
+            // Pinned grid — Flow auto-reflows when StartMenu resizes (no clipping),
+            // wrapper Item centers the row when columns don't fill the available width.
+            Item {
                 Layout.fillWidth: true
-                columns: 6
-                rowSpacing: 4
-                columnSpacing: 4
-                
-                Repeater {
-                    model: root.pinnedApps.slice(0, 18)
-                    delegate: AppButton {
-                        required property string modelData
-                        required property int index
-                        appId: modelData
-                        animIndex: index
+                implicitHeight: pinnedFlow.implicitHeight
+
+                Flow {
+                    id: pinnedFlow
+                    readonly property int cellWidth: 88 + spacing
+                    // Cap to 6 like Windows 11; less if there's not enough room.
+                    readonly property int maxCols: Math.max(1, Math.min(6, Math.floor((parent.width + spacing) / cellWidth)))
+                    width: Math.min(parent.width, maxCols * cellWidth - spacing)
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 4
+
+                    Repeater {
+                        model: root.pinnedApps.slice(0, 18)
+                        delegate: AppButton {
+                            required property string modelData
+                            required property int index
+                            appId: modelData
+                            animIndex: index
+                        }
                     }
                 }
             }
@@ -77,7 +86,9 @@ WPanelPageColumn {
                 Layout.fillWidth: true
                 Layout.minimumHeight: recHeader.implicitHeight + 8 + Math.min(recGrid.implicitHeight, 2 * 44 + 1 * 4)
                 Layout.maximumHeight: recHeader.implicitHeight + 8 + recGrid.implicitHeight
-                visible: (root.recentApps?.length ?? 0) > 0
+                opacity: (root.recentApps?.length ?? 0) > 0 ? 1 : 0
+                visible: opacity > 0
+                Behavior on opacity { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Easing.OutCubic } }
                 spacing: 8
 
                 WText {
@@ -144,7 +155,7 @@ WPanelPageColumn {
         readonly property var de: DesktopEntries.heuristicLookup(appId)
         implicitWidth: 88
         implicitHeight: 76
-        onClicked: { if (de) de.execute(); GlobalStates.searchOpen = false }
+        onClicked: { if (de) AppSearch.launchEntry(de); GlobalStates.searchOpen = false }
         
         // Staggered entry animation
         opacity: 0
@@ -161,8 +172,8 @@ WPanelPageColumn {
             id: entryAnim
             PauseAnimation { duration: Looks.transition.staggerDelay(appBtn.animIndex, 25) }
             ParallelAnimation {
-                NumberAnimation { target: appBtn; property: "opacity"; to: 1; duration: 180; easing.type: Easing.OutQuad }
-                NumberAnimation { target: appBtn; property: "scale"; to: 1; duration: 200; easing.type: Easing.OutBack; easing.overshoot: 0.2 }
+                NumberAnimation { target: appBtn; property: "opacity"; to: 1; duration: Looks.transition.enabled ? Looks.transition.duration.normal : 0; easing.type: Easing.OutQuad }
+                NumberAnimation { target: appBtn; property: "scale"; to: 1; duration: Looks.transition.enabled ? Looks.transition.duration.medium : 0; easing.type: Easing.OutBack; easing.overshoot: 0.2 }
             }
         }
         
@@ -196,7 +207,7 @@ WPanelPageColumn {
         readonly property var de: DesktopEntries.heuristicLookup(appId)
         implicitWidth: 260
         implicitHeight: 44
-        onClicked: { if (de) de.execute(); GlobalStates.searchOpen = false }
+        onClicked: { if (de) AppSearch.launchEntry(de); GlobalStates.searchOpen = false }
         
         // Staggered entry animation (starts after pinned apps)
         opacity: 0
@@ -213,8 +224,8 @@ WPanelPageColumn {
             id: recEntryAnim
             PauseAnimation { duration: 300 + Looks.transition.staggerDelay(recBtn.animIndex, 40) }
             ParallelAnimation {
-                NumberAnimation { target: recBtn; property: "opacity"; to: 1; duration: 180; easing.type: Easing.OutQuad }
-                NumberAnimation { target: recTranslate; property: "x"; to: 0; duration: 220; easing.type: Easing.OutCubic }
+                NumberAnimation { target: recBtn; property: "opacity"; to: 1; duration: Looks.transition.enabled ? Looks.transition.duration.normal : 0; easing.type: Easing.OutQuad }
+                NumberAnimation { target: recTranslate; property: "x"; to: 0; duration: Looks.transition.enabled ? Looks.transition.duration.medium : 0; easing.type: Easing.BezierSpline; easing.bezierCurve: Looks.transition.easing.bezierCurve.decelerate }
             }
         }
         
@@ -312,7 +323,10 @@ WPanelPageColumn {
                             }
                             WText {
                                 Layout.alignment: Qt.AlignVCenter
-                                text: SystemInfo.hostname ?? "Computer"
+                                // `hostname` is an empty string until /etc/hostname
+                                // resolves, and `??` does not catch "" — this label
+                                // would otherwise render blank on the first frame.
+                                text: SystemInfo.hostname || "Computer"
                                 font.pixelSize: Looks.font.pixelSize.large
                                 font.weight: Looks.font.weight.strong
                             }

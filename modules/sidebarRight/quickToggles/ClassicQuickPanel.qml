@@ -1,6 +1,7 @@
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import QtQuick
 import QtQuick.Layouts
@@ -11,6 +12,8 @@ import qs.modules.sidebarRight.quickToggles.classicStyle
 AbstractQuickPanel {
     id: root
     property bool compactMode: false
+    property int compactItemSlotWidth: 48
+    property int compactSpacing: 8
     
     implicitHeight: grid.implicitHeight
     Layout.fillWidth: true
@@ -21,10 +24,10 @@ AbstractQuickPanel {
         anchors.horizontalCenter: parent.horizontalCenter
         
         // Approximate width of a toggle (40) + spacing
-        property int itemSlotWidth: root.compactMode ? 48 : 52
+        property int itemSlotWidth: root.compactMode ? root.compactItemSlotWidth : 52
         columns: Math.max(1, Math.floor(root.width / itemSlotWidth))
         
-        spacing: root.compactMode ? 8 : 12
+        spacing: root.compactMode ? root.compactSpacing : 12
         
         NetworkToggle {
             altAction: () => root.openWifiDialog()
@@ -43,7 +46,7 @@ AbstractQuickPanel {
         }
         
         EasyEffectsToggle {
-            altAction: () => Quickshell.execDetached(["easyeffects"])
+            altAction: () => ShellExec.execDetachedArgs(["easyeffects"], "Open EasyEffects")
         }
         
         IdleInhibitor {}

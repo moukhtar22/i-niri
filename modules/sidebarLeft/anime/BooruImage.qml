@@ -93,8 +93,11 @@ Button {
     }
 
     StyledToolTip {
+        // Scrolling moves the pointer across many thumbnails. Require real
+        // hover intent for Wallhaven instead of flashing every available tag.
+        delay: root.aspectCrop ? 750 : 16
         extraVisibleCondition: root.enableTooltip && root.imageData && root._tagText.length > 0
-        alternativeVisibleCondition: root.buttonHovered || root.hovered
+        alternativeVisibleCondition: root.enableTooltip && (root.buttonHovered || root.hovered)
         text: `${StringUtils.wordWrap(root._tagText, root.maxTagStringLineLength)}`
     }
 
@@ -177,14 +180,14 @@ Button {
             implicitWidth: buttonSize
 
             buttonRadius: buttonSize / 2
-            colBackground: ColorUtils.transparentize(Appearance.m3colors.m3surface, 0.3)
-            colBackgroundHover: ColorUtils.transparentize(ColorUtils.mix(Appearance.m3colors.m3surface, Appearance.m3colors.m3onSurface, 0.8), 0.2)
-            colRipple: ColorUtils.transparentize(ColorUtils.mix(Appearance.m3colors.m3surface, Appearance.m3colors.m3onSurface, 0.6), 0.1)
+            colBackground: ColorUtils.transparentize(Appearance.colors.colLayer1, 0.3)
+            colBackgroundHover: ColorUtils.transparentize(ColorUtils.mix(Appearance.colors.colLayer1, Appearance.colors.colOnSurface, 0.8), 0.2)
+            colRipple: ColorUtils.transparentize(ColorUtils.mix(Appearance.colors.colLayer1, Appearance.colors.colOnSurface, 0.6), 0.1)
 
             contentItem: MaterialSymbol {
                 horizontalAlignment: Text.AlignHCenter
                 iconSize: Appearance.font.pixelSize.large
-                color: Appearance.m3colors.m3onSurface
+                color: Appearance.colors.colOnSurface
                 text: "more_vert"
             }
 
@@ -251,7 +254,7 @@ Button {
                             `mkdir -p '${targetPath}' && curl '${root.imageData.file_url}' -o '${localPath}' && notify-send '${Translation.tr("Download complete")}' '${localPath}' -a 'Shell'`
                         ])
                         if (Config.options?.sidebar?.openFolderOnDownload ?? false)
-                            Quickshell.execDetached(["xdg-open", targetPath])
+                            ShellExec.execDetachedArgs(["xdg-open", targetPath], "Open image")
                     }
                 },
                 {

@@ -1,3 +1,4 @@
+import qs
 import QtQuick
 import qs.services
 import qs.modules.common
@@ -73,7 +74,7 @@ QuickToggleModel {
         id: registrationProc
         command: [root.warpCliPath, "registration", "new"]
         onExited: (exitCode, exitStatus) => {
-            console.log("Warp registration exited with code and status:", exitCode, exitStatus)
+            if (Quickshell.env("QS_DEBUG") === "1") console.log("Warp registration exited with code and status:", exitCode, exitStatus)
             if (exitCode === 0) {
                 connectProc.running = true
             } else {
@@ -146,7 +147,8 @@ QuickToggleModel {
         id: warpPollTimer
         interval: 5000
         repeat: true
-        running: root.available
+        triggeredOnStart: true
+        running: root.available && (GlobalStates.sidebarRightOpen || GlobalStates.waffleActionCenterOpen)
         onTriggered: root.refreshStatus()
     }
 

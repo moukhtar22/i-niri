@@ -1,3 +1,4 @@
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
@@ -70,7 +71,7 @@ AndroidQuickToggleButton {
         id: registrationProc
         command: [root.warpCliPath, "registration", "new"]
         onExited: (exitCode, exitStatus) => {
-            console.log("Warp registration exited with code and status:", exitCode, exitStatus)
+            if (Quickshell.env("QS_DEBUG") === "1") console.log("Warp registration exited with code and status:", exitCode, exitStatus)
             if (exitCode === 0) {
                 connectProc.running = true
             } else {
@@ -138,7 +139,8 @@ AndroidQuickToggleButton {
         id: warpPollTimer
         interval: 5000
         repeat: true
-        running: true
+        triggeredOnStart: true
+        running: GlobalStates.sidebarRightOpen
         onTriggered: root.refreshStatus()
     }
 

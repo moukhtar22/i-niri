@@ -33,6 +33,7 @@ Item {
     // Word count helper
     readonly property int wordCount: textArea.text.trim().length > 0
         ? textArea.text.trim().split(/\s+/).length : 0
+    readonly property int tabCount: Notepad.tabs.length
 
     // When this widget gets focus (from BottomWidgetGroup.focusActiveItem),
     // move focus to the internal text area on the next event loop tick.
@@ -42,10 +43,31 @@ Item {
         }
     }
 
+    // Guards programmatic text loads (tab switch / external reload) so they
+    // don't trigger the save timer and clobber the freshly-loaded tab.
+    property bool _loadingTab: false
+
+    function _loadActiveTab() {
+        root._loadingTab = true
+        textArea.text = Notepad.text
+        root._loadingTab = false
+    }
+
+    // The TextArea.text binding to Notepad.text breaks the moment the user
+    // types, so tab switches (currentTab change) and external reloads must be
+    // reflected manually — otherwise the old tab's text leaks into the new tab.
+    Connections {
+        target: Notepad
+        function onCurrentTabChanged() { root._loadActiveTab() }
+        function onTabsChanged() {
+            if (textArea.text !== Notepad.text) root._loadActiveTab()
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: root.margin
-        spacing: 8
+        spacing: 6
 
         // Header with title and stats
         RowLayout {
@@ -63,7 +85,12 @@ Item {
 
             // Stats badge
             Rectangle {
-                visible: textArea.text.length > 0
+                scale: textArea.text.length > 0 ? 1 : 0
+                visible: scale > 0
+                Behavior on scale {
+                    enabled: Appearance.animationsEnabled
+                    NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                }
                 implicitWidth: statsRow.implicitWidth + 12
                 implicitHeight: 22
                 radius: 11
@@ -82,9 +109,114 @@ Item {
                         font.family: Appearance.font.family.numbers
                         color: Appearance.angelEverywhere ? Appearance.angel.colText
                             : Appearance.inirEverywhere ? Appearance.inir.colText
-                            : Appearance.m3colors.m3onSecondaryContainer
+                            : Appearance.colors.colOnSecondaryContainer
                     }
                 }
+            }
+        }
+
+        // Tab bar
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 4
+            visible: root.tabCount > 1 || root.tabCount === 1 // Always show for discoverability
+
+            Flickable {
+                Layout.fillWidth: true
+                implicitHeight: 28
+                contentWidth: tabRow.implicitWidth
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+
+                Row {
+                    id: tabRow
+                    spacing: 4
+
+                    Repeater {
+                        model: Notepad.tabs
+                        delegate: Rectangle {
+                            id: tabPill
+                            required property var modelData
+                            required property int index
+                            readonly property bool active: index === Notepad.currentTab
+                            width: tabLabel.implicitWidth + (tabCount > 1 ? closeBtn.width + 16 : 16)
+                            height: 26
+                            radius: 13
+                            color: active
+                                ? (Appearance.angelEverywhere ? Appearance.angel.colPrimary
+                                    : Appearance.inirEverywhere ? Appearance.inir.colPrimary
+                                    : Appearance.colors.colPrimary)
+                                : (tabMA.containsMouse
+                                    ? (Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
+                                        : Appearance.inirEverywhere ? Appearance.inir.colLayer1Hover
+                                        : Appearance.colors.colLayer1Hover)
+                                    : "transparent")
+                            Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 4
+
+                                StyledText {
+                                    id: tabLabel
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: modelData.title || `Note ${index + 1}`
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    font.weight: tabPill.active ? Font.Medium : Font.Normal
+                                    color: tabPill.active
+                                        ? (Appearance.angelEverywhere ? Appearance.angel.colOnPrimary
+                                            : Appearance.inirEverywhere ? Appearance.inir.colOnPrimary
+                                            : Appearance.colors.colOnPrimary)
+                                        : root.colTextSecondary
+                                    elide: Text.ElideRight
+                                    maximumLineCount: 1
+                                    width: Math.min(implicitWidth, 80)
+                                }
+
+                                // Close button (only when multiple tabs)
+                                MaterialSymbol {
+                                    id: closeBtn
+                                    opacity: tabCount > 1 ? 1 : 0
+                                    visible: opacity > 0
+                                    Behavior on opacity {
+                                        enabled: Appearance.animationsEnabled
+                                        NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                                    }
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "close"
+                                    iconSize: 12
+                                    color: tabPill.active
+                                        ? (Appearance.angelEverywhere ? Appearance.angel.colOnPrimary
+                                            : Appearance.inirEverywhere ? Appearance.inir.colOnPrimary
+                                            : Appearance.colors.colOnPrimary)
+                                        : root.colTextSecondary
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        anchors.margins: -4
+                                        onClicked: Notepad.removeTab(tabPill.index)
+                                    }
+                                }
+                            }
+
+                            MouseArea {
+                                id: tabMA
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                z: -1
+                                onClicked: Notepad.switchTab(tabPill.index)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Add tab button
+            NotepadToolButton {
+                icon: "add"
+                tooltipText: Translation.tr("New tab")
+                onClicked: Notepad.addTab()
             }
         }
 
@@ -119,7 +251,7 @@ Item {
             Item { Layout.fillWidth: true }
 
             NotepadToolButton {
-                icon: "delete_outline"
+                icon: "delete"
                 tooltipText: Translation.tr("Clear all")
                 enabled: textArea.text.length > 0
                 destructive: true
@@ -155,14 +287,26 @@ Item {
                     id: textArea
                     width: scrollView.availableWidth
                     wrapMode: TextArea.Wrap
+                    renderType: Text.NativeRendering
                     font.pixelSize: Appearance.inirEverywhere ? Appearance.font.pixelSize.smaller : Appearance.font.pixelSize.small
                     color: Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer0
+                    selectionColor: Appearance.angelEverywhere ? Appearance.angel.colPrimary
+                        : Appearance.inirEverywhere ? Appearance.inir.colPrimary
+                        : Appearance.colors.colSecondaryContainer
+                    selectedTextColor: Appearance.angelEverywhere ? Appearance.angel.colOnPrimary
+                        : Appearance.inirEverywhere ? Appearance.inir.colOnPrimary
+                        : Appearance.colors.colOnSecondaryContainer
                     placeholderText: Translation.tr("Write your notes here...")
-                    placeholderTextColor: Appearance.inirEverywhere ? Appearance.inir.colTextSecondary : Appearance.m3colors.m3outline
-                    text: Notepad.text
+                    placeholderTextColor: Appearance.inirEverywhere ? Appearance.inir.colTextSecondary : Appearance.colors.colOutline
+                    Component.onCompleted: text = Notepad.text
                     selectByMouse: true
+                    persistentSelection: true
                     activeFocusOnTab: true
                     background: null
+
+                    TextInputContextMenu {
+                        target: textArea
+                    }
 
                     Keys.onPressed: (event) => {
                         if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_S) {
@@ -172,6 +316,7 @@ Item {
                     }
 
                     onTextChanged: {
+                        if (root._loadingTab) return
                         saveTimer.restart()
                     }
 
@@ -230,6 +375,7 @@ Item {
         }
 
         Behavior on opacity {
+            enabled: Appearance.animationsEnabled
             NumberAnimation { duration: Appearance.animation.elementMoveFast.duration }
         }
 
@@ -296,7 +442,7 @@ Item {
                          : Appearance.colors.colLayer1Hover)
                 return "transparent"
             }
-            Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+            Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
 
             MaterialSymbol {
                 anchors.centerIn: parent

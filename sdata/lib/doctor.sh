@@ -14,6 +14,7 @@ XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
 XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+XDG_BIN_HOME="${XDG_BIN_HOME:-$HOME/.local/bin}"
 
 doctor_pass() {
     tui_success "$1"
@@ -30,6 +31,24 @@ doctor_fix() {
     ((doctor_fixed++)) || true
 }
 
+doctor_detect_compositor_service() {
+    if ! command -v systemctl >/dev/null 2>&1; then
+        return 1
+    fi
+
+    if systemctl --user cat niri.service &>/dev/null; then
+        printf 'niri.service'
+        return 0
+    fi
+
+    if systemctl --user cat 'wayland-wm@Hyprland.service' &>/dev/null; then
+        printf 'wayland-wm@Hyprland.service'
+        return 0
+    fi
+
+    return 1
+}
+
 ###############################################################################
 # Checks
 ###############################################################################
@@ -40,6 +59,8 @@ check_dependencies() {
     
     # Commands to check (command:friendly_name)
     # These are distro-agnostic - we check for the command, not the package
+    # ALL dependencies are required — optional features still need their tools
+    # installed to avoid user confusion when things silently don't work.
     local cmds=(
         "qs:Quickshell"
         "niri:Niri"
@@ -64,10 +85,7 @@ check_dependencies() {
         "notify-send:libnotify"
         "flock:util-linux"
         "go:go"
-    )
-    
-    # Optional but recommended
-    local optional_cmds=(
+        "wlsunset:wlsunset"
         "easyeffects:EasyEffects"
         "uv:uv"
         "cava:cava"
@@ -91,11 +109,10 @@ check_dependencies() {
         "mpv:mpv"
         "swaylock:swaylock"
         "swayidle:swayidle"
-        "wlsunset:wlsunset"
         "songrec:SongRec"
         "trans:translate-shell"
     )
-    
+
     # Check required commands
     for item in "${cmds[@]}"; do
         local cmd="${item%%:*}"
@@ -106,21 +123,9 @@ check_dependencies() {
         fi
     done
     
-    # Check optional commands (warn but don't fail)
-    local optional_missing=()
-    for item in "${optional_cmds[@]}"; do
-        local cmd="${item%%:*}"
-        local name="${item##*:}"
-        command -v "$cmd" &>/dev/null || optional_missing+=("$name")
-    done
-    
     if [[ ${#missing[@]} -eq 0 ]]; then
         doctor_missing_deps=()
-        if [[ ${#optional_missing[@]} -gt 0 ]]; then
-            doctor_pass "Required commands OK (optional missing: ${optional_missing[*]})"
-        else
-            doctor_pass "All required commands available"
-        fi
+        doctor_pass "All dependencies available"
     else
         # Keep command identifiers here (qs, niri, wl-copy, etc.) because
         # setup/update installers map these keys to distro package names.
@@ -264,6 +269,133 @@ check_script_permissions() {
     fi
 }
 
+check_repo_checkout_state() {
+    local installed_strategy
+    installed_strategy="$(get_installed_update_strategy)"
+
+    if [[ "$installed_strategy" == "package-manager" ]]; then
+        doctor_pass "Repo checkout state not required for package-managed installs"
+        return 0
+    fi
+
+    if [[ ! -d "${REPO_ROOT}/.git" ]]; then
+        doctor_fail "Repo checkout is missing git metadata"
+        echo -e "    ${STY_FAINT}Run setup from a real iNiR checkout, not a random copy${STY_RST}"
+        return 1
+    fi
+
+    local branch tracked_branch update_rc=0
+    branch="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")"
+    tracked_branch="$(get_update_tracking_branch 2>/dev/null || echo "main")"
+
+    if [[ "$branch" == "HEAD" ]]; then
+        doctor_fail "Repo checkout is detached HEAD"
+        echo -e "    ${STY_FAINT}setup update cannot pull automatically until you check out a branch${STY_RST}"
+        return 1
+    fi
+
+    if declare -F check_remote_updates >/dev/null 2>&1; then
+        check_remote_updates || update_rc=$?
+        case "$update_rc" in
+            0)
+                doctor_pass "Repo checkout behind origin/${tracked_branch} (update available)"
+                echo -e "    ${STY_FAINT}Run: ./setup update${STY_RST}"
+                ;;
+            1)
+                doctor_pass "Repo checkout tracks origin/${tracked_branch}"
+                ;;
+            2)
+                doctor_pass "Repo remote check skipped"
+                ;;
+            3)
+                doctor_pass "Repo checkout has local commits ahead of origin/${tracked_branch}"
+                ;;
+            4)
+                doctor_fail "Repo checkout diverged from origin/${tracked_branch}"
+                echo -e "    ${STY_FAINT}If that rewrite was intentional, realign manually before updating${STY_RST}"
+                ;;
+        esac
+    else
+        doctor_pass "Repo remote check unavailable in this context"
+    fi
+
+    if [[ "$branch" != "main" && "$branch" != "master" ]]; then
+        tui_warn "Tracking non-release branch: ${branch}"
+    fi
+}
+
+check_launcher_health() {
+    local installed_strategy
+    installed_strategy="$(get_installed_update_strategy)"
+
+    local launcher_cmd expected_launcher repo_launcher runtime_launcher
+    launcher_cmd="$(command -v inir 2>/dev/null || true)"
+    expected_launcher="${XDG_BIN_HOME}/inir"
+    repo_launcher="${REPO_ROOT}/scripts/inir"
+    runtime_launcher="$(doctor_runtime_dir 2>/dev/null)/scripts/inir"
+
+    if [[ "$installed_strategy" == "package-manager" ]]; then
+        if [[ -n "$launcher_cmd" ]]; then
+            doctor_pass "Launcher available"
+        else
+            doctor_fail "inir launcher not found in PATH"
+            echo -e "    ${STY_FAINT}Run the package install flow again, or install the launcher manually${STY_RST}"
+        fi
+        return 0
+    fi
+
+    if [[ ! -f "$repo_launcher" ]]; then
+        if [[ -n "$launcher_cmd" || -x "$runtime_launcher" ]]; then
+            doctor_pass "Launcher available"
+        else
+            doctor_fail "Launcher missing"
+        fi
+        return 0
+    fi
+
+    if [[ ! -x "$expected_launcher" ]]; then
+        if declare -F sync_launcher_from_repo >/dev/null 2>&1; then
+            sync_launcher_from_repo >/dev/null 2>&1 || true
+        fi
+        if [[ -x "$expected_launcher" ]]; then
+            doctor_fix "Installed launcher to ${expected_launcher}"
+        else
+            doctor_fail "Launcher missing: ${expected_launcher}"
+            echo -e "    ${STY_FAINT}Run: ./setup install${STY_RST}"
+            return 1
+        fi
+    fi
+
+    if ! cmp -s "$repo_launcher" "$expected_launcher" 2>/dev/null; then
+        if declare -F sync_launcher_from_repo >/dev/null 2>&1; then
+            sync_launcher_from_repo >/dev/null 2>&1 || true
+        fi
+        if cmp -s "$repo_launcher" "$expected_launcher" 2>/dev/null; then
+            doctor_fix "Refreshed launcher from repo"
+        else
+            doctor_fail "Launcher content differs from repo"
+            echo -e "    ${STY_FAINT}Expected: ${expected_launcher}${STY_RST}"
+            return 1
+        fi
+    fi
+
+    if [[ -z "$launcher_cmd" ]]; then
+        doctor_fail "Launcher not in PATH"
+        echo -e "    ${STY_FAINT}Installed launcher exists at ${expected_launcher}${STY_RST}"
+        return 1
+    fi
+
+    local launcher_real
+    launcher_real="$(readlink -f "$launcher_cmd" 2>/dev/null || printf '%s' "$launcher_cmd")"
+    if ! cmp -s "$repo_launcher" "$launcher_real" 2>/dev/null; then
+        doctor_fail "PATH resolves an outdated launcher: ${launcher_cmd}"
+        echo -e "    ${STY_FAINT}Expected launcher content from ${repo_launcher}${STY_RST}"
+        return 1
+    fi
+
+    doctor_pass "Launcher current"
+}
+
 check_user_config() {
     local config="${DOTS_CORE_CONFDIR}/config.json"
     
@@ -372,17 +504,16 @@ check_fonts() {
 
     local important_fonts=(
         "Roboto Flex:Roboto Flex:important"
-        "Rubik:Rubik:important"
-        "Space Grotesk:Space Grotesk:important"
-        "Readex Pro:Readex Pro:important"
+        "Gabarito:Gabarito:important"
+        "Oxanium:Oxanium:important"
+        "Noto Color Emoji:Noto Color Emoji:important"
     )
 
     local optional_fonts=(
-        "Material Symbols Outlined:Material Symbols Outlined:optional"
-        "Gabarito:Gabarito:optional"
-        "Geist:Geist:optional"
-        "Oxanium:Oxanium:optional"
-        "Noto Color Emoji:Noto Color Emoji:optional"
+        "Rubik:Rubik:optional"
+        "Space Grotesk:Space Grotesk:optional"
+        "Readex Pro:Readex Pro:optional"
+        "Twemoji:Twemoji:optional"
     )
 
     if ! command -v fc-list &>/dev/null; then
@@ -399,6 +530,7 @@ check_fonts() {
     local missing_critical=()
     local missing_important=()
     local missing_optional=()
+    local missing_configured=()
 
     _font_installed() {
         echo "$fc_cache" | grep -qi "$1"
@@ -425,7 +557,24 @@ check_fonts() {
         _font_installed "$pattern" || missing_optional+=("$display")
     done
 
-    local total_missing=$(( ${#missing_critical[@]} + ${#missing_important[@]} ))
+    local config_file="${DOTS_CORE_CONFDIR}/config.json"
+    if [[ -f "$config_file" ]] && command -v jq &>/dev/null; then
+        local configured_font
+        while IFS= read -r configured_font; do
+            [[ -n "$configured_font" ]] || continue
+            case "${configured_font,,}" in
+                sans|sans-serif|serif|monospace|system-ui|auto) continue ;;
+            esac
+            _font_installed "$configured_font" || missing_configured+=("$configured_font")
+        done < <(jq -r '[
+            .appearance.typography.mainFont,
+            .appearance.typography.titleFont,
+            .appearance.typography.monospaceFont,
+            .waffles.theming.font.family
+        ] | .[] | select(type == "string" and length > 0)' "$config_file" 2>/dev/null | sort -u)
+    fi
+
+    local total_missing=$(( ${#missing_critical[@]} + ${#missing_important[@]} + ${#missing_configured[@]} ))
 
     if [[ $total_missing -eq 0 && ${#missing_optional[@]} -eq 0 ]]; then
         doctor_pass "All fonts installed"
@@ -434,7 +583,7 @@ check_fonts() {
 
     if [[ ${#missing_optional[@]} -gt 0 && $total_missing -eq 0 ]]; then
         tui_warn "Optional fonts missing: ${missing_optional[*]}"
-        doctor_pass "Required fonts OK"
+        doctor_pass "Required and configured fonts OK"
         return 0
     fi
 
@@ -451,18 +600,22 @@ check_fonts() {
             case "$font" in
                 "Material Symbols Rounded")
                     _try_install_font_package "ttf-material-symbols-variable-git" "Material Symbols Rounded" && ((fixed++)) || true ;;
-                "Material Symbols Outlined")
-                    _try_install_font_package "ttf-material-symbols-variable-git" "Material Symbols Outlined" && ((fixed++)) || true ;;
                 "JetBrainsMono Nerd Font")
                     _try_install_font_package "ttf-jetbrains-mono-nerd" "JetBrainsMono Nerd Font" && ((fixed++)) || true ;;
                 "Roboto Flex")
                     _try_install_font_package "ttf-roboto-flex" "Roboto Flex" && ((fixed++)) || true ;;
                 "Rubik")
-                    _try_install_font_package "ttf-rubik" "Rubik" && ((fixed++)) || true ;;
+                    _try_install_font_package "ttf-rubik-vf" "Rubik" && ((fixed++)) || true ;;
                 "Space Grotesk")
-                    _try_install_font_package "ttf-space-grotesk" "Space Grotesk" && ((fixed++)) || true ;;
+                    _try_install_font_package "otf-space-grotesk" "Space Grotesk" && ((fixed++)) || true ;;
                 "Readex Pro")
                     _try_install_font_package "ttf-readex-pro" "Readex Pro" && ((fixed++)) || true ;;
+                "Gabarito")
+                    _try_install_font_package "ttf-gabarito-git" "Gabarito" && ((fixed++)) || true ;;
+                "Oxanium")
+                    _try_install_font_package "ttf-oxanium" "Oxanium" && ((fixed++)) || true ;;
+                "Noto Color Emoji")
+                    _try_install_font_package "noto-fonts-emoji" "Noto Color Emoji" && ((fixed++)) || true ;;
             esac
         done
 
@@ -477,6 +630,7 @@ check_fonts() {
     fc_cache="$(fc-list : family 2>/dev/null)"
     local still_critical=()
     local still_important=()
+    local still_configured=()
 
     for entry in "${critical_fonts[@]}"; do
         local pattern="${entry%%:*}"
@@ -492,6 +646,11 @@ check_fonts() {
         _font_installed "$pattern" || still_important+=("$display")
     done
 
+    local configured_font
+    for configured_font in "${missing_configured[@]}"; do
+        _font_installed "$configured_font" || still_configured+=("$configured_font")
+    done
+
     if [[ ${#still_critical[@]} -gt 0 ]]; then
         doctor_fail "CRITICAL fonts missing: ${still_critical[*]}"
         echo -e "    ${STY_FAINT}Shell icons will be broken without these${STY_RST}"
@@ -502,8 +661,13 @@ check_fonts() {
         echo -e "    ${STY_FAINT}Install manually or run: ./setup install${STY_RST}"
     fi
 
-    if [[ ${#still_critical[@]} -eq 0 && ${#still_important[@]} -eq 0 ]]; then
-        doctor_pass "All required fonts OK"
+    if [[ ${#still_configured[@]} -gt 0 ]]; then
+        doctor_fail "Configured fonts unavailable: ${still_configured[*]}"
+        echo -e "    ${STY_FAINT}Choose an installed family or install the selected font${STY_RST}"
+    fi
+
+    if [[ ${#still_critical[@]} -eq 0 && ${#still_important[@]} -eq 0 && ${#still_configured[@]} -eq 0 ]]; then
+        doctor_pass "All required and configured fonts OK"
     fi
 
     if [[ ${#missing_optional[@]} -gt 0 ]]; then
@@ -573,6 +737,10 @@ _try_install_font_package() {
         "Gabarito")
             curl -fsSL -o "$font_dir/Gabarito.ttf" \
                 "https://github.com/google/fonts/raw/main/ofl/gabarito/Gabarito%5Bwght%5D.ttf" 2>/dev/null && return 0
+            ;;
+        "Oxanium")
+            curl -fsSL -o "$font_dir/Oxanium.ttf" \
+                "https://github.com/google/fonts/raw/main/ofl/oxanium/Oxanium%5Bwght%5D.ttf" 2>/dev/null && return 0
             ;;
     esac
 
@@ -659,6 +827,265 @@ check_manifest() {
     fi
 }
 
+check_service_unit_health() {
+    if ! command -v systemctl >/dev/null 2>&1; then
+        doctor_pass "User service checks skipped (systemctl missing)"
+        return 0
+    fi
+
+    local installed_strategy service_path expected_target
+    installed_strategy="$(get_installed_update_strategy)"
+    service_path="${XDG_CONFIG_HOME}/systemd/user/inir.service"
+    expected_target="$(doctor_detect_compositor_service 2>/dev/null || true)"
+
+    if [[ ! -f "$service_path" ]]; then
+        if [[ "$installed_strategy" == "package-manager" ]]; then
+            doctor_pass "User service not installed"
+        else
+            doctor_fail "User inir.service missing"
+            echo -e "    ${STY_FAINT}Run: inir service install${STY_RST}"
+        fi
+        return 0
+    fi
+
+    if [[ "$installed_strategy" != "package-manager" ]] && declare -F sync_user_inir_service_from_repo_if_present >/dev/null 2>&1; then
+        if sync_user_inir_service_from_repo_if_present >/dev/null 2>&1; then
+            doctor_fix "Refreshed user inir.service from repo"
+        fi
+    fi
+
+    local kill_mode fragment_path
+    kill_mode="$(systemctl --user show -p KillMode inir.service 2>/dev/null | cut -d= -f2)"
+    fragment_path="$(systemctl --user show -p FragmentPath inir.service 2>/dev/null | cut -d= -f2)"
+
+    if [[ -n "$kill_mode" && "$kill_mode" != "process" ]]; then
+        doctor_fail "inir.service KillMode is '${kill_mode}'"
+        echo -e "    ${STY_FAINT}Run: inir service install${STY_RST}"
+    else
+        doctor_pass "User service file present"
+    fi
+
+    if [[ -n "$fragment_path" && "$fragment_path" != "$service_path" ]]; then
+        tui_warn "systemd is loading inir.service from ${fragment_path}"
+    fi
+
+    local has_expected_link=false
+    local stale_links=()
+    local wants_dir
+    for wants_dir in "${XDG_CONFIG_HOME}/systemd/user"/*.wants; do
+        [[ -d "$wants_dir" ]] || continue
+        [[ -e "$wants_dir/inir.service" || -L "$wants_dir/inir.service" ]] || continue
+        local target_name
+        target_name="$(basename "${wants_dir%.wants}")"
+        if [[ -n "$expected_target" && "$target_name" == "$expected_target" ]]; then
+            has_expected_link=true
+        else
+            stale_links+=("$target_name")
+        fi
+    done
+
+    if [[ -n "$expected_target" && "$has_expected_link" == false ]]; then
+        if [[ "$installed_strategy" != "package-manager" ]] && declare -F ensure_user_inir_service_enabled >/dev/null 2>&1 && ensure_user_inir_service_enabled >/dev/null 2>&1; then
+            doctor_fix "Enabled inir.service for ${expected_target}"
+        else
+            doctor_fail "inir.service not wired to ${expected_target}"
+            echo -e "    ${STY_FAINT}Run: inir service enable${STY_RST}"
+        fi
+    fi
+
+    if [[ ${#stale_links[@]} -gt 0 ]]; then
+        doctor_fail "Stale service links found: ${stale_links[*]}"
+        echo -e "    ${STY_FAINT}Run: inir service disable && inir service enable${STY_RST}"
+    fi
+
+    if [[ -z "$expected_target" ]]; then
+        tui_warn "No supported compositor service detected for enablement wiring"
+    fi
+}
+
+check_stale_local_quickshell() {
+    # Detect a stale quickshell binary in ~/.local/bin or /usr/local/bin that
+    # shadows the system package. This is the #1 cause of "qs --version always
+    # reports 0.2" even after the system package was updated.
+    local qs_path
+    qs_path="$(command -v qs 2>/dev/null || true)"
+    [[ -z "$qs_path" ]] && { doctor_pass "No stale local quickshell"; return 0; }
+
+    local qs_real
+    qs_real="$(readlink -f "$qs_path" 2>/dev/null || printf '%s' "$qs_path")"
+
+    # Only flag local builds
+    case "$qs_real" in
+        "$HOME"/.local/bin/*|/usr/local/bin/*) ;;
+        *) doctor_pass "No stale local quickshell"; return 0 ;;
+    esac
+
+    # Check if a system quickshell also exists
+    local system_qs=""
+    if [[ -x /usr/bin/qs ]]; then
+        system_qs="/usr/bin/qs"
+    elif [[ -x /usr/bin/quickshell ]]; then
+        system_qs="/usr/bin/quickshell"
+    fi
+    [[ -z "$system_qs" ]] && { doctor_pass "No stale local quickshell"; return 0; }
+
+    # Compare versions
+    if command -v strings >/dev/null 2>&1; then
+        local local_ver system_ver
+        local_ver="$(strings "$qs_real" 2>/dev/null | grep -oP '\b0\.\d+\.\d+\b' | head -1 || true)"
+        system_ver="$(strings "$system_qs" 2>/dev/null | grep -oP '\b0\.\d+\.\d+\b' | head -1 || true)"
+        if [[ -n "$local_ver" && -n "$system_ver" && "$local_ver" != "$system_ver" ]]; then
+            doctor_fail "Stale local quickshell shadows system package"
+            echo -e "  ${STY_YELLOW}Local:  $qs_real ($local_ver)${STY_RST}"
+            echo -e "  ${STY_YELLOW}System: $system_qs ($system_ver)${STY_RST}"
+            echo -e "  ${STY_FAINT}Fix: rm $qs_real${STY_RST}"
+            if [[ -L "$qs_path" && "$qs_path" != "$qs_real" ]]; then
+                echo -e "  ${STY_FAINT}Also: rm $qs_path${STY_RST}"
+            fi
+            return 1
+        fi
+    fi
+
+    doctor_pass "No stale local quickshell"
+}
+
+# Pure ABI detection: returns 0 if compatible, 1 if mismatch.
+# Sets globals: _doctor_abi_msg, _doctor_abi_buildtime, _doctor_abi_runtime
+_doctor_abi_detect() {
+    _doctor_abi_msg=""
+    _doctor_abi_buildtime=""
+    _doctor_abi_runtime=""
+
+    if ! command -v qs >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local qs_stderr qs_combined mismatch_detected mismatch_msg
+    # Use timeout + offscreen platform to prevent hangs when Qt tries to
+    # initialize display plugins (Wayland/X11) during --version. Some systems
+    # block indefinitely waiting for a display server that may not respond.
+    qs_stderr="$(timeout 5 env QT_QPA_PLATFORM=offscreen qs --version 2>&1 >/dev/null || true)"
+    qs_combined="$(timeout 5 env QT_QPA_PLATFORM=offscreen qs --version 2>&1 || true)"
+
+    mismatch_detected=false
+    mismatch_msg=""
+
+    if echo "$qs_stderr" | grep -qiE "built against Qt|Qt.*mismatch|incompatible Qt"; then
+        mismatch_detected=true
+        mismatch_msg="$(echo "$qs_stderr" | grep -iE "built against Qt|Qt.*mismatch|incompatible Qt" | head -1)"
+    elif echo "$qs_combined" | grep -qiE "built against Qt|Qt.*mismatch|incompatible Qt"; then
+        mismatch_detected=true
+        mismatch_msg="$(echo "$qs_combined" | grep -iE "built against Qt|Qt.*mismatch|incompatible Qt" | head -1)"
+    fi
+
+    if ! $mismatch_detected; then
+        local qs_path buildtime_qt runtime_qt
+        qs_path="$(command -v qs 2>/dev/null || true)"
+        if [[ -n "$qs_path" ]]; then
+            if command -v strings >/dev/null 2>&1; then
+                buildtime_qt="$(strings "$qs_path" 2>/dev/null | grep -P '^6\.\d+\.\d+$' | head -1 || true)"
+            fi
+            if [[ -L /usr/lib/libQt6Core.so.6 ]]; then
+                runtime_qt="$(readlink -f /usr/lib/libQt6Core.so.6 2>/dev/null | grep -oP '[0-9]+\.[0-9]+\.[0-9]+$' || true)"
+            fi
+            if [[ -z "$runtime_qt" ]] && command -v pkg-config >/dev/null 2>&1; then
+                runtime_qt="$(pkg-config --modversion Qt6Core 2>/dev/null || true)"
+            fi
+            if [[ -n "$buildtime_qt" && -n "$runtime_qt" && "$buildtime_qt" != "$runtime_qt" ]]; then
+                mismatch_detected=true
+                mismatch_msg="Quickshell built against Qt $buildtime_qt but system has Qt $runtime_qt"
+            fi
+            _doctor_abi_buildtime="$buildtime_qt"
+            _doctor_abi_runtime="$runtime_qt"
+        fi
+    fi
+
+    if $mismatch_detected; then
+        _doctor_abi_msg="$mismatch_msg"
+        return 1
+    fi
+    return 0
+}
+
+# Pure rebuild command computation: echoes the command or nothing.
+_doctor_abi_rebuild_cmd() {
+    local install_kind="unknown" install_pkg="" rebuild_helper=""
+
+    if command -v pacman >/dev/null 2>&1; then
+        if pacman -Qi quickshell-bin &>/dev/null; then
+            install_kind="arch-aur-bin"; install_pkg="quickshell-bin"
+        elif pacman -Qi quickshell-git &>/dev/null; then
+            install_pkg="quickshell-git"
+            if pacman -Qm quickshell-git &>/dev/null; then
+                install_kind="arch-aur-foreign"
+            else
+                install_kind="arch-repo-binary"
+            fi
+        elif pacman -Qi quickshell &>/dev/null; then
+            install_pkg="quickshell"
+            if pacman -Qm quickshell &>/dev/null; then
+                install_kind="arch-aur-foreign"
+            else
+                install_kind="arch-repo-official"
+            fi
+        fi
+    elif command -v rpm >/dev/null 2>&1; then
+        local rpm_q
+        rpm_q="$(rpm -qa 2>/dev/null | grep -E '^quickshell(-git)?-[0-9]' | head -1)"
+        if [[ -n "$rpm_q" ]]; then
+            install_kind="fedora-pkg"
+            install_pkg="${rpm_q%%-[0-9]*}"
+        fi
+    elif [[ -d /etc/nixos ]] || [[ -L /run/current-system ]]; then
+        install_kind="nixos"; install_pkg="quickshell"
+    elif command -v dpkg >/dev/null 2>&1 && dpkg -s quickshell &>/dev/null; then
+        install_kind="debian"; install_pkg="quickshell"
+    elif [[ -x /usr/local/bin/quickshell || -x /usr/local/bin/qs ]]; then
+        install_kind="source"
+    fi
+
+    if [[ "$install_kind" == arch-* ]]; then
+        for h in paru yay; do
+            if command -v "$h" >/dev/null 2>&1; then
+                rebuild_helper="$h"; break
+            fi
+        done
+    fi
+
+    case "$install_kind" in
+        arch-aur-foreign)
+            if [[ -n "$rebuild_helper" ]]; then
+                printf '%s -S --rebuild --noconfirm %s' "$rebuild_helper" "$install_pkg"
+            fi
+            ;;
+        arch-repo-binary)
+            if [[ -n "$rebuild_helper" ]]; then
+                printf '%s -Sa --noconfirm --skipreview %s' "$rebuild_helper" "$install_pkg"
+            fi
+            ;;
+        arch-repo-official)
+            # pacman -Syu only works if the repo already has a fresh rebuild.
+            # Most of the time it doesn't — switch to AUR quickshell-git for immediate fix.
+            if [[ -n "$rebuild_helper" ]]; then
+                printf 'sudo pacman -Rdd --noconfirm quickshell && %s -S --noconfirm quickshell-git' "$rebuild_helper"
+            else
+                printf 'sudo pacman -Syu'
+            fi
+            ;;
+        arch-aur-bin)
+            if [[ -n "$rebuild_helper" ]]; then
+                printf '%s -Rdd --noconfirm quickshell-bin && %s -Sa --noconfirm --skipreview quickshell-git' "$rebuild_helper" "$rebuild_helper"
+            fi
+            ;;
+        fedora-pkg)
+            printf 'sudo dnf upgrade --refresh %s' "$install_pkg"
+            ;;
+        nixos)
+            printf 'sudo nixos-rebuild switch --upgrade'
+            ;;
+    esac
+}
+
 check_quickshell_abi() {
     # Quickshell uses Qt private APIs — any Qt minor version bump (e.g. 6.10→6.11)
     # breaks ABI and requires rebuilding quickshell. This is the #1 cause of
@@ -670,135 +1097,25 @@ check_quickshell_abi() {
         return 0
     fi
 
-    # qs --version prints version info to stdout, but Qt ABI mismatch warnings
-    # go to stderr at library load time before anything else runs
-    local qs_stderr
-    qs_stderr="$(qs --version 2>&1 >/dev/null || true)"
-
-    # Also check combined output in case the warning format differs
-    local qs_combined
-    qs_combined="$(qs --version 2>&1 || true)"
-
-    local mismatch_detected=false
-    local mismatch_msg=""
-
-    if echo "$qs_stderr" | grep -qiE "built against Qt|Qt.*mismatch|incompatible Qt"; then
-        mismatch_detected=true
-        mismatch_msg="$(echo "$qs_stderr" | grep -iE "built against Qt|Qt.*mismatch|incompatible Qt" | head -1)"
-    elif echo "$qs_combined" | grep -qiE "built against Qt|Qt.*mismatch|incompatible Qt"; then
-        mismatch_detected=true
-        mismatch_msg="$(echo "$qs_combined" | grep -iE "built against Qt|Qt.*mismatch|incompatible Qt" | head -1)"
+    if _doctor_abi_detect; then
+        doctor_pass "Quickshell/Qt ABI compatible"
+        return 0
     fi
 
-    # Secondary check: compare compile-time vs runtime Qt versions
-    # ldd always shows the current system lib (not what qs was built against), so
-    # we extract the compile-time Qt version from the qs binary via strings, and
-    # the runtime Qt version from the libQt6Core.so symlink target.
-    if ! $mismatch_detected; then
-        local qs_path
-        qs_path="$(command -v qs 2>/dev/null || true)"
-        if [[ -n "$qs_path" ]]; then
-            local buildtime_qt=""
-            local runtime_qt=""
+    doctor_fail "Qt/Quickshell ABI mismatch: $_doctor_abi_msg"
+    echo -e "  ${STY_YELLOW}Quickshell uses Qt private APIs that break on every Qt update.${STY_RST}"
+    echo -e "  ${STY_YELLOW}The shell will crash on any UI interaction until quickshell is rebuilt.${STY_RST}"
 
-            # Compile-time Qt version embedded in qs binary
-            if command -v strings >/dev/null 2>&1; then
-                buildtime_qt="$(strings "$qs_path" 2>/dev/null | grep -P '^6\.\d+\.\d+$' | head -1 || true)"
-            fi
-
-            # Runtime Qt version from library symlink or pkg-config
-            if [[ -L /usr/lib/libQt6Core.so.6 ]]; then
-                runtime_qt="$(readlink -f /usr/lib/libQt6Core.so.6 2>/dev/null | grep -oP '[0-9]+\.[0-9]+\.[0-9]+$' || true)"
-            fi
-            if [[ -z "$runtime_qt" ]] && command -v pkg-config >/dev/null 2>&1; then
-                runtime_qt="$(pkg-config --modversion Qt6Core 2>/dev/null || true)"
-            fi
-
-            if [[ -n "$buildtime_qt" && -n "$runtime_qt" ]]; then
-                local build_minor="${buildtime_qt%.*}"
-                local runtime_minor="${runtime_qt%.*}"
-                if [[ "$build_minor" != "$runtime_minor" ]]; then
-                    mismatch_detected=true
-                    mismatch_msg="Quickshell built against Qt $buildtime_qt but system has Qt $runtime_qt"
-                fi
-            fi
-        fi
+    local _rebuild_cmd
+    _rebuild_cmd="$(_doctor_abi_rebuild_cmd)"
+    if [[ -n "$_rebuild_cmd" ]]; then
+        echo -e "  ${STY_YELLOW}To fix: ${_rebuild_cmd//--noconfirm /}${STY_RST}"
+        echo -e "  ${STY_FAINT}Or run: inir doctor --fix-abi${STY_RST}"
+    else
+        echo -e "  ${STY_YELLOW}No automatic fix available for this install type.${STY_RST}"
+        echo -e "  ${STY_FAINT}See: https://quickshell.org/docs/master/guide/install-setup${STY_RST}"
     fi
-
-    if $mismatch_detected; then
-        doctor_fail "Qt/Quickshell ABI mismatch: $mismatch_msg"
-        echo -e "  ${STY_YELLOW}Quickshell uses Qt private APIs that break on minor version bumps.${STY_RST}"
-        echo -e "  ${STY_YELLOW}The shell will crash on any UI interaction until quickshell is rebuilt.${STY_RST}"
-
-        # Attempt auto-fix on Arch
-        local can_rebuild=false
-        local rebuild_pkg=""
-        local rebuild_helper=""
-
-        if command -v pacman >/dev/null 2>&1; then
-            if pacman -Qi quickshell-git &>/dev/null; then
-                rebuild_pkg="quickshell-git"
-            elif pacman -Qi quickshell-bin &>/dev/null; then
-                rebuild_pkg="quickshell-bin"
-            elif pacman -Qi quickshell &>/dev/null; then
-                # Official package — should be rebuilt by maintainer, try reinstall
-                rebuild_pkg="quickshell"
-            fi
-
-            if [[ -n "$rebuild_pkg" ]]; then
-                for helper in yay paru; do
-                    if command -v "$helper" >/dev/null 2>&1; then
-                        rebuild_helper="$helper"
-                        can_rebuild=true
-                        break
-                    fi
-                done
-            fi
-        fi
-
-        if $can_rebuild; then
-            local do_rebuild=false
-            if ! ${ask:-true}; then
-                do_rebuild=true
-            elif tui_confirm "Rebuild $rebuild_pkg to fix ABI mismatch?"; then
-                do_rebuild=true
-            fi
-
-            # Determine the right rebuild command:
-            # - Official repo (quickshell): sudo pacman -Syu
-            # - Foreign/AUR package: --rebuild triggers source compilation
-            # - Binary repo (CachyOS, chaotic-aur): -Sa forces AUR source build
-            local rebuild_cmd=""
-            if [[ "$rebuild_pkg" == "quickshell" ]]; then
-                rebuild_cmd="sudo pacman -Syu"
-            elif pacman -Qm "$rebuild_pkg" &>/dev/null; then
-                rebuild_cmd="$rebuild_helper -S --rebuild --noconfirm $rebuild_pkg"
-            else
-                rebuild_cmd="$rebuild_helper -Sa --noconfirm $rebuild_pkg"
-            fi
-
-            if $do_rebuild; then
-                echo -e "  ${STY_FAINT}Running: $rebuild_cmd${STY_RST}"
-                if eval "$rebuild_cmd" 2>/dev/null; then
-                    doctor_fix "Rebuilt $rebuild_pkg for current Qt version"
-                    return 0
-                else
-                    echo -e "  ${STY_RED}Rebuild failed. Try manually: ${rebuild_cmd/--noconfirm /}${STY_RST}"
-                fi
-            else
-                echo -e "  ${STY_YELLOW}To fix manually: ${rebuild_cmd/--noconfirm /}${STY_RST}"
-            fi
-        else
-            echo -e "  ${STY_YELLOW}To fix: rebuild quickshell from source against the current Qt version.${STY_RST}"
-            if command -v pacman >/dev/null 2>&1; then
-                echo -e "  ${STY_YELLOW}On Arch: yay -Sa quickshell-git  (forces AUR source build)${STY_RST}"
-            fi
-        fi
-        return 1
-    fi
-
-    doctor_pass "Quickshell/Qt ABI compatible"
-    return 0
+    return 1
 }
 
 check_quickshell_loads() {
@@ -809,6 +1126,10 @@ check_quickshell_loads() {
         doctor_runtime_dir_or_fail "Quickshell"
         return 0
     fi
+
+    # Resolve symlinks — Quickshell stores the real path internally, so
+    # `qs -p <symlink>` won't match the running instance.
+    target="$(readlink -f "$target")"
 
     # Skip if no graphical session
     if [[ -z "$WAYLAND_DISPLAY" && -z "$DISPLAY" && -z "$NIRI_SOCKET" ]]; then
@@ -994,6 +1315,39 @@ check_conflicting_services() {
     fi
 }
 
+check_conflicting_shells() {
+    # Quickshell-based shells that conflict with iNiR at the package level.
+    # These provide/replace quickshell or own overlapping config paths.
+    local shell_pkgs=(
+        "cachyos-niri-noctalia"
+        "noctalia-shell"
+        "noctalia-qs"
+        "noctalia-qs-git"
+        "dms-shell"
+        "dms-shell-git"
+        "caelestia-shell"
+        "caelestia-shell-git"
+        "bms-shell-bin"
+    )
+    local found=()
+
+    if ! command -v pacman &>/dev/null; then
+        doctor_pass "Conflicting shells (not Arch, skipped)"
+        return 0
+    fi
+
+    for pkg in "${shell_pkgs[@]}"; do
+        pacman -Qi "$pkg" &>/dev/null 2>&1 && found+=("$pkg")
+    done
+
+    if [[ ${#found[@]} -gt 0 ]]; then
+        doctor_fail "Conflicting Quickshell shells installed: ${found[*]}"
+        echo -e "    ${STY_FAINT}These must be removed for iNiR to work. Run: ./setup install${STY_RST}"
+    else
+        doctor_pass "No conflicting Quickshell shells"
+    fi
+}
+
 check_wallpaper_health() {
     local wallpaper_dir
     wallpaper_dir="$(xdg-user-dir PICTURES 2>/dev/null || echo "$HOME/Pictures")/Wallpapers"
@@ -1172,6 +1526,23 @@ check_qt_theming() {
     else
         doctor_pass "Darkly Qt style OK"
     fi
+
+    # Check kde-cli-tools when QT_QPA_PLATFORMTHEME=kde
+    # Without it, Dolphin "Open With" and other KDE dialogs fail silently
+    if $plugin_found; then
+        if command -v keditfiletype &>/dev/null || command -v keditfiletype6 &>/dev/null; then
+            doctor_pass "kde-cli-tools OK"
+        else
+            doctor_fail "kde-cli-tools not installed (Dolphin 'Open With' dialog won't work)"
+            case "${OS_GROUP_ID:-unknown}" in
+                arch) echo -e "    ${STY_FAINT}Run: sudo pacman -S kde-cli-tools${STY_RST}" ;;
+                fedora) echo -e "    ${STY_FAINT}Run: sudo dnf install kde-cli-tools${STY_RST}" ;;
+                debian|ubuntu) echo -e "    ${STY_FAINT}Run: sudo apt install kde-cli-tools${STY_RST}" ;;
+                opensuse) echo -e "    ${STY_FAINT}Run: sudo zypper install kde-cli-tools6${STY_RST}" ;;
+                *) echo -e "    ${STY_FAINT}Install kde-cli-tools using your package manager${STY_RST}" ;;
+            esac
+        fi
+    fi
 }
 
 check_niri_config() {
@@ -1180,8 +1551,10 @@ check_niri_config() {
     
     if command -v niri &>/dev/null; then
         local output
-        output=$(niri validate 2>&1)
-        if echo "$output" | grep -qi "valid"; then
+        # Current niri releases are silent on successful validation. The exit
+        # status is the contract; grepping for the word "valid" turns every
+        # silent success into a false failure.
+        if output=$(niri validate 2>&1); then
             doctor_pass "Niri config valid"
         else
             doctor_fail "Niri config has errors"
@@ -1196,14 +1569,54 @@ check_niri_config() {
 # Main
 ###############################################################################
 
+# Run a doctor check as an animated step. Output is buffered while the
+# spinner runs. Single-result steps show the result inline on the step
+# line; multi-result steps expand details below.
+_doctor_run_step() {
+    local step="$1" total="$2" desc="$3"; shift 3
+    local tmpfile pre_failed pre_fixed
+    tmpfile=$(mktemp)
+    pre_failed=$doctor_failed
+    pre_fixed=$doctor_fixed
+
+    tui_step_start "$step" "$total" "$desc"
+    "$@" > "$tmpfile" 2>&1
+
+    local new_fails=$((doctor_failed - pre_failed))
+    local new_fixes=$((doctor_fixed - pre_fixed))
+
+    # Count non-empty output lines
+    local lines=0
+    [[ -s "$tmpfile" ]] && lines=$(grep -c '.' "$tmpfile" 2>/dev/null || true)
+
+    # For single-result steps, extract the message for inline display
+    local msg=""
+    if [[ $lines -eq 1 ]]; then
+        msg=$(sed 's/\x1b\[[0-9;]*m//g; s/^[[:space:]]*//; s/^[✓✗⚠→] //' "$tmpfile")
+    fi
+
+    if [[ $new_fails -gt 0 ]]; then
+        tui_step_fail "${msg:-$desc}"
+    elif [[ $new_fixes -gt 0 ]]; then
+        tui_step_warn "${msg:-Fixed: $desc}"
+    else
+        tui_step_done "${msg:-$desc}"
+    fi
+
+    # Expand details for multi-result steps
+    (( lines > 1 )) && sed 's/^/  /' "$tmpfile"
+    rm -f "$tmpfile"
+}
+
 run_doctor_with_fixes() {
-    local total_steps=18
+    local total_steps=23
+    local doctor_started_at=$SECONDS
     doctor_passed=0
     doctor_failed=0
     doctor_fixed=0
-    
-    tui_step 1 $total_steps "Checking dependencies"
-    check_dependencies
+
+    # Step 1: Dependencies (special — may trigger interactive install)
+    _doctor_run_step 1 $total_steps "Checking dependencies" check_dependencies
 
     if [[ ${#doctor_missing_deps[@]} -gt 0 ]]; then
         detect_distro
@@ -1213,84 +1626,130 @@ run_doctor_with_fixes() {
                     SKIP_SYSUPDATE=true
                     ONLY_MISSING_DEPS="${doctor_missing_deps[*]}"
                     source ./sdata/subcmd-install/1.deps-router.sh
-                    check_dependencies
+                    # Re-check after install
+                    doctor_passed=0; doctor_failed=0; doctor_fixed=0
+                    _doctor_run_step 1 $total_steps "Re-checking dependencies" check_dependencies
                 fi
                 ;;
             *)
-                echo -e "${STY_YELLOW}Automatic dependency installation not available for ${OS_GROUP_ID}.${STY_RST}"
-                echo -e "${STY_YELLOW}Please install missing dependencies manually.${STY_RST}"
+                echo -e "  ${STY_YELLOW}Automatic install not available for ${OS_GROUP_ID}. Install manually.${STY_RST}"
                 ;;
         esac
     fi
-    
-    tui_step 2 $total_steps "Checking fonts"
-    check_fonts
-    
-    tui_step 3 $total_steps "Checking critical files"
-    check_critical_files
-    
-    tui_step 4 $total_steps "Checking script permissions"
-    check_script_permissions
-    
-    tui_step 5 $total_steps "Checking user config"
-    check_user_config
-    
-    tui_step 6 $total_steps "Checking state directories"
-    check_state_directories
-    
-    tui_step 7 $total_steps "Checking version tracking"
-    check_version_tracking
-    
-    tui_step 8 $total_steps "Checking file manifest"
-    check_manifest
-    
-    tui_step 9 $total_steps "Checking Niri compositor"
-    check_niri_running
-    
-    tui_step 10 $total_steps "Checking Python packages"
-    check_python_packages
-    
-    tui_step 11 $total_steps "Checking Quickshell/Qt ABI"
-    check_quickshell_abi
-    
-    tui_step 12 $total_steps "Checking Quickshell"
-    check_quickshell_loads
-    
-    tui_step 13 $total_steps "Checking theme colors"
-    check_matugen_colors
-    
-    tui_step 14 $total_steps "Checking Qt theming"
-    check_qt_theming
-    
-    tui_step 15 $total_steps "Checking conflicting services"
-    check_conflicting_services
-    
-    tui_step 16 $total_steps "Checking wallpaper health"
-    check_wallpaper_health
-    
-    tui_step 17 $total_steps "Checking environment variables"
-    check_environment_vars
-    
-    tui_step 18 $total_steps "Checking Niri config"
-    check_niri_config
-    
+
+    _doctor_run_step 2  $total_steps "Checking fonts"                check_fonts
+    _doctor_run_step 3  $total_steps "Checking repo checkout"        check_repo_checkout_state
+    _doctor_run_step 4  $total_steps "Checking critical files"       check_critical_files
+    _doctor_run_step 5  $total_steps "Checking script permissions"   check_script_permissions
+    _doctor_run_step 6  $total_steps "Checking launcher"             check_launcher_health
+    _doctor_run_step 7  $total_steps "Checking user config"          check_user_config
+    _doctor_run_step 8  $total_steps "Checking state directories"    check_state_directories
+    _doctor_run_step 9  $total_steps "Checking version tracking"     check_version_tracking
+    _doctor_run_step 10 $total_steps "Checking file manifest"        check_manifest
+    _doctor_run_step 11 $total_steps "Checking user service"         check_service_unit_health
+    _doctor_run_step 12 $total_steps "Checking Niri compositor"      check_niri_running
+    _doctor_run_step 13 $total_steps "Checking Python packages"      check_python_packages
+    _doctor_run_step 14 $total_steps "Checking stale local quickshell" check_stale_local_quickshell
+
+    # Step 15 pre-check: detect ABI mismatch and offer a visible rebuild.
+    # We do this OUTSIDE _doctor_run_step so the rebuild gets live TTY feedback
+    # instead of being swallowed by the tempfile capture.
+    if ! _doctor_abi_detect; then
+        echo ""
+        tui_error "Qt/Quickshell ABI mismatch detected"
+        echo -e "  ${STY_YELLOW}$_doctor_abi_msg${STY_RST}"
+        echo -e "  ${STY_YELLOW}Quickshell will crash on any UI interaction until rebuilt.${STY_RST}"
+
+        local _rebuild_cmd
+        _rebuild_cmd="$(_doctor_abi_rebuild_cmd)"
+        if [[ -n "$_rebuild_cmd" ]] && $ask && [[ -t 0 && -t 1 ]]; then
+            echo ""
+            if tui_confirm "Rebuild quickshell to fix the ABI mismatch?"; then
+                echo ""
+                echo -e "  ${STY_FAINT}Rebuilding quickshell against the current Qt version...${STY_RST}"
+                echo -e "  ${STY_FAINT}(This may take 2-5 minutes. timeout: 15 minutes)${STY_RST}"
+                echo ""
+
+                # Cache sudo credentials so the rebuild doesn't hang on a hidden prompt
+                local _sudo_ok=true
+                if [[ "$_rebuild_cmd" == *"sudo"* ]] || [[ "$_rebuild_cmd" == *"pacman"* ]] || [[ "$_rebuild_cmd" == *"dnf"* ]]; then
+                    echo ""
+                    echo -e "  ${STY_YELLOW}The rebuild requires sudo privileges.${STY_RST}"
+                    echo -e "  ${STY_FAINT}If prompted, enter your sudo password below.${STY_RST}"
+                    echo -e "  ${STY_FAINT}(timeout: 60 seconds)${STY_RST}"
+                    echo ""
+                    if ! timeout 60 sudo -v; then
+                        echo -e "  ${STY_RED}Sudo authentication timed out or failed.${STY_RST}"
+                        echo -e "  ${STY_YELLOW}Skipping automatic rebuild.${STY_RST}"
+                        echo -e "  ${STY_FAINT}You can run manually: ${_rebuild_cmd//--noconfirm/}${STY_RST}"
+                        _sudo_ok=false
+                    fi
+                fi
+
+                if $_sudo_ok; then
+                    local _rebuild_rc=0
+                    if command -v timeout >/dev/null 2>&1; then
+                        timeout 15m bash -c "${_rebuild_cmd//--noconfirm/}" || _rebuild_rc=$?
+                    else
+                        eval "${_rebuild_cmd//--noconfirm/}" || _rebuild_rc=$?
+                    fi
+
+                    if [[ $_rebuild_rc -eq 124 ]]; then
+                        echo ""
+                        echo -e "  ${STY_RED}Rebuild timed out after 15 minutes.${STY_RST}"
+                    elif [[ $_rebuild_rc -ne 0 ]]; then
+                        echo ""
+                        echo -e "  ${STY_RED}Rebuild failed (exit $_rebuild_rc).${STY_RST}"
+                    else
+                        rm -f "${XDG_CACHE_HOME:-$HOME/.cache}/inir/abi-check" 2>/dev/null
+                        if _doctor_abi_detect; then
+                            echo ""
+                            echo -e "  ${STY_GREEN}Quickshell rebuilt successfully. ABI mismatch resolved.${STY_RST}"
+                            doctor_fixed=$((doctor_fixed + 1))
+                        else
+                            echo ""
+                            echo -e "  ${STY_YELLOW}Rebuild finished but mismatch persists.${STY_RST}"
+                            echo -e "  ${STY_FAINT}A stale local binary may be shadowing the system package.${STY_RST}"
+                        fi
+                    fi
+                fi
+            fi
+        fi
+        echo ""
+    fi
+
+    _doctor_run_step 15 $total_steps "Checking Quickshell/Qt ABI"    check_quickshell_abi
+    _doctor_run_step 16 $total_steps "Checking Quickshell"           check_quickshell_loads
+    _doctor_run_step 17 $total_steps "Checking theme colors"         check_matugen_colors
+    _doctor_run_step 18 $total_steps "Checking Qt theming"           check_qt_theming
+    _doctor_run_step 19 $total_steps "Checking conflicting services" check_conflicting_services
+    _doctor_run_step 20 $total_steps "Checking conflicting shells"   check_conflicting_shells
+    _doctor_run_step 21 $total_steps "Checking wallpaper health"     check_wallpaper_health
+    _doctor_run_step 22 $total_steps "Checking environment variables" check_environment_vars
+    _doctor_run_step 23 $total_steps "Checking Niri config"          check_niri_config
+
     echo ""
     tui_divider
     echo ""
-    
+
     # Summary
     tui_title "Summary"
     echo ""
-    tui_status_line "Passed:" "$doctor_passed" "ok"
-    tui_status_line "Fixed:" "$doctor_fixed" "warn"
-    tui_status_line "Failed:" "$doctor_failed" "error"
-    
+    tui_badge_row \
+        "Passed" "$doctor_passed" "success" \
+        "Fixed" "$doctor_fixed" "warning" \
+        "Failed" "$doctor_failed" "error" \
+        "Time" "$(tui_elapsed "$doctor_started_at")" "muted"
+
     echo ""
     if [[ $doctor_failed -gt 0 ]]; then
         tui_error "Some issues need manual attention."
+        tui_info "Start with: ./setup status"
+        tui_info "Then read logs: inir logs"
         return 1
     elif [[ $doctor_fixed -gt 0 ]]; then
         tui_success "All issues fixed automatically."
+        tui_info "Restart the shell to apply: inir restart"
     else
         tui_success "Everything looks good!"
     fi

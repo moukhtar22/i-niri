@@ -264,6 +264,32 @@ def draw_largest_region(image_path, center, size, output_path='output.png', scre
     cv2.imwrite(output_path, img)
     # print removed for quieter operation
 
+def get_region_brightness(image_path, x, y, w, h, screen_width=None, screen_height=None, screen_mode="fill"):
+    """Get average brightness and brightness std-dev (both 0-255) of a region.
+
+    Returns a (mean, std) tuple. The std-dev measures how "busy"/high-contrast
+    the region is, so consumers can target worst-case legibility instead of
+    trusting the mean (which lies on textured wallpapers).
+    """
+    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        return 128.0, 0.0
+    orig_h, orig_w = img.shape[:2]
+    if screen_width is not None and screen_height is not None:
+        scale_w = screen_width / orig_w
+        scale_h = screen_height / orig_h
+        scale = max(scale_w, scale_h) if screen_mode == "fill" else min(scale_w, scale_h)
+        img = cv2.resize(img, (int(orig_w * scale), int(orig_h * scale)), interpolation=cv2.INTER_LANCZOS4)
+        img = center_crop(img, screen_width, screen_height)
+    x = max(0, x)
+    y = max(0, y)
+    w = max(1, min(w, img.shape[1] - x))
+    h = max(1, min(h, img.shape[0] - y))
+    region = img[y:y+h, x:x+w]
+    if region.size == 0:
+        return 128.0, 0.0
+    return float(np.mean(region)), float(np.std(region))
+
 def get_dominant_color(image_path, x, y, w, h, screen_width=None, screen_height=None, screen_mode="fill"):
     img = cv2.imread(image_path)
     if img is None:
@@ -288,18 +314,20 @@ def get_dominant_color(image_path, x, y, w, h, screen_width=None, screen_height=
     region = img[y:y+h, x:x+w]
     if region.size == 0 or region.shape[0] == 0 or region.shape[1] == 0:
         return [0, 0, 0]
-    region = region.reshape((-1, 3))
-    # Filter out black pixels (optional, improves accuracy for some images)
-    non_black = region[np.any(region > 10, axis=1)]
-    if non_black.shape[0] == 0:
-        non_black = region
-    region = np.float32(non_black)
+    # Keep the full sampled region. Discarding dark pixels biases mixed/dark
+    # wallpapers toward their bright highlights, which made desktop widgets
+    # choose an accent as if the backdrop were much brighter than it really is.
+    region = np.float32(region.reshape((-1, 3)))
     if region.shape[0] < 3:
         return [int(x) for x in np.mean(region, axis=0)]
     # K-means to find dominant color
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
     K = min(3, region.shape[0])
-    _, labels, centers = cv2.kmeans(region, K, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
+    # OpenCV's random centers otherwise make the same widget position capable of
+    # returning a different dominant cluster on consecutive analyses. Stable
+    # editing needs identical input geometry to produce identical color output.
+    cv2.setRNGSeed(0)
+    _, labels, centers = cv2.kmeans(region, K, None, criteria, 10, cv2.KMEANS_PP_CENTERS)
     counts = np.bincount(labels.flatten())
     dominant = centers[np.argmax(counts)]
     # Reverse from BGR to RGB
@@ -322,7 +350,32 @@ def main():
     parser.add_argument("--horizontal-padding", "-hp", type=int, default=50, help="Minimum horizontal distance from region to image edge")
     parser.add_argument("--vertical-padding", "-vp", type=int, default=50, help="Minimum vertical distance from region to image edge")
     parser.add_argument("--busiest", action="store_true", help="Find the busiest region instead of the least busy")
+    parser.add_argument("--color-only", action="store_true", help="Skip region search; analyze color/brightness at a specific position")
+    parser.add_argument("--position-x", type=int, default=0, help="Widget X position for --color-only mode")
+    parser.add_argument("--position-y", type=int, default=0, help="Widget Y position for --color-only mode")
     args = parser.parse_args()
+
+    # Color-only mode: analyze the region at the widget's actual position
+    if args.color_only:
+        dominant_color = get_dominant_color(
+            args.image_path, args.position_x, args.position_y, args.width, args.height,
+            screen_width=args.screen_width, screen_height=args.screen_height, screen_mode=args.screen_mode
+        )
+        brightness, brightness_std = get_region_brightness(
+            args.image_path, args.position_x, args.position_y, args.width, args.height,
+            screen_width=args.screen_width, screen_height=args.screen_height, screen_mode=args.screen_mode
+        )
+        dominant_color_hex = '#{:02x}{:02x}{:02x}'.format(*dominant_color)
+        print(json.dumps({
+            "center_x": args.position_x + args.width // 2,
+            "center_y": args.position_y + args.height // 2,
+            "width": args.width,
+            "height": args.height,
+            "dominant_color": dominant_color_hex,
+            "brightness": round(brightness, 1),
+            "brightness_std": round(brightness_std, 1)
+        }))
+        return
 
     if args.largest_region:
         center, size, var = find_largest_region(
@@ -349,6 +402,10 @@ def main():
                 args.image_path, x1, y1, region_w, region_h,
                 screen_width=args.screen_width, screen_height=args.screen_height, screen_mode=args.screen_mode
             )
+            brightness, brightness_std = get_region_brightness(
+                args.image_path, x1, y1, region_w, region_h,
+                screen_width=args.screen_width, screen_height=args.screen_height, screen_mode=args.screen_mode
+            )
             dominant_color_hex = '#{:02x}{:02x}{:02x}'.format(*dominant_color)
             print(json.dumps({
                 "center_x": center[0],
@@ -356,7 +413,9 @@ def main():
                 "width": size[0],
                 "height": size[1],
                 "variance": var,
-                "dominant_color": dominant_color_hex
+                "dominant_color": dominant_color_hex,
+                "brightness": round(brightness, 1),
+                "brightness_std": round(brightness_std, 1)
             }))
         else:
             print(json.dumps({"error": "No region found under the threshold."}))
@@ -384,6 +443,10 @@ def main():
         args.image_path, coords[0], coords[1], args.width, args.height,
         screen_width=args.screen_width, screen_height=args.screen_height, screen_mode=args.screen_mode
     )
+    brightness, brightness_std = get_region_brightness(
+        args.image_path, coords[0], coords[1], args.width, args.height,
+        screen_width=args.screen_width, screen_height=args.screen_height, screen_mode=args.screen_mode
+    )
     dominant_color_hex = '#{:02x}{:02x}{:02x}'.format(*dominant_color)
     print(json.dumps({
         "center_x": center_x,
@@ -391,7 +454,9 @@ def main():
         "width": args.width,
         "height": args.height,
         "variance": variance,
-        "dominant_color": dominant_color_hex
+        "dominant_color": dominant_color_hex,
+        "brightness": round(brightness, 1),
+        "brightness_std": round(brightness_std, 1)
     }))
 
 if __name__ == "__main__":

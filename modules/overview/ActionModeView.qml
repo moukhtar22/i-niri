@@ -1,5 +1,6 @@
 import qs
 import qs.services
+import qs.services.deferred
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -24,7 +25,12 @@ Item {
     id: root
     property string query: ""
     property int selectedCategoryIndex: 0
+    // Entering action mode ("/") always starts on "All" (index 0) so the query
+    // is never silently filtered by a category left selected from a previous
+    // session — the user no longer has to Tab back to "All" to capture input.
+    onVisibleChanged: if (visible) selectedCategoryIndex = 0
     property real availableHeight: Number.POSITIVE_INFINITY
+    readonly property bool zzzEverywhere: Appearance.zzzEverywhere
 
     readonly property var categoryList: [
         { id: "all",        label: Translation.tr("All"),        icon: "apps" },
@@ -195,7 +201,7 @@ Item {
             left: parent.left
             right: parent.right
         }
-        spacing: 8
+        spacing: Appearance.sizes.spacingSmall
 
         // ── Category Tab Bar (uses existing SecondaryTabBar widget) ──
         SecondaryTabBar {
@@ -243,14 +249,17 @@ Item {
                         text: modelData.cmd
                         font.pixelSize: Appearance.font.pixelSize.smallest
                         font.family: Appearance.font.family.monospace
-                        color: Appearance.inirEverywhere ? Appearance.inir.colPrimary : Appearance.colors.colPrimary
-                        opacity: 0.7
+                        color: root.zzzEverywhere ? Appearance.zzz.accent
+                            : Appearance.inirEverywhere ? Appearance.inir.colPrimary : Appearance.colors.colPrimary
+                        Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+                        opacity: root.zzzEverywhere ? 1 : 0.7
                     }
                     StyledText {
                         text: modelData.desc
                         font.pixelSize: Appearance.font.pixelSize.smallest
-                        color: Appearance.colors.colSubtext
-                        opacity: 0.5
+                        color: root.zzzEverywhere ? Appearance.zzz.inkMuted : Appearance.colors.colSubtext
+                        Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+                        opacity: root.zzzEverywhere ? 1 : 0.5
                     }
                 }
             }
@@ -264,8 +273,8 @@ Item {
             clip: true
             topMargin: 10
             bottomMargin: 8
-            spacing: 2
-            highlightMoveDuration: 100
+            spacing: root.zzzEverywhere ? 6 : 2
+            highlightMoveDuration: Appearance.animation.elementMoveFast.duration / 2
             focus: true
 
             model: root.displayItems
@@ -334,37 +343,45 @@ Item {
                 property bool keyboardDown: false
                 readonly property bool isCurrentItem: ListView.isCurrentItem
                 readonly property bool isHighlighted: delegateBtn.isCurrentItem
-                readonly property color normalTextColor: Appearance.angelEverywhere ? Appearance.angel.colText
+                readonly property color normalTextColor: root.zzzEverywhere ? Appearance.zzz.ink
+                    : Appearance.angelEverywhere ? Appearance.angel.colText
                     : Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer1
-                readonly property color selectedTextColor: Appearance.angelEverywhere ? Appearance.angel.colText
+                readonly property color selectedTextColor: root.zzzEverywhere ? Appearance.zzz.onSignal
+                    : Appearance.angelEverywhere ? Appearance.angel.colText
                     : Appearance.inirEverywhere ? Appearance.inir.colText
                     : Appearance.colors.colOnLayer1
                 readonly property color descriptionTextColor: delegateBtn.isHighlighted
-                    ? (Appearance.angelEverywhere ? Appearance.angel.colText
+                    ? (root.zzzEverywhere ? Appearance.zzz.onSignal
+                        : Appearance.angelEverywhere ? Appearance.angel.colText
                         : Appearance.inirEverywhere ? Appearance.inir.colTextSecondary
                         : Appearance.colors.colOnLayer1)
-                    : (Appearance.inirEverywhere ? Appearance.inir.colTextSecondary : Appearance.colors.colSubtext)
-                readonly property color selectedBackgroundColor: Appearance.angelEverywhere
+                    : (root.zzzEverywhere ? Appearance.zzz.inkMuted
+                        : Appearance.inirEverywhere ? Appearance.inir.colTextSecondary : Appearance.colors.colSubtext)
+                readonly property color selectedBackgroundColor: root.zzzEverywhere ? Appearance.zzz.signal
+                    : Appearance.angelEverywhere
                     ? Appearance.angel.colGlassCardHover
                     : Appearance.colors.colLayer1
-                readonly property color hoverBackgroundColor: Appearance.angelEverywhere
+                readonly property color hoverBackgroundColor: root.zzzEverywhere ? Appearance.zzz.paperAlt
+                    : Appearance.angelEverywhere
                     ? Appearance.angel.colGlassCardHover
                     : Appearance.colors.colLayer1
-                readonly property color pressedBackgroundColor: Appearance.angelEverywhere
+                readonly property color pressedBackgroundColor: root.zzzEverywhere ? ColorUtils.mix(Appearance.zzz.signal, Appearance.zzz.ink, 0.78)
+                    : Appearance.angelEverywhere
                     ? Appearance.angel.colGlassCardActive
                     : Appearance.colors.colLayer1Hover
 
                 anchors.left: parent?.left
                 anchors.right: parent?.right
 
-                property int horizontalMargin: 10
-                property int buttonHorizontalPadding: 10
-                property int buttonVerticalPadding: 6
+                property int horizontalMargin: root.zzzEverywhere ? 14 : 10
+                property int buttonHorizontalPadding: root.zzzEverywhere ? 12 : 10
+                property int buttonVerticalPadding: root.zzzEverywhere ? 8 : 6
 
                 implicitHeight: delegateRow.implicitHeight + buttonVerticalPadding * 2
 
                 // Style tokens — exactly match SearchItem.qml
-                buttonRadius: Appearance.angelEverywhere ? Appearance.angel.roundingSmall
+                buttonRadius: root.zzzEverywhere ? Appearance.zzz.pillRadius
+                    : Appearance.angelEverywhere ? Appearance.angel.roundingSmall
                     : Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.normal
                 colBackground: (delegateBtn.down || delegateBtn.keyboardDown)
                     ? delegateBtn.pressedBackgroundColor
@@ -372,7 +389,8 @@ Item {
                         ? delegateBtn.selectedBackgroundColor
                         : (delegateBtn.hovered ? delegateBtn.hoverBackgroundColor : "transparent"))
                 colBackgroundHover: delegateBtn.hoverBackgroundColor
-                colRipple: Appearance.angelEverywhere
+                colRipple: root.zzzEverywhere ? ColorUtils.transparentize(Appearance.zzz.ink, 0.72)
+                    : Appearance.angelEverywhere
                     ? Appearance.angel.colGlassCardActive
                     : Appearance.colors.colLayer1Hover
 
@@ -383,6 +401,26 @@ Item {
                 }
 
                 PointingHandInteraction {}
+
+                Rectangle {
+                    anchors.fill: delegateBtn
+                    anchors.leftMargin: delegateBtn.horizontalMargin
+                    anchors.rightMargin: delegateBtn.horizontalMargin
+                    visible: root.zzzEverywhere
+                    radius: delegateBtn.buttonRadius
+                    color: "transparent"
+                    border.width: delegateBtn.isHighlighted || delegateBtn.hovered ? Appearance.zzz.borderThick : 1
+                    border.color: delegateBtn.isHighlighted ? Appearance.zzz.accent : Appearance.zzz.hairline
+
+                    Behavior on border.color {
+                        enabled: Appearance.animationsEnabled
+                        ColorAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                    }
+                }
 
                 onClicked: {
                     // Capture values before closing overview (which destroys this component)
@@ -411,10 +449,14 @@ Item {
                         implicitWidth: 35
                         implicitHeight: 35
                         scale: delegateBtn.isHighlighted ? 1 : 0.96
-                        radius: Appearance.angelEverywhere ? Appearance.angel.roundingSmall
+                        radius: root.zzzEverywhere ? Appearance.zzz.pillRadius
+                            : Appearance.angelEverywhere ? Appearance.angel.roundingSmall
                             : Appearance.inirEverywhere ? Appearance.inir.roundingSmall
                             : Appearance.rounding.full
+                        Behavior on radius { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve } }
                         color: {
+                            if (root.zzzEverywhere)
+                                return delegateBtn.isHighlighted ? Appearance.zzz.accent : Appearance.zzz.paperAlt
                             if (isPackage && entry.pkg?.installed)
                                 return ColorUtils.transparentize(
                                     Appearance.inirEverywhere ? Appearance.inir.colPrimary : Appearance.colors.colPrimary, 0.3)
@@ -423,6 +465,7 @@ Item {
                                 : (Appearance.inirEverywhere ? Appearance.inir.colLayer2
                                     : Appearance.angelEverywhere ? Appearance.angel.colGlassCard
                                     : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
+                                    : Appearance.zzzEverywhere ? Appearance.colors.colLayer2
                                     : Appearance.colors.colSecondaryContainer)
                         }
 
@@ -447,9 +490,12 @@ Item {
                         MaterialSymbol {
                             anchors.centerIn: parent
                             text: entry?.icon ?? "settings"
-                            iconSize: 22
+                            iconSize: Appearance.font.pixelSize.huge
                             fill: (isPackage && entry.pkg?.installed) ? 1 : 0
+                            animateFill: true
                             color: {
+                                if (root.zzzEverywhere)
+                                    return delegateBtn.isHighlighted ? Appearance.zzz.onAccent : delegateBtn.normalTextColor
                                 if (isPackage && entry.pkg?.installed)
                                     return Appearance.inirEverywhere ? Appearance.inir.colPrimary : Appearance.colors.colPrimary
                                 return delegateBtn.isHighlighted
@@ -521,7 +567,8 @@ Item {
                             text: entry?.pkg?.version ?? ""
                             font.pixelSize: Appearance.font.pixelSize.smallest
                             font.family: Appearance.font.family.monospace
-                            color: Appearance.colors.colSubtext
+                            color: root.zzzEverywhere ? Appearance.zzz.inkMuted : Appearance.colors.colSubtext
+                            Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
                         }
 
                         Rectangle {
@@ -529,7 +576,9 @@ Item {
                             implicitWidth: repoText.implicitWidth + 10
                             implicitHeight: repoText.implicitHeight + 4
                             radius: height / 2
-                            color: entry?.pkg?.isAur
+                            color: root.zzzEverywhere
+                                ? ColorUtils.transparentize(Appearance.zzz.accent, 0.76)
+                                : entry?.pkg?.isAur
                                 ? ColorUtils.transparentize(Appearance.inirEverywhere ? Appearance.inir.colPrimary : Appearance.colors.colPrimary, 0.3)
                                 : (Appearance.inirEverywhere ? Appearance.inir.colLayer2 : Appearance.colors.colSecondaryContainer)
 
@@ -539,7 +588,8 @@ Item {
                                 text: entry?.pkg?.repo ?? ""
                                 font.pixelSize: Appearance.font.pixelSize.smallest
                                 font.weight: Font.Medium
-                                color: entry?.pkg?.isAur
+                                color: root.zzzEverywhere ? Appearance.zzz.ink
+                                    : entry?.pkg?.isAur
                                     ? (Appearance.inirEverywhere ? Appearance.inir.colPrimary : Appearance.colors.colPrimary)
                                     : (Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnSecondaryContainer)
                             }
@@ -550,15 +600,17 @@ Item {
                             implicitWidth: installedText.implicitWidth + 10
                             implicitHeight: installedText.implicitHeight + 4
                             radius: height / 2
-                            color: ColorUtils.transparentize(
+                            color: root.zzzEverywhere ? Appearance.zzz.signal : ColorUtils.transparentize(
                                 Appearance.inirEverywhere ? Appearance.inir.colPrimary : Appearance.colors.colPrimary, 0.2)
+                            Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
 
                             StyledText {
                                 id: installedText
                                 anchors.centerIn: parent
                                 text: Translation.tr("Installed")
                                 font.pixelSize: Appearance.font.pixelSize.smallest
-                                color: Appearance.inirEverywhere ? Appearance.inir.colPrimary : Appearance.colors.colPrimary
+                                color: root.zzzEverywhere ? Appearance.zzz.onSignal
+                                    : Appearance.inirEverywhere ? Appearance.inir.colPrimary : Appearance.colors.colPrimary
                             }
                         }
                     }
@@ -566,7 +618,12 @@ Item {
                     // Action hint on hover/focus
                     StyledText {
                         Layout.fillWidth: false
-                        visible: delegateBtn.hovered || delegateBtn.isHighlighted
+                        opacity: (delegateBtn.hovered || delegateBtn.isHighlighted) ? 1 : 0
+                        visible: opacity > 0
+                        Behavior on opacity {
+                            enabled: Appearance.animationsEnabled
+                            NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Easing.OutCubic }
+                        }
                         text: isAction
                             ? (entry?.action?.verb ?? Translation.tr("Run"))
                             : (root.isPackageRemove ? Translation.tr("Remove") : Translation.tr("Install"))
@@ -588,7 +645,12 @@ Item {
 
         // ── Loading indicator ──
         RowLayout {
-            visible: root.showLoading
+            opacity: root.showLoading ? 1 : 0
+            visible: opacity > 0
+            Behavior on opacity {
+                enabled: Appearance.animationsEnabled
+                NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Easing.OutCubic }
+            }
             Layout.fillWidth: true
             Layout.topMargin: 12
             Layout.bottomMargin: 12
@@ -603,13 +665,19 @@ Item {
             StyledText {
                 text: Translation.tr("Searching packages...")
                 font.pixelSize: Appearance.font.pixelSize.small
-                color: Appearance.colors.colSubtext
+                color: root.zzzEverywhere ? Appearance.zzz.inkMuted : Appearance.colors.colSubtext
+                Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
             }
         }
 
         // ── Empty state ──
         ColumnLayout {
-            visible: root.showEmpty
+            opacity: root.showEmpty ? 1 : 0
+            visible: opacity > 0
+            Behavior on opacity {
+                enabled: Appearance.animationsEnabled
+                NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Easing.OutCubic }
+            }
             Layout.fillWidth: true
             Layout.topMargin: 20
             Layout.bottomMargin: 20
@@ -620,7 +688,8 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 text: "search_off"
                 iconSize: 28
-                color: Appearance.colors.colSubtext
+                color: root.zzzEverywhere ? Appearance.zzz.inkMuted : Appearance.colors.colSubtext
+                Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
             }
             StyledText {
                 Layout.alignment: Qt.AlignHCenter
@@ -637,8 +706,8 @@ Item {
             Layout.bottomMargin: 8
             Layout.leftMargin: 20
             Layout.rightMargin: 20
-            spacing: 16
-            opacity: 0.5
+            spacing: Appearance.sizes.spacingLarge
+            opacity: root.zzzEverywhere ? 0.8 : 0.5
 
             Repeater {
                 model: [
@@ -653,23 +722,27 @@ Item {
                     Rectangle {
                         implicitWidth: keyLabel.implicitWidth + 8
                         implicitHeight: keyLabel.implicitHeight + 4
-                        radius: 4
-                        color: Appearance.inirEverywhere ? Appearance.inir.colLayer2
+                        radius: Appearance.rounding.unsharpen
+                        color: root.zzzEverywhere ? Appearance.zzz.paperAlt
+                            : Appearance.inirEverywhere ? Appearance.inir.colLayer2
                             : Appearance.angelEverywhere ? Appearance.angel.colGlassCard
                             : Appearance.colors.colSecondaryContainer
+                        Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
                         StyledText {
                             id: keyLabel
                             anchors.centerIn: parent
                             text: modelData.key
                             font.pixelSize: Appearance.font.pixelSize.smallest
                             font.family: Appearance.font.family.monospace
-                            color: Appearance.colors.colOnLayer1
+                            color: root.zzzEverywhere ? Appearance.zzz.ink : Appearance.colors.colOnLayer1
+                            Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
                         }
                     }
                     StyledText {
                         text: modelData.hint
                         font.pixelSize: Appearance.font.pixelSize.smallest
-                        color: Appearance.colors.colSubtext
+                        color: root.zzzEverywhere ? Appearance.zzz.inkMuted : Appearance.colors.colSubtext
+                        Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
                     }
                 }
             }

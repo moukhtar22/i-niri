@@ -9,6 +9,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Services.Mpris
+import Quickshell.Services.Pipewire
 import Quickshell.Io
 import Quickshell.Wayland
 
@@ -17,14 +18,24 @@ Item {
     property bool borderless: Config.options?.bar?.borderless ?? false
     readonly property MprisPlayer activePlayer: MprisController.activePlayer
     readonly property string cleanedTitle: StringUtils.cleanMusicTitle(activePlayer?.trackTitle) || Translation.tr("No media")
+    readonly property string fullTrackText: `${cleanedTitle}${activePlayer?.trackArtist ? ' • ' + activePlayer.trackArtist : ''}`
     readonly property string popupMode: Config.options?.media?.popupMode ?? "dock"
+    readonly property bool showVerboseLabel: Config.options?.bar?.verbose ?? true
+    readonly property bool hasTrackMetadata: (activePlayer?.trackTitle?.length ?? 0) > 0
+        || (activePlayer?.trackArtist?.length ?? 0) > 0
+    readonly property bool lockMediaWidth: showVerboseLabel && hasTrackMetadata
+    property int pendingTrackDirection: 0
+    readonly property int effectiveTrackAnimationDirection: pendingTrackDirection !== 0 ? pendingTrackDirection : 1
 
     Layout.fillHeight: true
     // Clamp width to prevent long song titles from overflowing into Workspaces.
     // The bar's centerSideModuleWidth binding already accounts for this, but
-    // an explicit maxWidth keeps the text properly elided inside the group.
-    readonly property real maxMediaWidth: 220
-    implicitWidth: Math.min(rowLayout.implicitWidth + rowLayout.spacing * 2, maxMediaWidth)
+    // a stable natural width prevents track-length changes from resizing the
+    // center pill every time metadata changes.
+    readonly property real maxMediaWidth: 220 * Appearance.fontSizeScale
+    implicitWidth: lockMediaWidth
+        ? maxMediaWidth
+        : Math.min(rowLayout.implicitWidth + rowLayout.spacing * 2, maxMediaWidth)
     implicitHeight: Appearance.sizes.barHeight
     clip: true
 
@@ -38,7 +49,43 @@ Item {
     // Volume popup
     property bool volumePopupVisible: false
     property real volumePopupValue: Math.max(0, Math.min(1, MprisController.getVolume()))
-    
+
+    // PipeWire stream fallback: players without MPRIS volume support (browser
+    // MPRIS bridges, some Electron apps) still have an audio stream whose
+    // volume we can drive directly. Cached (not a reactive binding) to avoid a
+    // binding loop: the binding read Audio.outputAppNodes, and the
+    // PwObjectTracker holding the resolved node invalidates node-property reads
+    // that feed outputAppNodes. Recomputed on active-player + node-list change.
+    property var playerStreamNode: null
+    function _updatePlayerStreamNode() {
+        const p = root.activePlayer
+        if (!p) { root.playerStreamNode = null; return }
+        const id = (p.identity ?? "").toLowerCase()
+        const entry = (p.desktopEntry ?? "").toLowerCase()
+        if (!id && !entry) { root.playerStreamNode = null; return }
+        root.playerStreamNode = Audio.outputAppNodes.find(n => {
+            const an = ((n.properties?.["application.name"] ?? n.name) ?? "").toLowerCase()
+            if (!an) return false
+            return (id && (an.includes(id) || id.includes(an)))
+                || (entry && (an.includes(entry) || entry.includes(an)))
+        }) ?? null
+    }
+    PwObjectTracker { objects: root.playerStreamNode ? [root.playerStreamNode] : [] }
+    Connections {
+        target: Audio
+        function onOutputAppNodesChanged() { root._updatePlayerStreamNode() }
+    }
+
+    // Track switch can swap the active player object; a stale popup value
+    // would then be applied to the new player on the next wheel tick.
+    onActivePlayerChanged: {
+        volumePopupVisible = false
+        volumePopupValue = Math.max(0, Math.min(1, MprisController.getVolume()))
+        root._updatePlayerStreamNode()
+    }
+    Component.onCompleted: root._updatePlayerStreamNode()
+
+
     // Bar-anchored media popup
     property bool barMediaPopupVisible: false
     
@@ -147,7 +194,8 @@ Item {
 
         Timer {
             id: _barMediaCloseTimer
-            interval: 200
+            // Keep the loader alive through the complete exit transition.
+            interval: Math.max(50, Appearance.animation.elementMoveFast.duration + 40)
             onTriggered: barMediaPopupLoader._barMediaClosing = false
         }
 
@@ -175,19 +223,30 @@ Item {
                 id: mediaPopupContent
                 anchors.centerIn: parent
                 onCloseRequested: root.barMediaPopupVisible = false
-                
-                // Entry/exit animation
-                opacity: root.barMediaPopupVisible ? 1 : 0
-                scale: root.barMediaPopupVisible ? 1 : 0.9
+
+                // Defer presentation so the first visible frame can transition.
+                property bool presented: false
+                Component.onCompleted: Qt.callLater(() => {
+                    mediaPopupContent.presented = root.barMediaPopupVisible
+                })
+                Connections {
+                    target: root
+                    function onBarMediaPopupVisibleChanged() {
+                        mediaPopupContent.presented = root.barMediaPopupVisible
+                    }
+                }
+
+                opacity: presented ? 1 : 0
+                scale: presented ? 1 : 0.975
                 transformOrigin: Config.options.bar.bottom ? Item.Bottom : Item.Top
 
                 Behavior on opacity {
                     enabled: Appearance.animationsEnabled
-                    NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                    NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                 }
                 Behavior on scale {
                     enabled: Appearance.animationsEnabled
-                    NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+                    NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                 }
             }
         }
@@ -198,11 +257,13 @@ Item {
         acceptedButtons: Qt.MiddleButton | Qt.BackButton | Qt.ForwardButton | Qt.RightButton | Qt.LeftButton
         onPressed: (event) => {
             if (event.button === Qt.MiddleButton) {
-                activePlayer?.togglePlaying();
+                MprisController.togglePlaying();
             } else if (event.button === Qt.BackButton) {
-                activePlayer?.previous();
+                root.pendingTrackDirection = -1
+                MprisController.previous();
             } else if (event.button === Qt.ForwardButton || event.button === Qt.RightButton) {
-                activePlayer?.next();
+                root.pendingTrackDirection = 1
+                MprisController.next();
             } else if (event.button === Qt.LeftButton) {
                 if (root.popupMode === "bar") {
                     root.barMediaPopupVisible = !root.barMediaPopupVisible
@@ -212,14 +273,18 @@ Item {
             }
         }
         onWheel: (event) => {
-            if (!MprisController.canChangeVolume) return
+            const mprisOk = MprisController.canChangeVolume
+            const node = root.playerStreamNode
+            const streamOk = !mprisOk && node?.audio
+            if (!mprisOk && !streamOk) return
             const step = 0.05
             const current = root.volumePopupVisible
                 ? root.volumePopupValue
-                : Math.max(0, Math.min(1, MprisController.getVolume()))
+                : Math.max(0, Math.min(1, mprisOk ? MprisController.getVolume() : node.audio.volume))
             if (event.angleDelta.y > 0) root.volumePopupValue = Math.min(1, current + step)
             else if (event.angleDelta.y < 0) root.volumePopupValue = Math.max(0, current - step)
-            MprisController.setVolume(root.volumePopupValue)
+            if (mprisOk) MprisController.setVolume(root.volumePopupValue)
+            else node.audio.volume = root.volumePopupValue
             volumePopupVisible = true
             hideTimer.restart()
         }
@@ -231,46 +296,199 @@ Item {
         spacing: 4
         anchors.fill: parent
 
-        ClippedFilledCircularProgress {
-            id: mediaCircProg
+        Item {
+            id: compactMediaGlyph
             Layout.alignment: Qt.AlignVCenter
-            lineWidth: Appearance.rounding.unsharpen
-            value: (activePlayer && activePlayer.length > 0) ? (activePlayer.position / activePlayer.length) : 0
-            implicitSize: 22
-            colPrimary: Appearance.inirEverywhere ? Appearance.inir.colPrimary
-                : Appearance.auroraEverywhere ? Appearance.colors.colPrimary
-                : Appearance.colors.colOnSecondaryContainer
-            enableAnimation: activePlayer?.playbackState === MprisPlaybackState.Playing
+            implicitWidth: Appearance.zzzEverywhere && !root.showVerboseLabel ? 30 : 22
+            implicitHeight: implicitWidth
 
-            Item {
+            ZzzPlate {
+                anchors.fill: parent
+                visible: Appearance.zzzEverywhere && !root.showVerboseLabel
+                fillColor: Appearance.zzz.paperAlt
+                strokeColor: Appearance.zzz.hairline
+                strokeWidth: 1
+                chamfer: Math.min(Appearance.zzz.cutCorner, 8)
+            }
+
+            ClippedFilledCircularProgress {
+                id: mediaCircProg
                 anchors.centerIn: parent
-                width: mediaCircProg.implicitSize
-                height: mediaCircProg.implicitSize
+                lineWidth: Appearance.zzzEverywhere ? 2 : Appearance.rounding.unsharpen
+                value: (activePlayer && activePlayer.length > 0) ? (activePlayer.position / activePlayer.length) : 0
+                implicitSize: Appearance.zzzEverywhere && !root.showVerboseLabel ? 22 : 22
+                colPrimary: Appearance.zzzEverywhere ? Appearance.zzz.accent
+                    : Appearance.inirEverywhere ? Appearance.inir.colPrimary
+                    : Appearance.auroraEverywhere ? Appearance.colors.colPrimary
+                    : Appearance.colors.colOnLayer0
+                enableAnimation: activePlayer?.playbackState === MprisPlaybackState.Playing
 
-                MaterialSymbol {
+                Item {
                     anchors.centerIn: parent
-                    fill: 1
-                    text: activePlayer?.isPlaying ? "pause" : "music_note"
-                    iconSize: Appearance.font.pixelSize.normal
-                    color: Appearance.inirEverywhere ? Appearance.inir.colOnPrimary
-                        : Appearance.auroraEverywhere ? Appearance.colors.colOnLayer0
-                        : Appearance.m3colors.m3onSecondaryContainer
+                    width: mediaCircProg.implicitSize
+                    height: mediaCircProg.implicitSize
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        fill: 1
+                        text: activePlayer?.isPlaying ? "pause" : "music_note"
+                        iconSize: Appearance.font.pixelSize.normal
+                        color: Appearance.zzzEverywhere ? Appearance.zzz.ink
+                            : Appearance.inirEverywhere ? Appearance.inir.colOnPrimary
+                            : Appearance.auroraEverywhere ? Appearance.colors.colOnLayer0
+                            : Appearance.colors.colOnLayer0
+                        Behavior on color {
+                            enabled: Appearance.animationsEnabled
+                            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                        }
+                    }
                 }
             }
         }
 
-        StyledText {
-            visible: Config.options?.bar?.verbose ?? true
-            width: rowLayout.width - (CircularProgress.size + rowLayout.spacing * 2)
+        Item {
+            id: titleScroller
+            visible: root.showVerboseLabel
             Layout.alignment: Qt.AlignVCenter
             Layout.fillWidth: true
             Layout.rightMargin: rowLayout.spacing
-            horizontalAlignment: Text.AlignHCenter
-            elide: Text.ElideRight
-            color: Appearance.inirEverywhere ? Appearance.inir.colText
-                : Appearance.auroraEverywhere ? Appearance.colors.colOnLayer0
-                : Appearance.colors.colOnLayer1
-            text: `${cleanedTitle}${activePlayer?.trackArtist ? ' • ' + activePlayer.trackArtist : ''}`
+            implicitWidth: titleText.implicitWidth
+            implicitHeight: titleText.implicitHeight
+            clip: true
+
+            readonly property string fullText: root.fullTrackText
+            readonly property bool overflowing: titleText.implicitWidth > width + 1
+            // Continuous wraparound: scroll one text width + gap, then loop. The
+            // trailing copy enters from the right exactly as the first exits left,
+            // so it reads as a single seamless ribbon with no fade-snap.
+            readonly property real gap: 40
+            readonly property real loopDistance: titleText.implicitWidth + gap
+
+            Row {
+                id: marqueeRow
+                height: parent.height
+                spacing: titleScroller.gap
+                x: 0
+
+                StyledText {
+                    id: titleText
+                    height: marqueeRow.height
+                    verticalAlignment: Text.AlignVCenter
+                    horizontalAlignment: titleScroller.overflowing ? Text.AlignLeft : Text.AlignHCenter
+                    width: titleScroller.overflowing ? implicitWidth : titleScroller.width
+                    elide: Text.ElideNone
+                    animateChange: true
+                    animationDistanceX: root.effectiveTrackAnimationDirection * 10
+                    animationDistanceY: 0
+                    color: Appearance.zzzEverywhere ? Appearance.zzz.ink
+                        : Appearance.inirEverywhere ? Appearance.inir.colText
+                        : Appearance.auroraEverywhere ? Appearance.colors.colOnLayer0
+                        : Appearance.colors.colOnLayer1
+                    Behavior on color {
+                        enabled: Appearance.animationsEnabled
+                        ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                    }
+                    text: titleScroller.fullText
+                    onTextChanged: {
+                        root.pendingTrackDirection = 0
+                        if (!titleScroller.overflowing) marqueeRow.x = 0
+                        if (!titleScroller._marqueeHovered && titleScroller.overflowing && Appearance.animationsEnabled) {
+                            scrollAnim.stop()
+                            titleScroller._marqueeHolding = true
+                            titleScroller._startHoldTimer()
+                        }
+                    }
+                }
+
+                // Trailing copy — only present while scrolling, enters from the right.
+                StyledText {
+                    height: marqueeRow.height
+                    verticalAlignment: Text.AlignVCenter
+                    visible: titleScroller.overflowing
+                    elide: Text.ElideNone
+                    color: titleText.color
+                    font: titleText.font
+                    text: titleScroller.fullText
+                }
+            }
+
+            // Pausable marquee: hold at start, then glide left continuously.
+            // Hover pauses mid-scroll; on exit it resumes from the paused position.
+            property bool _marqueeHolding: true
+            property bool _marqueeHovered: false
+
+            function _startHoldTimer() {
+                if (!titleScroller.visible || !titleScroller.overflowing
+                        || !Appearance.animationsEnabled || _marqueeHovered) return
+                holdTimer.start()
+            }
+
+            Timer {
+                id: holdTimer
+                interval: 1800
+                onTriggered: {
+                    titleScroller._marqueeHolding = false
+                    marqueeRow.x = 0
+                    scrollAnim.start()
+                }
+            }
+
+            NumberAnimation {
+                id: scrollAnim
+                target: marqueeRow; property: "x"
+                from: 0
+                to: -titleScroller.loopDistance
+                duration: Math.max(3500, titleScroller.loopDistance * 42)
+                easing.type: Easing.Linear
+                // Gate on running — binding setPaused() on a stopped animation warns.
+                paused: titleScroller._marqueeHovered && scrollAnim.running
+                onFinished: {
+                    marqueeRow.x = 0
+                    titleScroller._marqueeHolding = true
+                    titleScroller._startHoldTimer()
+                }
+            }
+
+            // Kick off on geometry/overflow changes
+            onOverflowingChanged: {
+                if (!overflowing) {
+                    marqueeRow.x = 0
+                    scrollAnim.stop()
+                    titleScroller._marqueeHolding = true
+                } else if (!_marqueeHovered) {
+                    scrollAnim.stop()
+                    titleScroller._marqueeHolding = true
+                    titleScroller._startHoldTimer()
+                }
+            }
+
+            onVisibleChanged: {
+                if (!visible) {
+                    holdTimer.stop()
+                    scrollAnim.stop()
+                    marqueeRow.x = 0
+                    _marqueeHolding = true
+                } else if (overflowing && !_marqueeHovered) {
+                    _startHoldTimer()
+                }
+            }
+
+            HoverHandler {
+                id: titleHoverHandler
+                onHoveredChanged: {
+                    titleScroller._marqueeHovered = hovered
+                    if (hovered) {
+                        holdTimer.stop()
+                    } else {
+                        if (titleScroller.overflowing && Appearance.animationsEnabled) {
+                            if (titleScroller._marqueeHolding) {
+                                titleScroller._startHoldTimer()
+                            }
+                            // NumberAnimation.paused is already false, so it resumes
+                        }
+                    }
+                }
+            }
         }
 
     }

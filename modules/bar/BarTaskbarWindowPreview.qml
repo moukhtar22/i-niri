@@ -41,7 +41,7 @@ Button {
                 : "transparent")
 
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
         }
     }
 
@@ -61,6 +61,9 @@ Button {
                     const de = AppSearch.lookupDesktopEntry(appId);
                     const icon = de?.icon || AppSearch.guessIcon(appId);
                     const resolved = IconThemeService.smartIconName(icon, appId);
+                    if (resolved.startsWith("/") || resolved.startsWith("file://")) {
+                        return resolved.startsWith("file://") ? resolved : `file://${resolved}`;
+                    }
                     return Quickshell.iconPath(resolved, "application-x-executable");
                 }
                 implicitSize: 16
@@ -76,7 +79,9 @@ Button {
                 StyledText {
                     anchors.fill: parent
                     anchors.rightMargin: closeButton.visible ? closeButton.width + 4 : 0
-                    text: root.toplevel?.title ?? ""
+                    text: root.toplevel?._sourceToplevel?.title
+                        ?? root.toplevel?.title
+                        ?? ""
                     elide: Text.ElideRight
                     font.pixelSize: Appearance.font.pixelSize.small
                     color: Appearance.inirEverywhere
@@ -88,10 +93,15 @@ Button {
 
             RippleButton {
                 id: closeButton
-                visible: root.hovered
+                opacity: root.hovered ? 1 : 0
+                visible: opacity > 0
                 implicitWidth: 20
                 implicitHeight: 20
                 buttonRadius: Appearance.rounding.full
+                Behavior on opacity {
+                    enabled: Appearance.animationsEnabled
+                    NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                }
                 colBackground: "transparent"
                 colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colError, 0.8)
                 colRipple: ColorUtils.transparentize(Appearance.colors.colError, 0.6)
@@ -166,7 +176,8 @@ Button {
                 smooth: true
 
                 Behavior on opacity {
-                    NumberAnimation { duration: 200; easing.type: Easing.OutQuad }
+                    enabled: Appearance.animationsEnabled
+                    NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                 }
             }
 
@@ -179,10 +190,16 @@ Button {
                 mipmap: true
                 anchors.fill: parent
                 anchors.margins: 2
+                // The preview file is a full-resolution window capture; decoding it
+                // natively for a thumbnail this size costs megabytes per hovered
+                // window. 2x the drawn size keeps it crisp under mipmap.
+                sourceSize.width: Math.max(1, Math.round(windowPreview.width * 2))
+                sourceSize.height: Math.max(1, Math.round(windowPreview.height * 2))
                 opacity: status === Image.Ready ? 1 : 0
 
                 Behavior on opacity {
-                    NumberAnimation { duration: 200; easing.type: Easing.OutQuad }
+                    enabled: Appearance.animationsEnabled
+                    NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                 }
 
                 layer.enabled: true

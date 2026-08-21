@@ -13,27 +13,39 @@ import qs.modules.common.functions
 MouseArea {
     id: root
 
-    visible: ShellUpdates.showUpdate || ShellUpdates.isUpdating
-    implicitWidth: visible ? pill.width : 0
+    visible: implicitWidth > 0
+    implicitWidth: (ShellUpdates.showUpdate || ShellUpdates.isUpdating) ? pill.width : 0
     implicitHeight: Appearance.sizes.barHeight
+
+    Behavior on implicitWidth {
+        enabled: Appearance.animationsEnabled
+        animation: NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve }
+    }
 
     hoverEnabled: true
     cursorShape: ShellUpdates.isUpdating ? Qt.ArrowCursor : Qt.PointingHandCursor
     acceptedButtons: Qt.LeftButton | Qt.RightButton
 
     readonly property color accentColor: Appearance.angelEverywhere ? Appearance.angel.colPrimary
-        : Appearance.inirEverywhere ? (Appearance.inir?.colAccent ?? Appearance.m3colors.m3primary)
-        : Appearance.auroraEverywhere ? (Appearance.aurora?.colAccent ?? Appearance.m3colors.m3primary)
-        : Appearance.m3colors.m3primary
+        : Appearance.inirEverywhere ? (Appearance.inir?.colAccent ?? Appearance.colors.colPrimary)
+        : Appearance.auroraEverywhere ? (Appearance.aurora?.colAccent ?? Appearance.colors.colPrimary)
+        : Appearance.colors.colPrimary
 
     onClicked: (mouse) => {
         if (ShellUpdates.isUpdating) return;
-        
+
         if (mouse.button === Qt.RightButton) {
             ShellUpdates.dismiss()
         } else {
             ShellUpdates.openOverlay()
         }
+    }
+
+    // Easter egg: long-press instead of clicking and she takes the credit
+    onPressAndHold: {
+        if (Config.options?.mascot?.enable ?? false)
+            Quickshell.execDetached([Quickshell.shellPath("scripts/inir"), "mascot", "appearWithLine",
+                "update-ready", "top", Translation.tr("Pressed it. You're welcome.")])
     }
 
     // Background pill
@@ -47,9 +59,9 @@ MouseArea {
         color: {
             if (ShellUpdates.isUpdating) {
                 if (Appearance.angelEverywhere) return ColorUtils.transparentize(Appearance.angel.colPrimary, 0.92)
-                if (Appearance.inirEverywhere) return ColorUtils.transparentize(Appearance.inir?.colAccent ?? Appearance.m3colors.m3primary, 0.92)
-                if (Appearance.auroraEverywhere) return ColorUtils.transparentize(Appearance.aurora?.colAccent ?? Appearance.m3colors.m3primary, 0.92)
-                return ColorUtils.transparentize(Appearance.m3colors.m3primary, 0.92)
+                if (Appearance.inirEverywhere) return ColorUtils.transparentize(Appearance.inir?.colAccent ?? Appearance.colors.colPrimary, 0.92)
+                if (Appearance.auroraEverywhere) return ColorUtils.transparentize(Appearance.aurora?.colAccent ?? Appearance.colors.colPrimary, 0.92)
+                return ColorUtils.transparentize(Appearance.colors.colPrimary, 0.92)
             }
             if (root.pressed) {
                 if (Appearance.angelEverywhere) return Appearance.angel.colGlassCardActive
@@ -64,9 +76,9 @@ MouseArea {
                 return Appearance.colors.colLayer1Hover
             }
             if (Appearance.angelEverywhere) return ColorUtils.transparentize(Appearance.angel.colPrimary, 0.85)
-            if (Appearance.inirEverywhere) return ColorUtils.transparentize(Appearance.inir?.colAccent ?? Appearance.m3colors.m3primary, 0.85)
-            if (Appearance.auroraEverywhere) return ColorUtils.transparentize(Appearance.aurora?.colAccent ?? Appearance.m3colors.m3primary, 0.85)
-            return ColorUtils.transparentize(Appearance.m3colors.m3primary, 0.88)
+            if (Appearance.inirEverywhere) return ColorUtils.transparentize(Appearance.inir?.colAccent ?? Appearance.colors.colPrimary, 0.85)
+            if (Appearance.auroraEverywhere) return ColorUtils.transparentize(Appearance.aurora?.colAccent ?? Appearance.colors.colPrimary, 0.85)
+            return ColorUtils.transparentize(Appearance.colors.colPrimary, 0.88)
         }
 
         border.width: (Appearance.angelEverywhere || Appearance.inirEverywhere) ? 1 : 0
@@ -74,10 +86,12 @@ MouseArea {
             : Appearance.inirEverywhere ? Appearance.inir.colBorder : "transparent"
 
         Behavior on color {
+            enabled: Appearance.animationsEnabled
             animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
         }
         Behavior on scale {
-            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+            enabled: Appearance.animationsEnabled
+            NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
         }
     }
 
@@ -134,213 +148,260 @@ MouseArea {
         id: updatePopup
         hoverTarget: root
 
-        ColumnLayout {
-            spacing: 6
+        // Wrapper caps implicitWidth so StyledPopup doesn't grow unbounded
+        // (monospace hashes + branch names exceed the visual area otherwise)
+        Item {
+            readonly property real minW: 220
+            readonly property real maxW: 280
+            anchors.centerIn: parent
+            width: Math.min(Math.max(columnContent.implicitWidth, minW), maxW)
+            height: columnContent.implicitHeight
+            implicitWidth: width
+            implicitHeight: height
+            clip: true
 
-            // Header row — icon + title
-            Row {
-                spacing: 5
+            ColumnLayout {
+                id: columnContent
+                width: parent.width
+                spacing: 6
 
-                MaterialSymbol {
-                    anchors.verticalCenter: parent.verticalCenter
-                    fill: 0
-                    font.weight: Font.Medium
-                    text: ShellUpdates.isUpdating ? "progress_activity" : "deployed_code_update"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnSurfaceVariant
-                    
-                    RotationAnimation on rotation {
-                        loops: Animation.Infinite
-                        running: ShellUpdates.isUpdating && updatePopup.active
-                        from: 0
-                        to: 360
-                        duration: 1200
+                // Header row
+                Row {
+                    spacing: 5
+
+                    MaterialSymbol {
+                        anchors.verticalCenter: parent.verticalCenter
+                        fill: 0
+                        font.weight: Font.Medium
+                        text: ShellUpdates.isUpdating ? "progress_activity" : "deployed_code_update"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colOnSurfaceVariant
+
+                        RotationAnimation on rotation {
+                            loops: Animation.Infinite
+                            running: ShellUpdates.isUpdating && updatePopup.active
+                            from: 0
+                            to: 360
+                            duration: 1200
+                        }
+                    }
+
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: ShellUpdates.isUpdating ? Translation.tr("Updating...") : Translation.tr("iNiR Update")
+                        font {
+                            weight: Font.Medium
+                            pixelSize: Appearance.font.pixelSize.normal
+                        }
+                        color: Appearance.colors.colOnSurfaceVariant
                     }
                 }
 
-                StyledText {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: ShellUpdates.isUpdating ? Translation.tr("Updating...") : Translation.tr("iNiR Update")
-                    font {
-                        weight: Font.Medium
-                        pixelSize: Appearance.font.pixelSize.normal
+                // Update progress
+                RowLayout {
+                    visible: ShellUpdates.isUpdating
+                    spacing: 5
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+
+                    MaterialSymbol {
+                        text: "info"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colOnSurfaceVariant
                     }
-                    color: Appearance.colors.colOnSurfaceVariant
-                }
-            }
-
-            // Update Progress details (Only visible when updating)
-            RowLayout {
-                visible: ShellUpdates.isUpdating
-                spacing: 5
-                Layout.fillWidth: true
-
-                MaterialSymbol {
-                    text: "info"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnSurfaceVariant
-                }
-                StyledText {
-                    Layout.fillWidth: true
-                    text: ShellUpdates.updateStepMessage.length > 0 ? Translation.tr(ShellUpdates.updateStepMessage) : Translation.tr("Processing...")
-                    color: Appearance.colors.colOnSurfaceVariant
-                }
-                StyledText {
-                    visible: ShellUpdates.updateStep > 0 && ShellUpdates.updateTotalSteps > 0
-                    text: Translation.tr("Step") + " " + ShellUpdates.updateStep + "/" + ShellUpdates.updateTotalSteps
-                    color: Appearance.colors.colOnSurfaceVariant
-                    font.weight: Font.DemiBold
-                }
-            }
-
-            // Commits behind
-            RowLayout {
-                visible: !ShellUpdates.isUpdating
-                spacing: 5
-                Layout.fillWidth: true
-
-                MaterialSymbol {
-                    text: "download"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnSurfaceVariant
-                }
-                StyledText {
-                    text: Translation.tr("Behind:")
-                    color: Appearance.colors.colOnSurfaceVariant
-                }
-                StyledText {
-                    Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignRight
-                    text: ShellUpdates.commitsBehind > 0
-                        ? (ShellUpdates.commitsBehind + " " + Translation.tr("commit(s)"))
-                        : Translation.tr("Update available")
-                    color: ShellUpdates.commitsBehind > 10
-                        ? (Appearance.m3colors?.m3error ?? Appearance.colors.colOnSurfaceVariant)
-                        : Appearance.colors.colOnSurfaceVariant
-                    font.weight: Font.Medium
-                }
-            }
-
-            // Version row
-            RowLayout {
-                visible: !ShellUpdates.isUpdating && ShellUpdates.localVersion.length > 0 && ShellUpdates.remoteVersion.length > 0 && ShellUpdates.remoteVersion !== ShellUpdates.localVersion
-                spacing: 5
-                Layout.fillWidth: true
-
-                MaterialSymbol {
-                    text: "tag"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnSurfaceVariant
-                }
-                StyledText {
-                    text: Translation.tr("Version:")
-                    color: Appearance.colors.colOnSurfaceVariant
-                }
-                StyledText {
-                    Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignRight
-                    text: "v" + ShellUpdates.localVersion + "  →  v" + ShellUpdates.remoteVersion
-                    font {
-                        family: Appearance.font.family.monospace
-                        weight: Font.Medium
+                    StyledText {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        text: ShellUpdates.updateStepMessage.length > 0 ? Translation.tr(ShellUpdates.updateStepMessage) : Translation.tr("Processing...")
+                        color: Appearance.colors.colOnSurfaceVariant
+                        elide: Text.ElideRight
                     }
-                    color: Appearance.colors.colOnSurfaceVariant
-                }
-            }
-
-            // Commit comparison row
-            RowLayout {
-                visible: !ShellUpdates.isUpdating
-                spacing: 5
-                Layout.fillWidth: true
-
-                MaterialSymbol {
-                    text: "commit"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnSurfaceVariant
-                }
-                StyledText {
-                    text: Translation.tr("Commit:")
-                    color: Appearance.colors.colOnSurfaceVariant
-                }
-                StyledText {
-                    Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignRight
-                    text: (ShellUpdates.localCommit || "\u2014") +
-                        (ShellUpdates.remoteCommit.length > 0 ? ("  →  " + ShellUpdates.remoteCommit) : "")
-                    font {
-                        family: Appearance.font.family.monospace
-                        weight: Font.Medium
+                    StyledText {
+                        visible: ShellUpdates.updateStep > 0 && ShellUpdates.updateTotalSteps > 0
+                        text: Translation.tr("Step") + " " + ShellUpdates.updateStep + "/" + ShellUpdates.updateTotalSteps
+                        color: Appearance.colors.colOnSurfaceVariant
+                        font.weight: Font.DemiBold
                     }
-                    color: Appearance.colors.colOnSurfaceVariant
                 }
-            }
 
-            // Branch row
-            RowLayout {
-                visible: !ShellUpdates.isUpdating && ShellUpdates.currentBranch.length > 0
-                spacing: 5
-                Layout.fillWidth: true
-
-                MaterialSymbol {
-                    text: "account_tree"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnSurfaceVariant
-                }
-                StyledText {
-                    text: Translation.tr("Branch:")
-                    color: Appearance.colors.colOnSurfaceVariant
-                }
-                StyledText {
+                // Commits behind
+                RowLayout {
+                    visible: !ShellUpdates.isUpdating
+                    spacing: 5
                     Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignRight
-                    text: ShellUpdates.currentBranch
-                    font.family: Appearance.font.family.monospace
-                    color: Appearance.colors.colOnSurfaceVariant
-                }
-            }
+                    Layout.minimumWidth: 0
 
-            // Error display
-            RowLayout {
-                spacing: 5
-                visible: !ShellUpdates.isUpdating && ShellUpdates.lastError.length > 0
-                Layout.fillWidth: true
-                Layout.maximumWidth: 280
-
-                MaterialSymbol {
-                    text: "error"
-                    color: Appearance.m3colors?.m3error ?? Appearance.colors.colOnSurfaceVariant
-                    iconSize: Appearance.font.pixelSize.large
+                    MaterialSymbol {
+                        text: "download"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colOnSurfaceVariant
+                    }
+                    StyledText {
+                        text: Translation.tr("Behind:")
+                        color: Appearance.colors.colOnSurfaceVariant
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        horizontalAlignment: Text.AlignRight
+                        elide: Text.ElideRight
+                        text: ShellUpdates.commitsBehind > 0
+                            ? (ShellUpdates.commitsBehind + " " + Translation.tr("commit(s)"))
+                            : Translation.tr("Update available")
+                        color: ShellUpdates.commitsBehind > 10
+                            ? (Appearance.m3colors?.m3error ?? Appearance.colors.colOnSurfaceVariant)
+                            : Appearance.colors.colOnSurfaceVariant
+                        font.weight: Font.Medium
+                    }
                 }
-                StyledText {
+
+                // Version row
+                RowLayout {
+                    visible: !ShellUpdates.isUpdating && ShellUpdates.localVersion.length > 0 && ShellUpdates.remoteVersion.length > 0 && ShellUpdates.remoteVersion !== ShellUpdates.localVersion
+                    spacing: 5
                     Layout.fillWidth: true
-                    text: ShellUpdates.lastError
+                    Layout.minimumWidth: 0
+
+                    MaterialSymbol {
+                        text: "tag"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colOnSurfaceVariant
+                    }
+                    StyledText {
+                        text: Translation.tr("Version:")
+                        color: Appearance.colors.colOnSurfaceVariant
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        horizontalAlignment: Text.AlignRight
+                        elide: Text.ElideMiddle
+                        text: "v" + ShellUpdates.localVersion + "  →  v" + ShellUpdates.remoteVersion
+                        font {
+                            family: Appearance.font.family.monospace
+                            weight: Font.Medium
+                        }
+                        color: Appearance.colors.colOnSurfaceVariant
+                    }
+                }
+
+                // Commit comparison row
+                RowLayout {
+                    visible: !ShellUpdates.isUpdating
+                    spacing: 5
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+
+                    MaterialSymbol {
+                        text: "commit"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colOnSurfaceVariant
+                    }
+                    StyledText {
+                        text: Translation.tr("Commit:")
+                        color: Appearance.colors.colOnSurfaceVariant
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        horizontalAlignment: Text.AlignRight
+                        elide: Text.ElideMiddle
+                        text: (ShellUpdates.localCommit || "\u2014") +
+                            (ShellUpdates.remoteCommit.length > 0 ? ("  →  " + ShellUpdates.remoteCommit) : "")
+                        font {
+                            family: Appearance.font.family.monospace
+                            weight: Font.Medium
+                        }
+                        color: Appearance.colors.colOnSurfaceVariant
+                    }
+                }
+
+                // Branch row
+                RowLayout {
+                    visible: !ShellUpdates.isUpdating && ShellUpdates.currentBranch.length > 0
+                    spacing: 5
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+
+                    MaterialSymbol {
+                        text: "account_tree"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: ShellUpdates.isNonMainBranch
+                            ? Appearance.colors.colTertiary
+                            : Appearance.colors.colOnSurfaceVariant
+                    }
+                    StyledText {
+                        text: Translation.tr("Branch:")
+                        color: Appearance.colors.colOnSurfaceVariant
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        horizontalAlignment: Text.AlignRight
+                        elide: Text.ElideMiddle
+                        text: ShellUpdates.currentBranch
+                        font.family: Appearance.font.family.monospace
+                        color: ShellUpdates.isNonMainBranch
+                            ? Appearance.colors.colTertiary
+                            : Appearance.colors.colOnSurfaceVariant
+                    }
+                }
+
+                // Non-main branch hint
+                StyledText {
+                    visible: ShellUpdates.isNonMainBranch && !ShellUpdates.isUpdating
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    text: Translation.tr("You are on a non-release branch. Updates track this branch.")
                     font.pixelSize: Appearance.font.pixelSize.smallest
-                    color: Appearance.m3colors?.m3error ?? Appearance.colors.colOnSurfaceVariant
+                    color: Appearance.colors.colTertiary
                     wrapMode: Text.WordWrap
+                    opacity: 0.85
                 }
-            }
 
-            // Separator
-            Rectangle {
-                visible: !ShellUpdates.isUpdating
-                Layout.fillWidth: true
-                Layout.preferredHeight: 1
-                Layout.topMargin: 2
-                Layout.bottomMargin: 2
-                color: Appearance.angelEverywhere ? Appearance.angel.colBorderSubtle
-                    : Appearance.inirEverywhere ? (Appearance.inir?.colBorder ?? Appearance.colors.colLayer0Border)
-                    : Appearance.colors.colLayer0Border
-                opacity: 0.5
-            }
+                // Error display
+                RowLayout {
+                    spacing: 5
+                    visible: !ShellUpdates.isUpdating && ShellUpdates.lastError.length > 0
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
 
-            // Hint
-            StyledText {
-                visible: !ShellUpdates.isUpdating
-                text: Translation.tr("Click for details · Right-click to dismiss")
-                font.pixelSize: Appearance.font.pixelSize.smallest
-                color: Appearance.colors.colOnSurfaceVariant
-                opacity: 0.6
+                    MaterialSymbol {
+                        text: "error"
+                        color: Appearance.m3colors?.m3error ?? Appearance.colors.colOnSurfaceVariant
+                        iconSize: Appearance.font.pixelSize.large
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        text: ShellUpdates.lastError
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        color: Appearance.m3colors?.m3error ?? Appearance.colors.colOnSurfaceVariant
+                        wrapMode: Text.WordWrap
+                    }
+                }
+
+                // Separator
+                Rectangle {
+                    visible: !ShellUpdates.isUpdating
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 1
+                    Layout.topMargin: 2
+                    Layout.bottomMargin: 2
+                    color: Appearance.angelEverywhere ? Appearance.angel.colBorderSubtle
+                        : Appearance.inirEverywhere ? (Appearance.inir?.colBorder ?? Appearance.colors.colLayer0Border)
+                        : Appearance.colors.colLayer0Border
+                    opacity: 0.5
+                }
+
+                // Hint
+                StyledText {
+                    visible: !ShellUpdates.isUpdating
+                    text: Translation.tr("Click for details · Right-click to dismiss")
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    color: Appearance.colors.colOnSurfaceVariant
+                    opacity: 0.6
+                }
             }
         }
     }

@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 
+import qs
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
@@ -36,7 +37,7 @@ Item {
     readonly property color colTextSecondary: Appearance.inirEverywhere ? Appearance.inir.colTextSecondary : Appearance.colors.colSubtext
     readonly property color colPrimary: Appearance.inirEverywhere ? Appearance.inir.colPrimary : Appearance.colors.colPrimary
     readonly property color colSurface: Appearance.angelEverywhere ? Appearance.angel.colGlassCard : Appearance.inirEverywhere ? Appearance.inir.colLayer1 : Appearance.auroraEverywhere ? "transparent" : Appearance.colors.colLayer1
-    readonly property color colSurfaceHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover : Appearance.inirEverywhere ? Appearance.inir.colLayer1Hover : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface : Appearance.colors.colLayer1Hover
+    readonly property color colSurfaceHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover : Appearance.inirEverywhere ? Appearance.inir.colLayer1Hover : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover : Appearance.colors.colLayer1Hover
     readonly property color colLayer2: Appearance.angelEverywhere ? Appearance.angel.colGlassElevated : Appearance.inirEverywhere ? Appearance.inir.colLayer2 : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface : Appearance.colors.colLayer2
     readonly property color colLayer2Hover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover : Appearance.inirEverywhere ? Appearance.inir.colLayer2Hover : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover : Appearance.colors.colLayer2Hover
     readonly property color colBorder: Appearance.angelEverywhere ? Appearance.angel.colCardBorder : Appearance.inirEverywhere ? Appearance.inir.colBorder : "transparent"
@@ -604,10 +605,15 @@ Item {
                         placeholderText: "/path/to/cookies.txt"
                         text: YtMusic.customCookiesPath
                         color: root.colText
+                        renderType: Text.NativeRendering
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         placeholderTextColor: root.colTextSecondary
                         background: Item {}
                         onAccepted: if (text) { YtMusic.setCustomCookiesPath(text); advancedOptionsPopup.close() }
+
+                        TextInputContextMenu {
+                            target: cookiesFieldPopup
+                        }
                     }
                 }
             }
@@ -704,7 +710,12 @@ Item {
                         TextField {
                             id: oauthClientIdField; anchors.fill: parent; anchors.margins: 6
                             placeholderText: "xxxxx.apps.googleusercontent.com"; color: root.colText
+                            renderType: Text.NativeRendering
                             font.pixelSize: Appearance.font.pixelSize.smallest; placeholderTextColor: root.colTextSecondary; background: Item {}
+
+                            TextInputContextMenu {
+                                target: oauthClientIdField
+                            }
                         }
                     }
 
@@ -715,7 +726,12 @@ Item {
                         TextField {
                             id: oauthClientSecretField; anchors.fill: parent; anchors.margins: 6
                             placeholderText: "GOCSPX-..."; color: root.colText; echoMode: TextInput.Password
+                            renderType: Text.NativeRendering
                             font.pixelSize: Appearance.font.pixelSize.smallest; placeholderTextColor: root.colTextSecondary; background: Item {}
+
+                            TextInputContextMenu {
+                                target: oauthClientSecretField
+                            }
                         }
                     }
 
@@ -765,7 +781,7 @@ Item {
                         StyledText {
                             anchors.centerIn: parent
                             text: YtMusic.oauthUserCode
-                            font.pixelSize: 22; font.weight: Font.Bold; font.letterSpacing: 3
+                            font.pixelSize: Appearance.font.pixelSize.huge; font.weight: Font.Bold; font.letterSpacing: 3
                             color: root.colPrimary
                         }
                     }
@@ -1042,7 +1058,7 @@ Item {
                     RotationAnimation on rotation {
                         from: 0; to: 360; duration: 1000
                         loops: Animation.Infinite
-                        running: YtMusic.searching
+                        running: YtMusic.searching && GlobalStates.sidebarLeftOpen
                     }
 
                     // Reset rotation to 0 when search ends so icon doesn't stay tilted
@@ -1060,6 +1076,7 @@ Item {
                     Layout.fillWidth: true
                     placeholderText: Translation.tr("Search YouTube Music...")
                     color: root.colText
+                    renderType: Text.NativeRendering
                     placeholderTextColor: root.colTextSecondary
                     font.pixelSize: Appearance.font.pixelSize.normal
                     font.family: Appearance.font.family.main
@@ -1067,6 +1084,10 @@ Item {
                     selectByMouse: true
                     onAccepted: { if (text.trim()) YtMusic.search(text) }
                     Keys.onEscapePressed: { text = ""; focus = false }
+
+                    TextInputContextMenu {
+                        target: searchField
+                    }
                 }
                 
                 RippleButton {
@@ -1340,6 +1361,7 @@ Item {
                         enabled: !YtMusic.syncingLiked
                         onClicked: { YtMusic.fetchLikedSongs(); YtMusic.fetchYtMusicPlaylists() }
                         contentItem: MaterialSymbol {
+                            id: syncIcon
                             anchors.centerIn: parent
                             text: "sync"
                             iconSize: 20
@@ -1347,7 +1369,8 @@ Item {
                             RotationAnimation on rotation {
                                 from: 0; to: 360; duration: 1000
                                 loops: Animation.Infinite
-                                running: YtMusic.syncingLiked
+                                running: YtMusic.syncingLiked && GlobalStates.sidebarLeftOpen
+                                onRunningChanged: if (!running) syncIcon.rotation = 0
                             }
                         }
                         StyledToolTip { text: Translation.tr("Sync library") }

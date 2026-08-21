@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Widgets
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.functions
 import qs.services
 
 ContentPage {
@@ -42,7 +43,7 @@ ContentPage {
                         anchors.fill: distroIconImage
                         source: distroIconImage
                         colorization: 1
-                        colorizationColor: Appearance.m3colors.m3primary
+                        colorizationColor: Appearance.colors.colPrimary
                         visible: distroIconImage.status === Image.Ready
                     }
 
@@ -51,7 +52,7 @@ ContentPage {
                         visible: distroIconImage.status !== Image.Ready
                         text: "computer"
                         iconSize: 64
-                        color: Appearance.m3colors.m3primary
+                        color: Appearance.colors.colPrimary
                     }
 
                 }
@@ -67,7 +68,7 @@ ContentPage {
                     StyledText {
                         visible: SystemInfo.homeUrl && SystemInfo.homeUrl.length > 0
                         font.pixelSize: Appearance.font.pixelSize.small
-                        color: Appearance.m3colors.m3primary
+                        color: Appearance.colors.colPrimary
                         text: SystemInfo.homeUrl ? `[${SystemInfo.homeUrl}](${SystemInfo.homeUrl})` : ""
                         textFormat: Text.MarkdownText
                         onLinkActivated: (link) => {
@@ -133,7 +134,7 @@ ContentPage {
                     radius: 34
                     color: "transparent"
                     border.width: 2
-                    border.color: Appearance.m3colors.m3primary
+                    border.color: Appearance.colors.colPrimary
 
                     Image {
                         id: projectIcon
@@ -143,7 +144,7 @@ ContentPage {
                         height: 60
                         sourceSize.width: 60
                         sourceSize.height: 60
-                        source: Quickshell.shellPath("assets/icons/sf.svg")
+                        source: Quickshell.shellPath("assets/icons/sf.jpg")
                         fillMode: Image.PreserveAspectFit
                         layer.enabled: Appearance.effectsEnabled
 
@@ -169,10 +170,9 @@ ContentPage {
                         visible: projectIcon.status !== Image.Ready
                         text: "deployed_code"
                         iconSize: 48
-                        color: Appearance.m3colors.m3primary
+                        color: Appearance.colors.colPrimary
                     }
 
-                    // Avatar interaction feedback
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
@@ -182,7 +182,7 @@ ContentPage {
                     Text {
                         id: _avatarFxLabel
                         text: "\ud83e\udec3\ud83c\udffb"
-                        font.pixelSize: 36
+                        font.pixelSize: Appearance.font.pixelSize.hugeass
                         anchors.centerIn: parent
                         visible: false
                         z: 10
@@ -213,10 +213,43 @@ ContentPage {
                         font.pixelSize: Appearance.font.pixelSize.title
                     }
 
+                    RowLayout {
+                        spacing: 6
+
+                        StyledText {
+                            text: ShellUpdates.localVersion || "—"
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colSubtext
+                        }
+
+                        Rectangle {
+                            visible: ShellUpdates.currentBranch.length > 0
+                            implicitWidth: branchLabel.implicitWidth + 12
+                            implicitHeight: branchLabel.implicitHeight + 4
+                            radius: Appearance.rounding.small
+                            color: ShellUpdates.isNonMainBranch
+                                ? ColorUtils.transparentize(Appearance.colors.colTertiary, 0.8)
+                                : ColorUtils.transparentize(Appearance.colors.colSubtext, 0.85)
+
+                            StyledText {
+                                id: branchLabel
+                                anchors.centerIn: parent
+                                text: ShellUpdates.currentBranch
+                                font {
+                                    pixelSize: Appearance.font.pixelSize.smallest
+                                    family: Appearance.font.family.monospace
+                                }
+                                color: ShellUpdates.isNonMainBranch
+                                    ? Appearance.colors.colTertiary
+                                    : Appearance.colors.colSubtext
+                            }
+                        }
+                    }
+
                     StyledText {
                         text: "[https://github.com/snowarch/inir](https://github.com/snowarch/inir)"
                         font.pixelSize: Appearance.font.pixelSize.small
-                        color: Appearance.m3colors.m3primary
+                        color: Appearance.colors.colPrimary
                         textFormat: Text.MarkdownText
                         onLinkActivated: (link) => {
                             return Qt.openUrlExternally(link);
@@ -238,7 +271,7 @@ ContentPage {
                 RippleButtonWithIcon {
                     materialIcon: "auto_stories"
                     mainText: Translation.tr("Documentation")
-                    onClicked: Qt.openUrlExternally("https://snowarch.github.io/iNiR/docs/")
+                    onClicked: Qt.openUrlExternally("https://github.com/snowarch/inir/wiki")
                 }
 
                 RippleButtonWithIcon {
@@ -285,7 +318,7 @@ ContentPage {
                         visible: end4Icon.status !== Image.Ready
                         text: "favorite"
                         iconSize: 64
-                        color: Appearance.m3colors.m3primary
+                        color: Appearance.colors.colPrimary
                     }
 
                 }
@@ -301,7 +334,7 @@ ContentPage {
                     StyledText {
                         text: "[https://github.com/end-4/dots-hyprland](https://github.com/end-4/dots-hyprland)"
                         font.pixelSize: Appearance.font.pixelSize.small
-                        color: Appearance.m3colors.m3primary
+                        color: Appearance.colors.colPrimary
                         textFormat: Text.MarkdownText
                         onLinkActivated: (link) => {
                             return Qt.openUrlExternally(link);

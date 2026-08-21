@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import Quickshell
 import qs.services
 import qs.modules.common
@@ -6,8 +7,35 @@ import qs.modules.common.widgets
 import qs.modules.common.functions
 
 ContentPage {
+    id: root
     settingsPageIndex: 8
     settingsPageName: Translation.tr("Advanced")
+
+    property bool cavaControlsReady: false
+    Component.onCompleted: Qt.callLater(() => root.cavaControlsReady = true)
+
+    function setCavaValue(path, value, regenerateStandalone): void {
+        if (!root.cavaControlsReady)
+            return
+        Config.setNestedValue(path, value)
+        if (regenerateStandalone)
+            colorRegenTimer.restart()
+    }
+
+    function resetCavaDefaults(): void {
+        if (!root.cavaControlsReady)
+            return
+        Config.setNestedValues({
+            "appearance.cava.colorSource": "theme",
+            "appearance.cava.gradientCount": 8,
+            "appearance.cava.sensitivity": 100,
+            "appearance.cava.bars": 0,
+            "appearance.cava.framerate": 60,
+            "appearance.cava.stereo": true,
+            "appearance.cava.waveOpacity": 30,
+        })
+        colorRegenTimer.restart()
+    }
 
     Timer {
         id: colorRegenTimer
@@ -83,14 +111,14 @@ ContentPage {
             }
             SettingsSwitch {
                 buttonIcon: "sports_esports"
-                text: Translation.tr("Steam (Adwaita for Steam)")
-                checked: Config.options?.appearance?.wallpaperTheming?.enableAdwSteam ?? false
+                text: Translation.tr("Steam (Millennium)")
+                checked: Config.options?.appearance?.wallpaperTheming?.enableSteam ?? false
                 onCheckedChanged: {
-                    Config.setNestedValue("appearance.wallpaperTheming.enableAdwSteam", checked);
+                    Config.setNestedValue("appearance.wallpaperTheming.enableSteam", checked);
                     colorRegenTimer.restart();
                 }
                 StyledToolTip {
-                    text: Translation.tr("Apply Material You colors to Steam via Adwaita for Steam (requires AdwSteamGtk)")
+                    text: Translation.tr("Apply Material You colors to Steam via Millennium Material-Theme")
                 }
             }
             SettingsSwitch {
@@ -165,6 +193,156 @@ ContentPage {
                     text: Translation.tr("Generate aether.nvim theme plugin for Neovim/LazyVim from wallpaper colors (writes to ~/.config/nvim/lua/plugins/neovim.lua)")
                 }
             }
+            SettingsSwitch {
+                id: cavaSwitch
+                buttonIcon: "equalizer"
+                text: Translation.tr("Theme standalone Cava")
+                checked: Config.options?.appearance?.wallpaperTheming?.enableCava ?? false
+                onCheckedChanged: root.setCavaValue(
+                    "appearance.wallpaperTheming.enableCava", checked, true)
+                StyledToolTip {
+                    text: Translation.tr("Manage the external ~/.config/cava/config block. Internal iNiR visualizers use the options below whether this switch is on or off.")
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Cava & spectrum options")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options?.appearance?.cava?.colorSource ?? "theme"
+                    onSelected: newValue => root.setCavaValue(
+                        "appearance.cava.colorSource", newValue, true)
+                    options: [
+                        { displayName: Translation.tr("Theme palette"), value: "theme" },
+                        { displayName: Translation.tr("Vibrant (saturated)"), value: "vibrant" },
+                        { displayName: Translation.tr("Album cover"), value: "cover" },
+                    ]
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 5
+
+                    Repeater {
+                        model: CavaTheme.visualizerColors
+
+                        Rectangle {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 8
+                            radius: height / 2
+                            color: modelData
+                        }
+                    }
+                }
+
+                SettingsNote {
+                    icon: (Config.options?.appearance?.cava?.colorSource ?? "theme") === "cover"
+                        ? "album" : "palette"
+                    text: {
+                        const source = Config.options?.appearance?.cava?.colorSource ?? "theme"
+                        if (source === "vibrant")
+                            return Translation.tr("Internal visualizers use a higher-saturation palette with wider hue separation. Standalone cava is regenerated too.")
+                        if (source === "cover")
+                            return CavaTheme.coverPaletteAvailable
+                                ? Translation.tr("Using colors extracted live from the active album artwork.")
+                                : Translation.tr("Waiting for active album artwork; the theme palette is used as a safe fallback.")
+                        return Translation.tr("Internal visualizers use the current primary, secondary and tertiary theme colors.")
+                    }
+                }
+
+                ConfigSpinBox {
+                    icon: "gradient"
+                    text: Translation.tr("Gradient colors")
+                    value: Config.options?.appearance?.cava?.gradientCount ?? 8
+                    from: 1
+                    to: 8
+                    onValueChanged: root.setCavaValue(
+                        "appearance.cava.gradientCount", value, true)
+                    StyledToolTip {
+                        text: Translation.tr("Use one color for a solid spectrum, or up to eight gradient stops")
+                    }
+                }
+
+                ConfigSpinBox {
+                    icon: "hearing"
+                    text: Translation.tr("Sensitivity")
+                    value: Config.options?.appearance?.cava?.sensitivity ?? 100
+                    from: 1
+                    to: 500
+                    stepSize: 10
+                    onValueChanged: root.setCavaValue(
+                        "appearance.cava.sensitivity", value, true)
+                    StyledToolTip {
+                        text: Translation.tr("Audio sensitivity (higher = more reactive)")
+                    }
+                }
+                ConfigSpinBox {
+                    icon: "bar_chart"
+                    text: Translation.tr("Bars")
+                    value: Config.options?.appearance?.cava?.bars ?? 0
+                    from: 0
+                    to: 200
+                    stepSize: 8
+                    onValueChanged: root.setCavaValue(
+                        "appearance.cava.bars", value, true)
+                    StyledToolTip {
+                        text: Translation.tr("Number of frequency data points (0 = auto)")
+                    }
+                }
+                ConfigSpinBox {
+                    icon: "speed"
+                    text: Translation.tr("Framerate")
+                    value: Config.options?.appearance?.cava?.framerate ?? 60
+                    from: 30
+                    to: 165
+                    stepSize: 5
+                    onValueChanged: root.setCavaValue(
+                        "appearance.cava.framerate", value, true)
+                    StyledToolTip {
+                        text: Translation.tr("Target refresh rate for the visualizer")
+                    }
+                }
+                SettingsSwitch {
+                    buttonIcon: "headphones"
+                    text: Translation.tr("Stereo")
+                    checked: Config.options?.appearance?.cava?.stereo ?? true
+                    onCheckedChanged: root.setCavaValue(
+                        "appearance.cava.stereo", checked, true)
+                    StyledToolTip {
+                        text: Translation.tr("Split visualizer into left/right channels")
+                    }
+                }
+                ConfigSpinBox {
+                    icon: "opacity"
+                    text: Translation.tr("Wave opacity")
+                    value: Config.options?.appearance?.cava?.waveOpacity ?? 30
+                    from: 5
+                    to: 100
+                    stepSize: 5
+                    onValueChanged: root.setCavaValue(
+                        "appearance.cava.waveOpacity", value, false)
+                    StyledToolTip {
+                        text: Translation.tr("Default fill opacity for shared wave visualizers. The bar spectrum has its own opacity control.")
+                    }
+                }
+
+                RippleButton {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 34
+                    buttonRadius: Appearance.rounding.small
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    onClicked: root.resetCavaDefaults()
+                    contentItem: RowLayout {
+                        anchors.centerIn: parent
+                        spacing: 5
+                        MaterialSymbol { text: "restart_alt"; iconSize: 15; color: Appearance.colors.colOnLayer1 }
+                        StyledText { text: Translation.tr("Reset to defaults"); font.pixelSize: Appearance.font.pixelSize.smaller; color: Appearance.colors.colOnLayer1 }
+                    }
+                }
+            }
+
             ConfigRow {
                 uniform: true
                 SettingsSwitch {
@@ -234,7 +412,7 @@ ContentPage {
     }
 
     SettingsCardSection {
-        expanded: true
+        expanded: false
         icon: "memory_alt"
         title: Translation.tr("Resource Monitor")
 
@@ -247,7 +425,7 @@ ContentPage {
                     Config.setNestedValue("resources.monitorGpu", checked);
                 }
                 StyledToolTip {
-                    text: Translation.tr("Enable GPU usage and temperature polling. Disable on hybrid GPU laptops to prevent keeping the discrete GPU awake.")
+                    text: Translation.tr("Poll GPU usage and temperature. Disable on hybrid laptops to keep the dGPU asleep — also pins Qt to the iGPU on next restart.")
                 }
             }
         }

@@ -22,13 +22,20 @@ Item {
             topMargin: itemHeight * root.currentIndex + (root.expanded ? 0 : ((itemHeight - baseHighlightHeight) / 2))
         }
         radius: Appearance.rounding.full
-        color: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
-             : Appearance.inirEverywhere ? Appearance.inir.colSecondaryContainer
-             : Appearance.auroraEverywhere ? Appearance.aurora.colElevatedSurface 
-             : Appearance.colors.colSecondaryContainer
+        // Bgless doctrine: no selection pill behind the icon. The active item is
+        // signalled by the icon's accent colour (see NavigationRailButton).
+        color: "transparent"
         implicitHeight: root.expanded ? itemHeight : baseHighlightHeight
         implicitWidth: visible ? (tabBarColumn.children[root.currentIndex]?.visualWidth ?? 56) : 0
 
+        Behavior on implicitWidth {
+            enabled: Appearance.animationsEnabled
+            NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve }
+        }
+        Behavior on implicitHeight {
+            enabled: Appearance.animationsEnabled
+            NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve }
+        }
         Behavior on anchors.topMargin {
             NumberAnimation {
                 duration: Appearance.animationCurves.expressiveFastSpatialDuration

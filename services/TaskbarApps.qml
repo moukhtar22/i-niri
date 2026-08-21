@@ -4,9 +4,31 @@ import qs.modules.common
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import qs.services
 
 Singleton {
     id: root
+
+    readonly property bool sortingEnabled:
+        (Config.options?.panelFamily ?? "ii") === "waffle"
+    property int _identityRulesRevision: 0
+
+    Connections {
+        target: Config.options?.windows
+        function onAppIdentityRulesChanged() {
+            root._identityRulesRevision++
+        }
+    }
+
+    function syncSortingDemand(): void {
+        CompositorService.setSortingConsumer("waffleTaskbar",
+            root.sortingEnabled)
+    }
+
+    onSortingEnabledChanged: syncSortingDemand()
+    Component.onCompleted: syncSortingDemand()
+    Component.onDestruction:
+        CompositorService.setSortingConsumer("waffleTaskbar", false)
 
     function togglePin(appId) {
         const pinned = Config.options?.dock?.pinnedApps ?? []
@@ -16,11 +38,15 @@ Singleton {
     }
 
     property list<var> apps: {
+        const identityRulesRevision = root._identityRulesRevision;
         var map = new Map();
 
         // Pinned apps
         const pinnedApps = Config.options?.dock?.pinnedApps ?? [];
         for (const appId of pinnedApps) {
+            // Skip pinned apps with no desktop entry installed
+            if (!AppSearch.lookupDesktopEntry(appId))
+                continue;
             if (!map.has(appId.toLowerCase())) map.set(appId.toLowerCase(), ({
                 pinned: true,
                 toplevels: []
@@ -33,35 +59,48 @@ Singleton {
         }
 
         // Ignored apps
-        const ignoredRegexStrings = Config.options?.dock.ignoredAppRegexes ?? [];
-        const ignoredRegexes = ignoredRegexStrings.map(pattern => new RegExp(pattern, "i"));
+        const ignoredRegexStrings = Config.options?.dock?.ignoredAppRegexes ?? [];
+        const systemIgnored = [
+            "^$", "^portal$", "^x-run-dialog$", "^kdialog$",
+            "^org.freedesktop.impl.portal.*"
+        ];
+        const ignoredRegexes = ignoredRegexStrings.concat(systemIgnored)
+            .map(pattern => new RegExp(pattern, "i"));
+
+        // Niri's event stream is authoritative. CompositorService enriches
+        // live foreign-toplevel handles with exact Niri ids and drops stale
+        // handles instead of letting ghost apps survive in the taskbar.
+        const sorted = CompositorService.sortedToplevels ?? [];
+        const sourceToplevels = CompositorService.isNiri
+            ? sorted
+            : (sorted.length > 0
+                ? sorted
+                : (ToplevelManager.toplevels?.values ?? []));
+
         // Open windows
-        for (const toplevel of ToplevelManager.toplevels.values) {
-            if (ignoredRegexes.some(re => re.test(toplevel.appId))) continue;
-            if (!map.has(toplevel.appId.toLowerCase())) map.set(toplevel.appId.toLowerCase(), ({
+        for (const toplevel of sourceToplevels) {
+            const appId = AppSearch.resolveWindowIdentity(toplevel);
+            if (appId.length === 0 || ignoredRegexes.some(re => re.test(appId)))
+                continue;
+            const lowerAppId = appId.toLowerCase();
+            if (!map.has(lowerAppId)) map.set(lowerAppId, ({
                 pinned: false,
                 toplevels: []
             }));
-            map.get(toplevel.appId.toLowerCase()).toplevels.push(toplevel);
+            map.get(lowerAppId).toplevels.push(toplevel);
         }
 
         var values = [];
 
         for (const [key, value] of map) {
-            values.push(appEntryComp.createObject(null, { appId: key, toplevels: value.toplevels, pinned: value.pinned }));
+            values.push({
+                appId: key,
+                toplevels: value.toplevels,
+                pinned: value.pinned
+            });
         }
 
         return values;
     }
 
-    component TaskbarAppEntry: QtObject {
-        id: wrapper
-        required property string appId
-        required property list<var> toplevels
-        required property bool pinned
-    }
-    Component {
-        id: appEntryComp
-        TaskbarAppEntry {}
-    }
 }

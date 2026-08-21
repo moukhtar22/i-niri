@@ -211,6 +211,33 @@ ContentPage {
     SettingsCardSection {
         visible: root.isIiActive
         expanded: false
+        icon: "fullscreen"
+        title: Translation.tr("Fullscreen behavior")
+
+        SettingsGroup {
+            SettingsSwitch {
+                buttonIcon: "visibility_off"
+                text: Translation.tr("Hide main wallpaper in fullscreen")
+                checked: Config.options?.background?.hideWhenFullscreen ?? true
+                onCheckedChanged: Config.setNestedValue("background.hideWhenFullscreen", checked)
+                StyledToolTip {
+                    text: Translation.tr("Hide the main wallpaper on monitors covered by a fullscreen window. The overview backdrop stays available.")
+                }
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                text: Translation.tr("Reduces background rendering during games and fullscreen video without removing the overview backdrop.")
+                color: Appearance.colors.colSubtext
+                font.pixelSize: Appearance.font.pixelSize.small
+                wrapMode: Text.WordWrap
+            }
+        }
+    }
+
+    SettingsCardSection {
+        visible: root.isIiActive
+        expanded: false
         icon: "devices"
         title: Translation.tr("Multi-monitor")
 
@@ -569,7 +596,7 @@ ContentPage {
                                                 text: bgMonDelegate.monName || ("Monitor " + (bgMonDelegate.index + 1))
                                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                                 font.weight: Font.Medium
-                                                color: "#ffffff"
+                                                color: Appearance.colors.colOnLayer0
                                             }
                                             StyledText {
                                                 Layout.alignment: Qt.AlignHCenter
@@ -598,13 +625,13 @@ ContentPage {
                                             MaterialSymbol {
                                                 text: WallpaperListener.isVideoPath(bgMonDelegate.wpPath) ? "movie" : "gif"
                                                 font.pixelSize: 11
-                                                color: "#ffffff"
+                                                color: Appearance.colors.colOnLayer0
                                                 anchors.verticalCenter: parent.verticalCenter
                                             }
                                             StyledText {
                                                 text: WallpaperListener.mediaTypeLabel(bgMonDelegate.wpPath)
                                                 font.pixelSize: Appearance.font.pixelSize.smaller - 2
-                                                color: "#ffffff"
+                                                color: Appearance.colors.colOnLayer0
                                                 anchors.verticalCenter: parent.verticalCenter
                                             }
                                         }
@@ -744,7 +771,7 @@ ContentPage {
                                             text: bgMultiMonPanel.selectedMonitor || Translation.tr("No monitor selected")
                                             font.pixelSize: Appearance.font.pixelSize.large
                                             font.weight: Font.Medium
-                                            color: "#ffffff"
+                                            color: Appearance.colors.colOnLayer0
                                         }
                                         StyledText {
                                             text: {
@@ -778,7 +805,7 @@ ContentPage {
                                                 anchors.verticalCenter: parent.verticalCenter
                                             }
                                             StyledText {
-                                                text: "Backdrop"
+                                                text: Translation.tr("Backdrop")
                                                 font.pixelSize: Appearance.font.pixelSize.smaller - 1
                                                 color: Appearance.colors.colOnSecondaryContainer
                                                 anchors.verticalCenter: parent.verticalCenter
@@ -805,13 +832,13 @@ ContentPage {
                                             MaterialSymbol {
                                                 text: WallpaperListener.mediaTypeIcon(bgMonPreviewCard._activePath)
                                                 font.pixelSize: 12
-                                                color: "#ffffff"
+                                                color: Appearance.colors.colOnLayer0
                                                 anchors.verticalCenter: parent.verticalCenter
                                             }
                                             StyledText {
                                                 text: WallpaperListener.mediaTypeLabel(bgMonPreviewCard._activePath)
                                                 font.pixelSize: Appearance.font.pixelSize.smaller - 1
-                                                color: "#ffffff"
+                                                color: Appearance.colors.colOnLayer0
                                                 anchors.verticalCenter: parent.verticalCenter
                                             }
                                         }
@@ -828,10 +855,10 @@ ContentPage {
                                 ? (Appearance.inir?.colBorder
                                     ?? Appearance.colors?.colLayer0Border
                                     ?? Appearance.colors?.colLayer0Border
-                                    ?? Appearance.m3colors.m3outlineVariant)
+                                    ?? Appearance.colors.colOutlineVariant)
                                 : (Appearance.colors?.colLayer0Border
                                     ?? Appearance.colors?.colLayer0Border
-                                    ?? Appearance.m3colors.m3outlineVariant)
+                                    ?? Appearance.colors.colOutlineVariant)
                             opacity: 0.5
                         }
 
@@ -865,17 +892,21 @@ ContentPage {
 
                                 RippleButtonWithIcon {
                                     Layout.fillWidth: true
-                                    buttonRadius: Appearance.rounding.small
+                                    buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.small
                                     materialIcon: "wallpaper"
                                     mainText: Translation.tr("Change wallpaper")
-                                    colBackground: Appearance.colors.colPrimaryContainer
-                                    colBackgroundHover: Appearance.colors.colPrimaryContainerHover
-                                    colRipple: Appearance.colors.colPrimaryContainerActive
+                                    colBackground: Appearance.zzzEverywhere ? Appearance.zzz.sticker : Appearance.colors.colPrimaryContainer
+                                    colBackgroundHover: Appearance.zzzEverywhere ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimaryContainerHover
+                                    colRipple: Appearance.zzzEverywhere ? Appearance.colors.colPrimaryActive : Appearance.colors.colPrimaryContainerActive
                                     mainContentComponent: Component {
                                         StyledText {
                                             text: Translation.tr("Change wallpaper")
                                             font.pixelSize: Appearance.font.pixelSize.small
-                                            color: Appearance.colors.colOnPrimaryContainer
+                                            color: Appearance.zzzEverywhere ? Appearance.zzz.onSticker : Appearance.colors.colOnPrimaryContainer
+                                            Behavior on color {
+                                                enabled: Appearance.animationsEnabled
+                                                ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                                            }
                                         }
                                     }
                                     onClicked: {
@@ -889,7 +920,7 @@ ContentPage {
                                 }
                                 RippleButtonWithIcon {
                                     Layout.fillWidth: true
-                                    buttonRadius: Appearance.rounding.small
+                                    buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.small
                                     materialIcon: "shuffle"
                                     mainText: Translation.tr("Random")
                                     onClicked: {
@@ -1086,6 +1117,82 @@ ContentPage {
                     to: 128
                     stepSize: 1
                     onValueChanged: Config.setNestedValue("background.backend.awww.spatialStep", value)
+                }
+            }
+        }
+    }
+
+    SettingsCardSection {
+        expanded: false
+        icon: "folder"
+        title: Translation.tr("Wallpapers folder")
+
+        SettingsGroup {
+            ContentSubsection {
+                title: Translation.tr("Custom wallpapers directory")
+                tooltip: Translation.tr("Leave empty for default ~/Pictures/Wallpapers")
+
+                MaterialTextField {
+                    Layout.fillWidth: true
+                    placeholderText: "~/Pictures/Wallpapers"
+                    text: Config.options?.wallpapers?.directory ?? ""
+                    onEditingFinished: Config.setNestedValue("wallpapers.directory", text)
+                }
+            }
+        }
+    }
+
+    SettingsCardSection {
+        expanded: false
+        icon: "shuffle"
+        title: Translation.tr("Shuffle wallpapers")
+
+        SettingsGroup {
+            SettingsSwitch {
+                buttonIcon: "autorenew"
+                text: Translation.tr("Shuffle wallpapers automatically")
+                checked: Config.options?.background?.autoWallpaper?.enable ?? false
+                onCheckedChanged: Config.setNestedValue("background.autoWallpaper.enable", checked)
+                StyledToolTip {
+                    text: Translation.tr("Pick a random wallpaper from the folder every few minutes")
+                }
+            }
+
+            ConfigSpinBox {
+                enabled: Config.options?.background?.autoWallpaper?.enable ?? false
+                icon: "timer"
+                text: Translation.tr("Change every") + ` (${value} ${value === 1 ? Translation.tr("minute") : Translation.tr("minutes")})`
+                value: Config.options?.background?.autoWallpaper?.intervalMinutes ?? 30
+                from: 1
+                to: 1440
+                stepSize: 1
+                onValueChanged: Config.setNestedValue("background.autoWallpaper.intervalMinutes", value)
+                StyledToolTip {
+                    text: Translation.tr("How often to pick a new random wallpaper")
+                }
+            }
+
+            SettingsSwitch {
+                enabled: Config.options?.background?.autoWallpaper?.enable ?? false
+                buttonIcon: "palette"
+                text: Translation.tr("Regenerate theme colors on shuffle")
+                checked: Config.options?.background?.autoWallpaper?.generateColors ?? true
+                onCheckedChanged: Config.setNestedValue("background.autoWallpaper.generateColors", checked)
+                StyledToolTip {
+                    text: Translation.tr("When enabled, theme colors are recomputed from the new wallpaper (slower). Disable to only swap the image.")
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Shuffle folder (optional)")
+                tooltip: Translation.tr("Leave empty to shuffle within the current wallpapers folder")
+
+                MaterialTextField {
+                    Layout.fillWidth: true
+                    enabled: Config.options?.background?.autoWallpaper?.enable ?? false
+                    placeholderText: Translation.tr("Use current wallpapers folder")
+                    text: Config.options?.background?.autoWallpaper?.folder ?? ""
+                    onEditingFinished: Config.setNestedValue("background.autoWallpaper.folder", text)
                 }
             }
         }
@@ -1290,7 +1397,7 @@ ContentPage {
                             text: "open_with"
                             iconSize: 16
                             color: Appearance.inirEverywhere ? Appearance.inir.colPrimary
-                                 : Appearance.auroraEverywhere ? Appearance.m3colors.m3primary
+                                 : Appearance.auroraEverywhere ? Appearance.colors.colPrimary
                                  : Appearance.colors.colPrimary
                         }
 
@@ -1299,7 +1406,7 @@ ContentPage {
                             font.pixelSize: Appearance.font.pixelSize.small
                             font.weight: Font.Medium
                             color: Appearance.inirEverywhere ? Appearance.inir.colText
-                                 : Appearance.auroraEverywhere ? Appearance.m3colors.m3onSurface
+                                 : Appearance.auroraEverywhere ? Appearance.colors.colOnSurface
                                  : Appearance.colors.colOnLayer1
                         }
 
@@ -1341,7 +1448,7 @@ ContentPage {
                                 text: "restart_alt"
                                 iconSize: 14
                                 color: Appearance.inirEverywhere ? Appearance.inir.colTextSecondary
-                                     : Appearance.auroraEverywhere ? Appearance.m3colors.m3onSurfaceVariant
+                                     : Appearance.auroraEverywhere ? Appearance.colors.colOnSurfaceVariant
                                      : Appearance.colors.colSubtext
                             }
                             StyledToolTip { text: Translation.tr("Reset position and zoom") }
@@ -1358,7 +1465,7 @@ ContentPage {
                         color: Appearance.colors.colLayer0
                         clip: true
                         border.width: panDragArea.drag.active ? 2 : 0
-                        border.color: Appearance.m3colors.m3primary
+                        border.color: Appearance.colors.colPrimary
 
                         Behavior on border.width {
                             enabled: Appearance.animationsEnabled
@@ -1376,11 +1483,25 @@ ContentPage {
                                 }
                                 return Config.options?.background?.wallpaperPath ?? ""
                             }
-                            source: wpPath ? (wpPath.startsWith("file://") ? wpPath : "file://" + wpPath) : ""
+                            readonly property bool isVideo: WallpaperListener.isVideoPath(wpPath)
+                            readonly property string previewPath: isVideo
+                                ? Wallpapers.getVideoFirstFramePath(wpPath) : wpPath
+                            source: previewPath
+                                ? (previewPath.startsWith("file://") ? previewPath : "file://" + previewPath)
+                                : ""
                             sourceSize.width: 1200
                             cache: false
                             fillMode: Image.Stretch
                             visible: status === Image.Ready
+
+                            Component.onCompleted: {
+                                if (isVideo)
+                                    Wallpapers.ensureVideoFirstFrame(wpPath)
+                            }
+                            onWpPathChanged: {
+                                if (isVideo)
+                                    Wallpapers.ensureVideoFirstFrame(wpPath)
+                            }
 
                             readonly property real imgNatW: implicitWidth > 0 ? implicitWidth : 1
                             readonly property real imgNatH: implicitHeight > 0 ? implicitHeight : 1
@@ -1560,6 +1681,19 @@ ContentPage {
 
             SettingsSwitch {
                 visible: Config.options?.background?.enableAnimation ?? true
+                buttonIcon: "battery_saver"
+                text: Translation.tr("Pause animated wallpapers on battery")
+                checked: Config.options?.background?.pauseAnimationOnBattery ?? true
+                onCheckedChanged: {
+                    Config.setNestedValue("background.pauseAnimationOnBattery", checked);
+                }
+                StyledToolTip {
+                    text: Translation.tr("Freeze videos and GIFs while on battery power to save energy")
+                }
+            }
+
+            SettingsSwitch {
+                visible: Config.options?.background?.enableAnimation ?? true
                 buttonIcon: "blur_on"
                 text: Translation.tr("Blur animated wallpapers (videos/GIFs)")
                 checked: Config.options?.background?.effects?.enableAnimatedBlur ?? false
@@ -1575,7 +1709,7 @@ ContentPage {
 
     SettingsCardSection {
         visible: root.isIiActive
-        expanded: true
+        expanded: false
         icon: "wallpaper"
         title: Translation.tr("Wallpaper effects")
 
@@ -2059,746 +2193,7 @@ ContentPage {
         }
     }
 
-    SettingsCardSection {
-        visible: root.isIiActive
-        expanded: false
-        icon: "schedule"
-        title: Translation.tr("Widget: Clock")
-
-        SettingsGroup {
-            ConfigRow {
-                Layout.fillWidth: true
-
-                SettingsSwitch {
-                    Layout.fillWidth: false
-                    buttonIcon: "check"
-                    text: Translation.tr("Enable")
-                    checked: Config.options.background.widgets.clock.enable
-                    onCheckedChanged: {
-                        Config.setNestedValue("background.widgets.clock.enable", checked);
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Show the desktop clock widget")
-                    }
-                }
-                Item {
-                    Layout.fillWidth: true
-                }
-                ConfigSelectionArray {
-                    Layout.fillWidth: false
-                    currentValue: Config.options.background.widgets.clock.placementStrategy
-                    onSelected: newValue => {
-                        Config.setNestedValue("background.widgets.clock.placementStrategy", newValue);
-                    }
-                    options: [
-                        {
-                            displayName: Translation.tr("Draggable"),
-                            icon: "drag_pan",
-                            value: "free"
-                        },
-                        {
-                            displayName: Translation.tr("Least busy"),
-                            icon: "category",
-                            value: "leastBusy"
-                        },
-                        {
-                            displayName: Translation.tr("Most busy"),
-                            icon: "shapes",
-                            value: "mostBusy"
-                        },
-                    ]
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Clock style")
-                ConfigSelectionArray {
-                    currentValue: Config.options.background.widgets.clock.style
-                    onSelected: newValue => {
-                        Config.setNestedValue("background.widgets.clock.style", newValue);
-                    }
-                    options: [
-                        {
-                            displayName: Translation.tr("Digital"),
-                            icon: "timer",
-                            value: "digital"
-                        },
-                        {
-                            displayName: Translation.tr("Cookie"),
-                            icon: "cookie",
-                            value: "cookie"
-                        }
-                    ]
-                }
-            }
-
-            ContentSubsection {
-                visible: Config.options.background.widgets.clock.style === "digital"
-                title: Translation.tr("Digital clock settings")
-
-                SettingsSwitch {
-                    buttonIcon: "animation"
-                    text: Translation.tr("Animate time change")
-                    checked: Config.options.background.widgets.clock.digital.animateChange
-                    onCheckedChanged: {
-                        Config.setNestedValue("background.widgets.clock.digital.animateChange", checked);
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Smoothly animate digits when time changes")
-                    }
-                }
-
-                ContentSubsection {
-                    title: Translation.tr("Time format")
-                    ConfigSelectionArray {
-                        currentValue: Config.options?.background?.widgets?.clock?.timeFormat ?? "system"
-                        onSelected: newValue => {
-                            Config.setNestedValue("background.widgets.clock.timeFormat", newValue);
-                        }
-                        options: [
-                            {
-                                displayName: Translation.tr("System"),
-                                icon: "settings",
-                                value: "system"
-                            },
-                            {
-                                displayName: Translation.tr("24h"),
-                                icon: "schedule",
-                                value: "24h"
-                            },
-                            {
-                                displayName: Translation.tr("12h"),
-                                icon: "nest_clock_farsight_analog",
-                                value: "12h"
-                            }
-                        ]
-                    }
-                }
-
-                SettingsSwitch {
-                    buttonIcon: "timer"
-                    text: Translation.tr("Show seconds")
-                    checked: Config.options?.background?.widgets?.clock?.showSeconds ?? false
-                    onCheckedChanged: {
-                        Config.setNestedValue("background.widgets.clock.showSeconds", checked);
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Display seconds in the time string")
-                    }
-                }
-
-                SettingsSwitch {
-                    buttonIcon: "calendar_today"
-                    text: Translation.tr("Show date")
-                    checked: Config.options?.background?.widgets?.clock?.showDate ?? true
-                    onCheckedChanged: {
-                        Config.setNestedValue("background.widgets.clock.showDate", checked);
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Show a date line below the time")
-                    }
-                }
-
-                ContentSubsection {
-                    visible: Config.options?.background?.widgets?.clock?.showDate ?? true
-                    title: Translation.tr("Date style")
-                    ConfigSelectionArray {
-                        currentValue: Config.options?.background?.widgets?.clock?.dateStyle ?? "long"
-                        onSelected: newValue => {
-                            Config.setNestedValue("background.widgets.clock.dateStyle", newValue);
-                        }
-                        options: [
-                            {
-                                displayName: Translation.tr("Long"),
-                                icon: "calendar_month",
-                                value: "long"
-                            },
-                            {
-                                displayName: Translation.tr("Minimal"),
-                                icon: "event_note",
-                                value: "minimal"
-                            },
-                            {
-                                displayName: Translation.tr("Weekday"),
-                                icon: "today",
-                                value: "weekday"
-                            },
-                            {
-                                displayName: Translation.tr("Numeric"),
-                                icon: "123",
-                                value: "numeric"
-                            }
-                        ]
-                    }
-                }
-
-                ConfigSpinBox {
-                    icon: "format_size"
-                    text: Translation.tr("Time scale (%)")
-                    value: Config.options?.background?.widgets?.clock?.timeScale ?? 100
-                    from: 50
-                    to: 200
-                    stepSize: 5
-                    onValueChanged: {
-                        Config.setNestedValue("background.widgets.clock.timeScale", value);
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Scale the time text size")
-                    }
-                }
-
-                ConfigSpinBox {
-                    icon: "format_size"
-                    text: Translation.tr("Date scale (%)")
-                    value: Config.options?.background?.widgets?.clock?.dateScale ?? 100
-                    from: 50
-                    to: 200
-                    stepSize: 5
-                    onValueChanged: {
-                        Config.setNestedValue("background.widgets.clock.dateScale", value);
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Scale the date text size")
-                    }
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Clock effects")
-
-                ConfigSpinBox {
-                    icon: "brightness_6"
-                    text: Translation.tr("Clock dim (%)")
-                    value: Config.options.background.widgets.clock.dim
-                    from: 0
-                    to: 100
-                    stepSize: 5
-                    onValueChanged: {
-                        Config.setNestedValue("background.widgets.clock.dim", value);
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Only affects the clock widget text, independent from the global wallpaper dim.")
-                    }
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Clock appearance")
-
-                FontSelector {
-                    id: clockFontSelector
-                    label: Translation.tr("Clock font")
-                    icon: "font_download"
-                    selectedFont: Config.options?.background?.widgets?.clock?.fontFamily ?? "Space Grotesk"
-                    onSelectedFontChanged: {
-                        if (Config.options?.background?.widgets?.clock)
-                            Config.setNestedValue("background.widgets.clock.fontFamily", selectedFont);
-                    }
-                    Connections {
-                        target: Config.options?.background?.widgets?.clock ?? null
-                        function onFontFamilyChanged() { clockFontSelector.selectedFont = Config.options.background.widgets.clock.fontFamily }
-                    }
-                }
-
-                SettingsSwitch {
-                    buttonIcon: "shadow"
-                    text: Translation.tr("Show text shadow")
-                    checked: Config.options?.background?.widgets?.clock?.showShadow ?? true
-                    onCheckedChanged: {
-                        Config.setNestedValue("background.widgets.clock.showShadow", checked);
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Draw a subtle shadow behind clock text for better readability")
-                    }
-                }
-            }
-
-            ContentSubsection {
-                visible: Config.options.background.widgets.clock.style === "cookie"
-                title: Translation.tr("Cookie clock settings")
-
-                SettingsSwitch {
-                    buttonIcon: "wand_stars"
-                    text: Translation.tr("Auto styling with Gemini")
-                    checked: Config.options.background.widgets.clock.cookie.aiStyling
-                    onCheckedChanged: {
-                        Config.setNestedValue("background.widgets.clock.cookie.aiStyling", checked);
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Uses Gemini to categorize the wallpaper then picks a preset based on it.\nYou'll need to set Gemini API key on the left sidebar first.\nImages are downscaled for performance, but just to be safe,\ndo not select wallpapers with sensitive information.")
-                    }
-                }
-
-                SettingsSwitch {
-                    buttonIcon: "airwave"
-                    text: Translation.tr("Use old sine wave cookie implementation")
-                    checked: Config.options.background.widgets.clock.cookie.useSineCookie
-                    onCheckedChanged: {
-                        Config.setNestedValue("background.widgets.clock.cookie.useSineCookie", checked);
-                    }
-                    StyledToolTip {
-                        text: "Looks a bit softer and more consistent with different number of sides,\nbut has less impressive morphing"
-                    }
-                }
-
-                ConfigSpinBox {
-                    icon: "add_triangle"
-                    text: Translation.tr("Sides")
-                    value: Config.options.background.widgets.clock.cookie.sides
-                    from: 0
-                    to: 40
-                    stepSize: 1
-                    onValueChanged: {
-                        Config.setNestedValue("background.widgets.clock.cookie.sides", value);
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Number of sides for the polygon shape")
-                    }
-                }
-
-                SettingsSwitch {
-                    buttonIcon: "autoplay"
-                    text: Translation.tr("Constantly rotate")
-                    checked: Config.options.background.widgets.clock.cookie.constantlyRotate
-                    onCheckedChanged: {
-                        Config.setNestedValue("background.widgets.clock.cookie.constantlyRotate", checked);
-                    }
-                    StyledToolTip {
-                        text: "Makes the clock always rotate. This is extremely expensive\n(expect 50% usage on Intel UHD Graphics) and thus impractical."
-                    }
-                }
-
-                ConfigRow {
-
-                    SettingsSwitch {
-                        enabled: Config.options.background.widgets.clock.style === "cookie" && Config.options.background.widgets.clock.cookie.dialNumberStyle === "dots" || Config.options.background.widgets.clock.cookie.dialNumberStyle === "full"
-                        buttonIcon: "brightness_7"
-                        text: Translation.tr("Hour marks")
-                        checked: Config.options.background.widgets.clock.cookie.hourMarks
-                        onEnabledChanged: {
-                            checked = Config.options.background.widgets.clock.cookie.hourMarks;
-                        }
-                        onCheckedChanged: {
-                            Config.setNestedValue("background.widgets.clock.cookie.hourMarks", checked);
-                        }
-                        StyledToolTip {
-                            text: "Can only be turned on using the 'Dots' or 'Full' dial style for aesthetic reasons"
-                        }
-                    }
-
-                    SettingsSwitch {
-                        enabled: Config.options.background.widgets.clock.style === "cookie" && Config.options.background.widgets.clock.cookie.dialNumberStyle !== "numbers"
-                        buttonIcon: "123"
-                        text: Translation.tr("Digits in the middle")
-                        checked: Config.options.background.widgets.clock.cookie.timeIndicators
-                        onEnabledChanged: {
-                            checked = Config.options.background.widgets.clock.cookie.timeIndicators;
-                        }
-                        onCheckedChanged: {
-                            Config.setNestedValue("background.widgets.clock.cookie.timeIndicators", checked);
-                        }
-                        StyledToolTip {
-                            text: "Can't be turned on when using 'Numbers' dial style for aesthetic reasons"
-                        }
-                    }
-                }
-            }
-
-            ContentSubsection {
-                visible: Config.options.background.widgets.clock.style === "cookie"
-                title: Translation.tr("Dial style")
-                ConfigSelectionArray {
-                    currentValue: Config.options.background.widgets.clock.cookie.dialNumberStyle
-                    onSelected: newValue => {
-                        Config.setNestedValue("background.widgets.clock.cookie.dialNumberStyle", newValue);
-                        if (newValue !== "dots" && newValue !== "full") {
-                            Config.setNestedValue("background.widgets.clock.cookie.hourMarks", false);
-                        }
-                        if (newValue === "numbers") {
-                            Config.setNestedValue("background.widgets.clock.cookie.timeIndicators", false);
-                        }
-                    }
-                    options: [
-                        {
-                            displayName: "",
-                            icon: "block",
-                            value: "none"
-                        },
-                        {
-                            displayName: Translation.tr("Dots"),
-                            icon: "graph_6",
-                            value: "dots"
-                        },
-                        {
-                            displayName: Translation.tr("Full"),
-                            icon: "history_toggle_off",
-                            value: "full"
-                        },
-                        {
-                            displayName: Translation.tr("Numbers"),
-                            icon: "counter_1",
-                            value: "numbers"
-                        }
-                    ]
-                }
-            }
-
-            ContentSubsection {
-                visible: Config.options.background.widgets.clock.style === "cookie"
-                title: Translation.tr("Hour hand")
-                ConfigSelectionArray {
-                    currentValue: Config.options.background.widgets.clock.cookie.hourHandStyle
-                    onSelected: newValue => {
-                        Config.setNestedValue("background.widgets.clock.cookie.hourHandStyle", newValue);
-                    }
-                    options: [
-                        {
-                            displayName: "",
-                            icon: "block",
-                            value: "hide"
-                        },
-                        {
-                            displayName: Translation.tr("Classic"),
-                            icon: "radio",
-                            value: "classic"
-                        },
-                        {
-                            displayName: Translation.tr("Hollow"),
-                            icon: "circle",
-                            value: "hollow"
-                        },
-                        {
-                            displayName: Translation.tr("Fill"),
-                            icon: "eraser_size_5",
-                            value: "fill"
-                        },
-                    ]
-                }
-            }
-
-            ContentSubsection {
-                visible: Config.options.background.widgets.clock.style === "cookie"
-                title: Translation.tr("Minute hand")
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.background.widgets.clock.cookie.minuteHandStyle
-                    onSelected: newValue => {
-                        Config.setNestedValue("background.widgets.clock.cookie.minuteHandStyle", newValue);
-                    }
-                    options: [
-                        {
-                            displayName: "",
-                            icon: "block",
-                            value: "hide"
-                        },
-                        {
-                            displayName: Translation.tr("Classic"),
-                            icon: "radio",
-                            value: "classic"
-                        },
-                        {
-                            displayName: Translation.tr("Thin"),
-                            icon: "line_end",
-                            value: "thin"
-                        },
-                        {
-                            displayName: Translation.tr("Medium"),
-                            icon: "eraser_size_2",
-                            value: "medium"
-                        },
-                        {
-                            displayName: Translation.tr("Bold"),
-                            icon: "eraser_size_4",
-                            value: "bold"
-                        },
-                    ]
-                }
-            }
-
-            ContentSubsection {
-                visible: Config.options.background.widgets.clock.style === "cookie"
-                title: Translation.tr("Second hand")
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.background.widgets.clock.cookie.secondHandStyle
-                    onSelected: newValue => {
-                        Config.setNestedValue("background.widgets.clock.cookie.secondHandStyle", newValue);
-                    }
-                    options: [
-                        {
-                            displayName: "",
-                            icon: "block",
-                            value: "hide"
-                        },
-                        {
-                            displayName: Translation.tr("Classic"),
-                            icon: "radio",
-                            value: "classic"
-                        },
-                        {
-                            displayName: Translation.tr("Line"),
-                            icon: "line_end",
-                            value: "line"
-                        },
-                        {
-                            displayName: Translation.tr("Dot"),
-                            icon: "adjust",
-                            value: "dot"
-                        },
-                    ]
-                }
-            }
-
-            ContentSubsection {
-                visible: Config.options.background.widgets.clock.style === "cookie"
-                title: Translation.tr("Date style")
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.background.widgets.clock.cookie.dateStyle
-                    onSelected: newValue => {
-                        Config.setNestedValue("background.widgets.clock.cookie.dateStyle", newValue);
-                    }
-                    options: [
-                        {
-                            displayName: "",
-                            icon: "block",
-                            value: "hide"
-                        },
-                        {
-                            displayName: Translation.tr("Bubble"),
-                            icon: "bubble_chart",
-                            value: "bubble"
-                        },
-                        {
-                            displayName: Translation.tr("Border"),
-                            icon: "rotate_right",
-                            value: "border"
-                        },
-                        {
-                            displayName: Translation.tr("Rect"),
-                            icon: "rectangle",
-                            value: "rect"
-                        }
-                    ]
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Quote")
-
-                SettingsSwitch {
-                    buttonIcon: "check"
-                    text: Translation.tr("Enable")
-                    checked: Config.options.background.widgets.clock.quote.enable
-                    onCheckedChanged: {
-                        Config.setNestedValue("background.widgets.clock.quote.enable", checked);
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Show a quote text widget below the clock")
-                    }
-                }
-                MaterialTextArea {
-                    Layout.fillWidth: true
-                    placeholderText: Translation.tr("Quote")
-                    text: Config.options.background.widgets.clock.quote.text
-                    wrapMode: TextEdit.Wrap
-                    onTextChanged: {
-                        Config.setNestedValue("background.widgets.clock.quote.text", text);
-                    }
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Reset")
-
-                RippleButton {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 34
-                    buttonRadius: Appearance.rounding.small
-                    colBackground: Appearance.colors.colLayer2
-                    colBackgroundHover: Appearance.colors.colLayer2Hover
-                    onClicked: {
-                        Config.setNestedValue("background.widgets.clock.fontFamily", "Space Grotesk");
-                        Config.setNestedValue("background.widgets.clock.timeFormat", "system");
-                        Config.setNestedValue("background.widgets.clock.showSeconds", false);
-                        Config.setNestedValue("background.widgets.clock.showDate", true);
-                        Config.setNestedValue("background.widgets.clock.dateStyle", "long");
-                        Config.setNestedValue("background.widgets.clock.timeScale", 100);
-                        Config.setNestedValue("background.widgets.clock.dateScale", 100);
-                        Config.setNestedValue("background.widgets.clock.showShadow", true);
-                        Config.setNestedValue("background.widgets.clock.dim", 70);
-                        Config.setNestedValue("background.widgets.clock.digital.animateChange", true);
-                    }
-                    contentItem: RowLayout {
-                        spacing: 6
-                        Item { Layout.fillWidth: true }
-                        MaterialSymbol {
-                            text: "restart_alt"
-                            iconSize: 15
-                            color: Appearance.colors.colOnLayer1
-                        }
-                        StyledText {
-                            text: Translation.tr("Reset clock settings to defaults")
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: Appearance.colors.colOnLayer1
-                        }
-                        Item { Layout.fillWidth: true }
-                    }
-                }
-            }
-        }
-    }
-
-    SettingsCardSection {
-        visible: root.isIiActive
-        expanded: false
-        icon: "cloud"
-        title: Translation.tr("Widget: Weather")
-
-        SettingsGroup {
-            StyledText {
-                Layout.fillWidth: true
-                visible: !(Config.options?.bar?.weather?.enable ?? false)
-                text: Translation.tr("Enable weather service first in Services → Weather")
-                color: Appearance.colors.colTertiary
-                font.pixelSize: Appearance.font.pixelSize.small
-                wrapMode: Text.WordWrap
-            }
-
-            ConfigRow {
-                Layout.fillWidth: true
-                enabled: Config.options?.bar?.weather?.enable ?? false
-
-                SettingsSwitch {
-                    Layout.fillWidth: false
-                    buttonIcon: "check"
-                    text: Translation.tr("Enable")
-                    checked: Config.options.background.widgets.weather.enable
-                    onCheckedChanged: {
-                        Config.setNestedValue("background.widgets.weather.enable", checked);
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Show the desktop weather widget")
-                    }
-                }
-                Item {
-                    Layout.fillWidth: true
-                }
-                ConfigSelectionArray {
-                    Layout.fillWidth: false
-                    currentValue: Config.options.background.widgets.weather.placementStrategy
-                    onSelected: newValue => {
-                        Config.setNestedValue("background.widgets.weather.placementStrategy", newValue);
-                    }
-                    options: [
-                        {
-                            displayName: Translation.tr("Draggable"),
-                            icon: "drag_pan",
-                            value: "free"
-                        },
-                        {
-                            displayName: Translation.tr("Least busy"),
-                            icon: "category",
-                            value: "leastBusy"
-                        },
-                        {
-                            displayName: Translation.tr("Most busy"),
-                            icon: "shapes",
-                            value: "mostBusy"
-                        },
-                    ]
-                }
-            }
-        }
-    }
-
-    SettingsCardSection {
-        visible: root.isIiActive
-        expanded: false
-        icon: "album"
-        title: Translation.tr("Widget: Media Controls")
-
-        SettingsGroup {
-            ConfigRow {
-                Layout.fillWidth: true
-
-                SettingsSwitch {
-                    Layout.fillWidth: false
-                    buttonIcon: "check"
-                    text: Translation.tr("Enable")
-                    checked: Config.options.background.widgets.mediaControls.enable
-                    onCheckedChanged: {
-                        Config.setNestedValue("background.widgets.mediaControls.enable", checked);
-                    }
-                }
-                Item {
-                    Layout.fillWidth: true
-                }
-                ConfigSelectionArray {
-                    Layout.fillWidth: false
-                    currentValue: Config.options.background.widgets.mediaControls.placementStrategy
-                    onSelected: newValue => {
-                        Config.setNestedValue("background.widgets.mediaControls.placementStrategy", newValue);
-                    }
-                    options: [
-                        {
-                            displayName: Translation.tr("Draggable"),
-                            icon: "drag_pan",
-                            value: "free"
-                        },
-                        {
-                            displayName: Translation.tr("Least busy"),
-                            icon: "category",
-                            value: "leastBusy"
-                        },
-                        {
-                            displayName: Translation.tr("Most busy"),
-                            icon: "shapes",
-                            value: "mostBusy"
-                        },
-                    ]
-                }
-            }
-            
-            ContentSubsectionLabel {
-                text: Translation.tr("Player Style")
-            }
-            
-            ConfigRow {
-                Layout.fillWidth: true
-                
-                ConfigSelectionArray {
-                    Layout.fillWidth: true
-                    currentValue: Config.options.background.widgets.mediaControls.playerPreset
-                    onSelected: newValue => {
-                        Config.setNestedValue("background.widgets.mediaControls.playerPreset", newValue);
-                    }
-                    options: [
-                        {
-                            displayName: Translation.tr("Full"),
-                            icon: "featured_video",
-                            value: "full"
-                        },
-                        {
-                            displayName: Translation.tr("Compact"),
-                            icon: "view_compact",
-                            value: "compact"
-                        },
-                        {
-                            displayName: Translation.tr("Album Art"),
-                            icon: "image",
-                            value: "albumart"
-                        },
-                        {
-                            displayName: Translation.tr("Classic"),
-                            icon: "radio",
-                            value: "classic"
-                        }
-                    ]
-                }
-            }
-        }
-    }
+    // Desktop widget settings moved to DesktopWidgetsConfig.qml (settingsPageIndex: 14)
 
     SettingsCardSection {
         expanded: false

@@ -1,5 +1,4 @@
 import QtQuick
-import Quickshell
 import Quickshell.Io
 import QtQuick.Layouts
 import qs.services
@@ -65,190 +64,6 @@ ContentPage {
                     }
                     StyledToolTip {
                         text: Translation.tr("Maximum volume percentage (pavucontrol allows up to 153%)")
-                    }
-                }
-            }
-        }
-    }
-
-    SettingsCardSection {
-        expanded: false
-        icon: "devices"
-        title: Translation.tr("Displays")
-
-        SettingsGroup {
-            // Connected monitors info
-            Repeater {
-                model: Quickshell.screens
-
-                delegate: Item {
-                    required property var modelData
-                    required property int index
-                    readonly property string screenName: modelData.name ?? ""
-                    readonly property int screenW: modelData.width ?? 0
-                    readonly property int screenH: modelData.height ?? 0
-                    Layout.fillWidth: true
-                    implicitHeight: monitorRow.implicitHeight + 4
-
-                    RowLayout {
-                        id: monitorRow
-                        anchors {
-                            left: parent.left; right: parent.right
-                            verticalCenter: parent.verticalCenter
-                            leftMargin: 8; rightMargin: 8
-                        }
-                        spacing: 10
-
-                        MaterialSymbol {
-                            text: "monitor"
-                            iconSize: Appearance.font.pixelSize.larger
-                            color: Appearance.colors.colPrimary
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 0
-                            StyledText {
-                                text: screenName || ("Monitor " + (index + 1))
-                                font.pixelSize: Appearance.font.pixelSize.small
-                                font.weight: Font.Medium
-                                color: Appearance.colors.colOnLayer1
-                            }
-                            StyledText {
-                                text: screenW + "×" + screenH
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.colors.colSubtext
-                            }
-                        }
-                    }
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Primary monitor")
-                tooltip: Translation.tr("Choose which monitor is used as the default for popups like wallpaper selector, OSD, and notifications when the focused screen can't be detected.")
-
-                ConfigSelectionArray {
-                    currentValue: Config.options?.display?.primaryMonitor ?? ""
-                    onSelected: newValue => {
-                        Config.setNestedValue("display.primaryMonitor", newValue)
-                    }
-                    options: {
-                        let opts = [{ displayName: Translation.tr("Auto (first available)"), icon: "auto_mode", value: "" }]
-                        const screens = Quickshell.screens
-                        for (let i = 0; i < screens.length; i++) {
-                            const name = screens[i].name ?? ""
-                            if (name.length > 0) {
-                                opts.push({
-                                    displayName: name,
-                                    icon: "monitor",
-                                    value: name
-                                })
-                            }
-                        }
-                        return opts
-                    }
-                }
-            }
-
-            SettingsDivider {
-                visible: Quickshell.screens.length > 1
-            }
-
-            ContentSubsection {
-                visible: Quickshell.screens.length > 1
-                title: Translation.tr("Bar visibility")
-                tooltip: Translation.tr("Choose which monitors show the bar. All enabled = shown everywhere.")
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 2
-
-                    Repeater {
-                        model: Quickshell.screens
-
-                        SettingsSwitch {
-                            required property var modelData
-                            required property int index
-                            readonly property string screenName: modelData.name ?? ""
-                            property bool _ready: false
-                            Component.onCompleted: _ready = true
-                            Layout.fillWidth: true
-                            buttonIcon: "web_asset"
-                            text: screenName || ("Monitor " + (index + 1))
-                            checked: {
-                                const list = Config.options?.bar?.screenList ?? []
-                                return list.length === 0 || list.includes(screenName)
-                            }
-                            onCheckedChanged: {
-                                if (!_ready) return
-                                const screens = Quickshell.screens
-                                let current = [...(Config.options?.bar?.screenList ?? [])]
-                                const allNames = screens.map(s => s?.name ?? "").filter(n => n.length > 0)
-                                current = current.filter(n => allNames.includes(n))
-                                if (current.length === 0 && !checked) {
-                                    current = allNames
-                                }
-                                if (checked && !current.includes(screenName)) {
-                                    current.push(screenName)
-                                } else if (!checked) {
-                                    current = current.filter(n => n !== screenName)
-                                }
-                                if (allNames.length > 0 && allNames.every(n => current.includes(n))) {
-                                    current = []
-                                }
-                                Config.setNestedValue("bar.screenList", current)
-                            }
-                        }
-                    }
-                }
-            }
-
-            ContentSubsection {
-                visible: Quickshell.screens.length > 1
-                title: Translation.tr("Dock visibility")
-                tooltip: Translation.tr("Choose which monitors show the dock. All enabled = shown everywhere.")
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 2
-
-                    Repeater {
-                        model: Quickshell.screens
-
-                        SettingsSwitch {
-                            required property var modelData
-                            required property int index
-                            readonly property string screenName: modelData.name ?? ""
-                            property bool _ready: false
-                            Component.onCompleted: _ready = true
-                            Layout.fillWidth: true
-                            buttonIcon: "call_to_action"
-                            text: screenName || ("Monitor " + (index + 1))
-                            checked: {
-                                const list = Config.options?.dock?.screenList ?? []
-                                return list.length === 0 || list.includes(screenName)
-                            }
-                            onCheckedChanged: {
-                                if (!_ready) return
-                                const screens = Quickshell.screens
-                                let current = [...(Config.options?.dock?.screenList ?? [])]
-                                const allNames = screens.map(s => s?.name ?? "").filter(n => n.length > 0)
-                                current = current.filter(n => allNames.includes(n))
-                                if (current.length === 0 && !checked) {
-                                    current = allNames
-                                }
-                                if (checked && !current.includes(screenName)) {
-                                    current.push(screenName)
-                                } else if (!checked) {
-                                    current = current.filter(n => n !== screenName)
-                                }
-                                if (allNames.length > 0 && allNames.every(n => current.includes(n))) {
-                                    current = []
-                                }
-                                Config.setNestedValue("dock.screenList", current)
-                            }
-                        }
                     }
                 }
             }
@@ -355,9 +170,8 @@ ContentPage {
                     buttonIcon: "battery_saver"
                     text: Translation.tr("Charge limit")
                     checked: Config.options?.battery?.chargeLimit?.enable ?? false
-                    onCheckedChanged: {
-                        Config.setNestedValue("battery.chargeLimit.enable", checked);
-                    }
+                    autoToggle: false
+                    onToggledByUser: checked => Config.setNestedValue("battery.chargeLimit.enable", checked)
                     StyledToolTip {
                         text: !Battery.chargeLimitSupported
                             ? Translation.tr("Not supported on this device")
@@ -367,6 +181,7 @@ ContentPage {
                     }
                 }
                 ConfigSpinBox {
+                    property bool _ready: false
                     visible: Battery.chargeLimitAdjustable
                     enabled: (Config.options?.battery?.chargeLimit?.enable ?? false) && Battery.chargeLimitAdjustable
                     icon: "speed"
@@ -375,8 +190,10 @@ ContentPage {
                     from: 20
                     to: 100
                     stepSize: 5
+                    Component.onCompleted: _ready = true
                     onValueChanged: {
-                        Config.setNestedValue("battery.chargeLimit.threshold", value);
+                        if (_ready && value !== (Config.options?.battery?.chargeLimit?.threshold ?? 80))
+                            Config.setNestedValue("battery.chargeLimit.threshold", value);
                     }
                     StyledToolTip {
                         text: Translation.tr("Maximum charge percentage")
@@ -433,7 +250,7 @@ ContentPage {
 
             ContentSubsection {
                 title: Translation.tr("Generate translation with Gemini")
-                tooltip: Translation.tr("You'll need to enter your Gemini API key first.\nType /key on the sidebar for instructions.")
+                tooltip: Translation.tr("Needs a Gemini API key — type /key in the sidebar.")
                 
                 ConfigRow {
                     MaterialTextArea {
@@ -460,6 +277,7 @@ ContentPage {
     }
 
     SettingsCardSection {
+        visible: !(Config.options?.settingsUi?.easyMode ?? false)
         expanded: false
         icon: "rule"
         title: Translation.tr("Policies")
@@ -504,9 +322,24 @@ ContentPage {
     }
 
     SettingsCardSection {
+        id: soundsSection
         expanded: false
         icon: "notification_sound"
         title: Translation.tr("Sounds")
+
+        // One row per shell sound event (keys match Audio.soundEvents)
+        readonly property var soundEventRows: [
+            { key: "notification", label: Translation.tr("Notification") },
+            { key: "notificationCritical", label: Translation.tr("Critical notification") },
+            { key: "batteryLow", label: Translation.tr("Battery low") },
+            { key: "batteryCritical", label: Translation.tr("Battery critical") },
+            { key: "batteryFull", label: Translation.tr("Battery full") },
+            { key: "powerPlug", label: Translation.tr("Power plugged in") },
+            { key: "powerUnplug", label: Translation.tr("Power unplugged") },
+            { key: "pomodoroDone", label: Translation.tr("Pomodoro ends") },
+            { key: "timerDone", label: Translation.tr("Timer ends") }
+        ]
+
         SettingsGroup {
             ConfigRow {
                 uniform: true
@@ -553,6 +386,51 @@ ContentPage {
                     StyledToolTip {
                         text: Translation.tr("Play sound for incoming notifications")
                     }
+                }
+            }
+        }
+
+        SettingsGroup {
+            StyledText {
+                text: Translation.tr("Volume")
+                font.pixelSize: Appearance.font.pixelSize.normal
+                color: Appearance.colors.colOnLayer1
+            }
+            StyledSlider {
+                Layout.fillWidth: true
+                from: 0
+                to: 1
+                stepSize: 0.05
+                value: Config.options?.sounds?.volume ?? 0.5
+                configuration: StyledSlider.Configuration.S
+                settingsSearchLabel: Translation.tr("Sound volume")
+                settingsSearchKeywords: ["sound", "volume", "audio", "event"]
+                onPressedChanged: {
+                    if (!pressed) Config.setNestedValue("sounds.volume", value)
+                }
+            }
+        }
+
+        SettingsGroup {
+            StyledText {
+                text: Translation.tr("Event sounds")
+                font.pixelSize: Appearance.font.pixelSize.normal
+                color: Appearance.colors.colOnLayer1
+            }
+            StyledText {
+                Layout.fillWidth: true
+                text: Translation.tr("Pick the sound each event plays: one from your sound theme, or any audio file")
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+                wrapMode: Text.Wrap
+            }
+            Repeater {
+                model: soundsSection.soundEventRows
+                delegate: SoundPicker {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    label: modelData.label
+                    eventId: modelData.key
                 }
             }
         }
@@ -603,16 +481,135 @@ ContentPage {
                     ]
                 }
             }
+
+            SettingsDivider {}
+
+            ContentSubsection {
+                title: Translation.tr("Date formats")
+                tooltip: Translation.tr("Customize how dates are shown across the shell")
+
+                ContentSubsectionLabel {
+                    text: Translation.tr("Long date format")
+                }
+
+                MaterialTextField {
+                    Layout.fillWidth: true
+                    placeholderText: Translation.tr("e.g. dddd, MMMM dd")
+                    text: Config.options?.time?.dateFormat ?? "ddd, dd/MM"
+                    onEditingFinished: Config.setNestedValue("time.dateFormat", text)
+                }
+
+                ContentSubsectionLabel {
+                    text: Translation.tr("Short date format")
+                }
+
+                MaterialTextField {
+                    Layout.fillWidth: true
+                    placeholderText: Translation.tr("e.g. dd/MM")
+                    text: Config.options?.time?.shortDateFormat ?? "dd/MM"
+                    onEditingFinished: Config.setNestedValue("time.shortDateFormat", text)
+                }
+            }
         }
     }
 
     SettingsCardSection {
+        expanded: false
+        icon: "keyboard"
+        title: Translation.tr("Keyboard")
+
+        SettingsGroup {
+            SettingsSwitch {
+                buttonIcon: "keyboard"
+                text: Translation.tr("Keyboard popups")
+                checked: Config.options?.keyboardIndicators?.showPopup ?? true
+                onCheckedChanged: Config.setNestedValue("keyboardIndicators.showPopup", checked)
+                StyledToolTip {
+                    text: Translation.tr("Show a popup when Caps Lock, Num Lock, or the keyboard layout changes")
+                }
+            }
+
+            SettingsSwitch {
+                buttonIcon: "language"
+                text: Translation.tr("Layout popup")
+                checked: Config.options?.keyboardIndicators?.popup?.layout ?? true
+                onCheckedChanged: Config.setNestedValue("keyboardIndicators.popup.layout", checked)
+                StyledToolTip {
+                    text: Translation.tr("Show a popup when the keyboard layout changes")
+                }
+            }
+
+            SettingsSwitch {
+                buttonIcon: "keyboard_capslock"
+                text: Translation.tr("Caps Lock popup")
+                checked: Config.options?.keyboardIndicators?.popup?.caps ?? true
+                onCheckedChanged: Config.setNestedValue("keyboardIndicators.popup.caps", checked)
+                StyledToolTip {
+                    text: Translation.tr("Show a popup when Caps Lock changes")
+                }
+            }
+
+            SettingsSwitch {
+                buttonIcon: "dialpad"
+                text: Translation.tr("Num Lock popup")
+                checked: Config.options?.keyboardIndicators?.popup?.num ?? false
+                onCheckedChanged: Config.setNestedValue("keyboardIndicators.popup.num", checked)
+                StyledToolTip {
+                    text: Translation.tr("Show a popup when Num Lock changes")
+                }
+            }
+
+            SettingsSwitch {
+                buttonIcon: "dock_to_right"
+                text: Translation.tr("Keyboard panel indicators")
+                checked: Config.options?.keyboardIndicators?.showPanel ?? true
+                onCheckedChanged: Config.setNestedValue("keyboardIndicators.showPanel", checked)
+                StyledToolTip {
+                    text: Translation.tr("Show layout and lock state indicators in the bar or taskbar")
+                }
+            }
+
+            SettingsSwitch {
+                buttonIcon: "language"
+                text: Translation.tr("Layout indicator")
+                checked: Config.options?.keyboardIndicators?.panel?.layout ?? true
+                onCheckedChanged: Config.setNestedValue("keyboardIndicators.panel.layout", checked)
+                StyledToolTip {
+                    text: Translation.tr("Show the current keyboard layout in the bar or taskbar")
+                }
+            }
+
+            SettingsSwitch {
+                buttonIcon: "keyboard_capslock"
+                text: Translation.tr("Caps Lock indicator")
+                checked: Config.options?.keyboardIndicators?.panel?.caps ?? true
+                onCheckedChanged: Config.setNestedValue("keyboardIndicators.panel.caps", checked)
+                StyledToolTip {
+                    text: Translation.tr("Show Caps Lock in the bar or taskbar")
+                }
+            }
+
+            SettingsSwitch {
+                buttonIcon: "dialpad"
+                text: Translation.tr("Num Lock indicator")
+                checked: Config.options?.keyboardIndicators?.panel?.num ?? false
+                onCheckedChanged: Config.setNestedValue("keyboardIndicators.panel.num", checked)
+                StyledToolTip {
+                    text: Translation.tr("Show Num Lock in the bar or taskbar")
+                }
+            }
+        }
+    }
+
+    SettingsCardSection {
+        visible: !(Config.options?.settingsUi?.easyMode ?? false)
         expanded: false
         icon: "select_window"
         title: Translation.tr("Window Management")
 
         SettingsGroup {
             SettingsSwitch {
+                visible: CompositorService.isNiri
                 buttonIcon: "help"
                 text: Translation.tr("Confirm before closing windows")
                 checked: Config.options?.closeConfirm?.enabled ?? false
@@ -627,6 +624,7 @@ ContentPage {
     }
 
     SettingsCardSection {
+        visible: !(Config.options?.settingsUi?.easyMode ?? false)
         expanded: false
         icon: "work_alert"
         title: Translation.tr("Work safety")
@@ -655,6 +653,68 @@ ContentPage {
                 }
                 StyledToolTip {
                     text: Translation.tr("Replace anime wallpapers with a solid color when enabled")
+                }
+            }
+        }
+    }
+
+    SettingsCardSection {
+        expanded: false
+        icon: "waving_hand"
+        title: Translation.tr("Boot greeting")
+
+        SettingsGroup {
+            SettingsSwitch {
+                buttonIcon: "waving_hand"
+                text: Translation.tr("Show greeting on startup")
+                checked: Config.options?.bootGreeting?.enable ?? true
+                onCheckedChanged: {
+                    Config.setNestedValue("bootGreeting.enable", checked);
+                }
+                StyledToolTip {
+                    text: Translation.tr("Display a fullscreen welcome screen with clock and weather when the shell starts")
+                }
+            }
+
+            SettingsDivider {}
+
+            ConfigSpinBox {
+                enabled: Config.options?.bootGreeting?.enable ?? true
+                icon: "timer"
+                text: Translation.tr("Auto-dismiss delay (ms)")
+                value: Config.options?.bootGreeting?.autoDismissDelay ?? 5000
+                from: 2000
+                to: 15000
+                stepSize: 500
+                onValueChanged: {
+                    Config.setNestedValue("bootGreeting.autoDismissDelay", value);
+                }
+                StyledToolTip {
+                    text: Translation.tr("How long to show the greeting before it fades out automatically")
+                }
+            }
+
+            SettingsDivider {}
+
+            ConfigRow {
+                uniform: true
+                SettingsSwitch {
+                    enabled: Config.options?.bootGreeting?.enable ?? true
+                    buttonIcon: "thermostat"
+                    text: Translation.tr("Show weather")
+                    checked: Config.options?.bootGreeting?.showWeather ?? true
+                    onCheckedChanged: {
+                        Config.setNestedValue("bootGreeting.showWeather", checked);
+                    }
+                }
+                SettingsSwitch {
+                    enabled: Config.options?.bootGreeting?.enable ?? true
+                    buttonIcon: "calendar_today"
+                    text: Translation.tr("Show date")
+                    checked: Config.options?.bootGreeting?.showDate ?? true
+                    onCheckedChanged: {
+                        Config.setNestedValue("bootGreeting.showDate", checked);
+                    }
                 }
             }
         }
@@ -702,7 +762,7 @@ ContentPage {
                         Config.setNestedValue("lock.security.requirePasswordToPower", checked);
                     }
                     StyledToolTip {
-                        text: Translation.tr("Remember that on most devices one can always hold the power button to force shutdown\nThis only makes it a tiny bit harder for accidents to happen")
+                        text: Translation.tr("Guards against accidents only — holding the power button still forces a shutdown.")
                     }
                 }
 
@@ -714,13 +774,143 @@ ContentPage {
                         Config.setNestedValue("lock.security.unlockKeyring", checked);
                     }
                     StyledToolTip {
-                        text: Translation.tr("This is usually safe and needed for your browser and AI sidebar anyway\nMostly useful for those who use lock on startup instead of a display manager that does it (GDM, SDDM, etc.)")
+                        text: Translation.tr("Safe, and needed by your browser and the AI sidebar. Mostly for lock-on-startup setups.")
                     }
                 }
             }
 
             ContentSubsection {
                 title: Translation.tr("Style: general")
+
+                SettingsSwitch {
+                    buttonIcon: "notifications"
+                    text: Translation.tr('Show notifications on lock screen')
+                    checked: Config.options?.lock?.notifications?.enable ?? false
+                    onCheckedChanged: {
+                        Config.setNestedValue("lock.notifications.enable", checked);
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Display recent notifications on the lock screen clock view")
+                    }
+                }
+
+                SettingsSwitch {
+                    visible: Config.options?.lock?.notifications?.enable ?? false
+                    buttonIcon: "visibility"
+                    text: Translation.tr('Show notification body text')
+                    checked: Config.options?.lock?.notifications?.showBody ?? true
+                    onCheckedChanged: {
+                        Config.setNestedValue("lock.notifications.showBody", checked);
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Display the message content of notifications. Disable for privacy.")
+                    }
+                }
+
+                ConfigSpinBox {
+                    visible: Config.options?.lock?.notifications?.enable ?? false
+                    icon: "format_list_numbered"
+                    text: Translation.tr("Max notifications shown")
+                    value: Config.options?.lock?.notifications?.maxCount ?? 3
+                    from: 1
+                    to: 10
+                    stepSize: 1
+                    onValueChanged: {
+                        Config.setNestedValue("lock.notifications.maxCount", value);
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Maximum number of notifications to display on the lock screen")
+                    }
+                }
+            }
+
+            ContentSubsection {
+                visible: Config.options?.lock?.notifications?.enable ?? false
+                title: Translation.tr("Notification position")
+                tooltip: Translation.tr("Auto centres on Material, right-aligns on Waffle.")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options?.lock?.notifications?.position ?? "auto"
+                    options: [
+                        { displayName: Translation.tr("Auto"), value: "auto" },
+                        { displayName: Translation.tr("Center"), value: "center" },
+                        { displayName: Translation.tr("Left"), value: "left" },
+                        { displayName: Translation.tr("Right"), value: "right" }
+                    ]
+                    onSelected: (newValue) => Config.setNestedValue("lock.notifications.position", newValue)
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Clock style")
+                tooltip: Translation.tr("Visual style for the lock screen clock")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options?.lock?.clock?.style ?? "default"
+                    options: [
+                        { displayName: Translation.tr("Default"), value: "default" },
+                        { displayName: Translation.tr("Minimal"), value: "minimal" },
+                        { displayName: Translation.tr("Analog"), value: "analog" }
+                    ]
+                    onSelected: (newValue) => Config.setNestedValue("lock.clock.style", newValue)
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Clock position")
+                tooltip: Translation.tr("Where the clock appears on the lock screen")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options?.lock?.clock?.position ?? "center"
+                    options: [
+                        { displayName: Translation.tr("Center"), value: "center" },
+                        { displayName: Translation.tr("Top Left"), value: "topLeft" },
+                        { displayName: Translation.tr("Bottom Left"), value: "bottomLeft" }
+                    ]
+                    onSelected: (newValue) => Config.setNestedValue("lock.clock.position", newValue)
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Extras")
+
+                SettingsSwitch {
+                    buttonIcon: "info"
+                    text: Translation.tr('Show status indicators')
+                    checked: Config.options?.lock?.status?.enable ?? true
+                    onCheckedChanged: {
+                        Config.setNestedValue("lock.status.enable", checked);
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Show WiFi, Bluetooth, volume and battery indicators on the lock screen")
+                    }
+                }
+
+                SettingsSwitch {
+                    buttonIcon: "brightness_6"
+                    text: Translation.tr('Dim wallpaper')
+                    checked: Config.options?.lock?.dim?.enable ?? false
+                    onCheckedChanged: {
+                        Config.setNestedValue("lock.dim.enable", checked);
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Apply a dark overlay to the wallpaper for better contrast on the lock screen")
+                    }
+                }
+
+                ConfigSpinBox {
+                    visible: Config.options?.lock?.dim?.enable ?? false
+                    text: Translation.tr("Dim amount")
+                    icon: "opacity"
+                    value: Math.round((Config.options?.lock?.dim?.opacity ?? 0.3) * 100)
+                    from: 10
+                    to: 80
+                    stepSize: 5
+                    onValueChanged: Config.setNestedValue("lock.dim.opacity", value / 100)
+                    StyledToolTip {
+                        text: Translation.tr("How much to dim the wallpaper (percentage)")
+                    }
+                }
 
                 SettingsSwitch {
                     buttonIcon: "center_focus_weak"
@@ -764,8 +954,40 @@ ContentPage {
                     checked: Config.options?.lock?.enableAnimation ?? false
                     onCheckedChanged: Config.setNestedValue("lock.enableAnimation", checked)
                     StyledToolTip {
-                        text: Translation.tr("Play video and GIF wallpapers on the lock screen instead of showing a still frame. May increase GPU/battery usage.")
+                        text: Translation.tr("Animated wallpapers on the lock screen. Costs GPU and battery.")
                     }
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Widgets")
+
+                SettingsSwitch {
+                    buttonIcon: "thermostat"
+                    text: Translation.tr("Weather")
+                    checked: Config.options?.lock?.widgets?.weather ?? true
+                    onCheckedChanged: Config.setNestedValue("lock.widgets.weather", checked)
+                }
+
+                SettingsSwitch {
+                    buttonIcon: "music_note"
+                    text: Translation.tr("Media player")
+                    checked: Config.options?.lock?.widgets?.media ?? true
+                    onCheckedChanged: Config.setNestedValue("lock.widgets.media", checked)
+                }
+
+                SettingsSwitch {
+                    buttonIcon: "power_settings_new"
+                    text: Translation.tr("Power buttons")
+                    checked: Config.options?.lock?.widgets?.powerButtons ?? true
+                    onCheckedChanged: Config.setNestedValue("lock.widgets.powerButtons", checked)
+                }
+
+                SettingsSwitch {
+                    buttonIcon: "touch_app"
+                    text: Translation.tr("Unlock hint text")
+                    checked: Config.options?.lock?.widgets?.hintText ?? true
+                    onCheckedChanged: Config.setNestedValue("lock.widgets.hintText", checked)
                 }
             }
             ContentSubsection {

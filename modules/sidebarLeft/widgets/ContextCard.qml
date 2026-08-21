@@ -32,7 +32,14 @@ Item {
         id: card
         anchors.centerIn: parent
         width: parent.width
-        implicitHeight: stack.implicitHeight + 16
+        // StackLayout's implicitHeight is the MAX across all views, so weather
+        // mode used to reserve the taller timer view's height as a ghost gap
+        // below the visible content. Size to the current view instead.
+        implicitHeight: (stack.children[stack.currentIndex]?.implicitHeight ?? stack.implicitHeight) + 16
+        Behavior on implicitHeight {
+            enabled: Appearance.animationsEnabled
+            NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve }
+        }
         radius: Appearance.angelEverywhere ? Appearance.angel.roundingNormal
             : Appearance.inirEverywhere ? Appearance.inir.roundingNormal
             : Appearance.rounding.normal
@@ -93,12 +100,18 @@ Item {
 
                     // Cycle badge for pomodoro
                     Rectangle {
-                        visible: timerView.activeTimer === "pomodoro"
+                        scale: timerView.activeTimer === "pomodoro" ? 1 : 0
+                        visible: scale > 0
+                        Behavior on scale {
+                            enabled: Appearance.animationsEnabled
+                            NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Easing.OutCubic }
+                        }
                         implicitWidth: cycleText.implicitWidth + 8
                         implicitHeight: 16
                         radius: 8
                         color: Appearance.inirEverywhere ? Appearance.inir.colLayer2
                             : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
+                            : Appearance.zzzEverywhere ? Appearance.colors.colLayer2
                             : Appearance.colors.colSecondaryContainer
 
                         StyledText {
@@ -158,7 +171,12 @@ Item {
                 // Progress
                 StyledProgressBar {
                     Layout.fillWidth: true
-                    visible: timerView.activeTimer !== "stopwatch"
+                    opacity: timerView.activeTimer !== "stopwatch" ? 1 : 0
+                    visible: opacity > 0
+                    Behavior on opacity {
+                        enabled: Appearance.animationsEnabled
+                        NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Easing.OutCubic }
+                    }
                     value: timerView.activeTimer === "pomodoro"
                         ? TimerService.pomodoroSecondsLeft / (TimerService.pomodoroLapDuration || 1)
                         : TimerService.countdownSecondsLeft / (TimerService.countdownDuration || 1)
@@ -167,6 +185,7 @@ Item {
                         : (Appearance.inirEverywhere ? Appearance.inir.colPrimary : Appearance.colors.colPrimary)
                     trackColor: Appearance.inirEverywhere ? Appearance.inir.colLayer2
                         : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
+                        : Appearance.zzzEverywhere ? Appearance.colors.colLayer2
                         : Appearance.colors.colSecondaryContainer
                 }
             }
@@ -211,7 +230,12 @@ Item {
                         StyledText {
                             Layout.fillWidth: true
                             text: Weather.visibleCity
-                            visible: Weather.showVisibleCity
+                            opacity: Weather.showVisibleCity ? 1 : 0
+                            visible: opacity > 0
+                            Behavior on opacity {
+                                enabled: Appearance.animationsEnabled
+                                NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Easing.OutCubic }
+                            }
                             font.pixelSize: Appearance.font.pixelSize.smallest
                             color: Appearance.inirEverywhere ? Appearance.inir.colTextSecondary : Appearance.colors.colSubtext
                             elide: Text.ElideRight
@@ -256,7 +280,9 @@ Item {
                 id: idleView
                 spacing: 6
 
-                property int tab: Persistent.states?.timer?.tab ?? 0
+                // Clamp to the valid tab range — a stale/out-of-range persisted
+                // value would otherwise index past `tabs` and throw.
+                property int tab: Math.max(0, Math.min(2, Persistent.states?.timer?.tab ?? 0))
                 property int _prevTab: 0
                 readonly property var tabs: [
                     { icon: "target", label: Translation.tr("Focus") },
@@ -362,6 +388,7 @@ Item {
                                     : Appearance.colors.colPrimary)
                                 : (Appearance.inirEverywhere ? Appearance.inir.colLayer2
                                     : Appearance.auroraEverywhere ? Appearance.aurora.colElevatedSurface
+                                    : Appearance.zzzEverywhere ? Appearance.colors.colLayer2
                                     : Appearance.colors.colSecondaryContainer)
                             Behavior on color { enabled: Appearance.animationsEnabled; animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
 

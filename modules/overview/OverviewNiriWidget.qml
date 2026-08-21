@@ -32,9 +32,15 @@ Item {
     readonly property string wallpaperThumbnailPath: Config.options?.background?.thumbnailPath ?? wallpaperPathRaw
 
     readonly property int workspacesShown: root.overviewRows * root.overviewColumns
-    readonly property var workspacesForOutput: NiriService.currentOutputWorkspaces
-    readonly property var outputWorkspaceNumbers: NiriService.getCurrentOutputWorkspaceNumbers ? NiriService.getCurrentOutputWorkspaceNumbers() : []
-    readonly property int currentWorkspaceNumber: NiriService.getCurrentWorkspaceNumber ? NiriService.getCurrentWorkspaceNumber() : 1
+    readonly property string outputName: panelWindow?.screen?.name ?? ""
+    readonly property var workspacesForOutput: NiriService.allWorkspaces
+        .filter(workspace => workspace.output === root.outputName)
+        .sort((a, b) => a.idx - b.idx)
+    readonly property var outputWorkspaceNumbers: workspacesForOutput.map(workspace => workspace.idx)
+    readonly property int currentWorkspaceNumber: {
+        const activeWorkspace = workspacesForOutput.find(workspace => workspace.is_active)
+        return activeWorkspace?.idx ?? (outputWorkspaceNumbers[0] ?? 1)
+    }
     readonly property int currentWorkspaceSlot: {
         if (!outputWorkspaceNumbers || outputWorkspaceNumbers.length === 0)
             return 0;
@@ -77,12 +83,11 @@ Item {
     property string wallpaperPath: wallpaperIsVideo ? wallpaperThumbnailPath
                                                     : wallpaperPathRaw
 
-    property string currentOutput: NiriService.currentOutput
     property var outputs: NiriService.outputs
 
-    property var currentOutputInfo: (!currentOutput && Object.keys(outputs).length > 0)
+    property var currentOutputInfo: (!outputName && Object.keys(outputs).length > 0)
                                     ? outputs[Object.keys(outputs)[0]]
-                                    : outputs[currentOutput]
+                                    : outputs[outputName]
 
     property int logicalWidth: currentOutputInfo && currentOutputInfo.logical ? currentOutputInfo.logical.width : 1920
     property int logicalHeight: currentOutputInfo && currentOutputInfo.logical ? currentOutputInfo.logical.height : 1080
@@ -122,8 +127,8 @@ Item {
     property int wheelStepCounter: 0
     property int wheelStepsRequired: Math.max(1, root.overviewScrollWorkspaceSteps)
 
-    property int draggingFromWorkspace: -1    // Niri workspace idx
-    property int draggingTargetWorkspace: -1  // Niri workspace idx
+    property int draggingFromWorkspace: -1
+    property int draggingTargetWorkspace: -1
 
     implicitWidth: overviewBackground.implicitWidth + Appearance.sizes.elevationMargin * 2
     implicitHeight: overviewBackground.implicitHeight + Appearance.sizes.elevationMargin * 2
@@ -196,9 +201,9 @@ Item {
             if (nextIndex === validIndex)
                 return
 
-            const nextNumber = wsList[nextIndex]
-            // wsList already contains Niri idx (1-based) for this output.
-            NiriService.switchToWorkspace(nextNumber)
+            const nextWorkspace = root.workspacesForOutput[nextIndex]
+            if (nextWorkspace)
+                NiriService.switchToWorkspaceById(nextWorkspace.id)
         }
     }
 
@@ -377,9 +382,11 @@ Item {
                                 bottomLeftRadius: workspace.bottomLeftRadius
                                 bottomRightRadius: workspace.bottomRightRadius
                                 Behavior on opacity {
+                                    enabled: Appearance.animationsEnabled
                                     NumberAnimation {
-                                        duration: 140
-                                        easing.type: Easing.InOutQuad
+                                        duration: Appearance.animation.elementMoveFast.duration
+                                        easing.type: Appearance.animation.elementMoveFast.type
+                                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
                                     }
                                 }
                             }
@@ -430,8 +437,7 @@ Item {
                                 onPressed: {
                                     if (root.draggingTargetWorkspace === -1 && workspace.workspaceObj) {
                                         GlobalStates.overviewOpen = false
-                                        // Usar idx real de Niri para FocusWorkspace
-                                        NiriService.switchToWorkspace(workspace.workspaceObj.idx)
+                                        NiriService.switchToWorkspaceById(workspace.workspaceObj.id)
                                     }
                                 }
                             }
@@ -439,14 +445,14 @@ Item {
                             DropArea {
                                 anchors.fill: parent
                                 onEntered: {
-                                    root.draggingTargetWorkspace = workspace.workspaceObj ? workspace.workspaceObj.idx : -1
+                                    root.draggingTargetWorkspace = workspace.workspaceObj ? workspace.workspaceObj.id : -1
                                     if (root.draggingFromWorkspace === root.draggingTargetWorkspace)
                                         return
                                     hoveredWhileDragging = true
                                 }
                                 onExited: {
                                     hoveredWhileDragging = false
-                                    if (workspace.workspaceObj && root.draggingTargetWorkspace === workspace.workspaceObj.idx)
+                                    if (workspace.workspaceObj && root.draggingTargetWorkspace === workspace.workspaceObj.id)
                                         root.draggingTargetWorkspace = -1
                                 }
                             }
@@ -611,17 +617,19 @@ Item {
                     z: root.windowZ
 
                     Behavior on x {
-                        enabled: !windowItem.Drag.active
+                        enabled: !windowItem.Drag.active && Appearance.animationsEnabled
                         NumberAnimation {
-                            duration: 140
-                            easing.type: Easing.InOutQuad
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
                         }
                     }
                     Behavior on y {
-                        enabled: !windowItem.Drag.active
+                        enabled: !windowItem.Drag.active && Appearance.animationsEnabled
                         NumberAnimation {
-                            duration: 140
-                            easing.type: Easing.InOutQuad
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
                         }
                     }
 
@@ -690,7 +698,12 @@ Item {
                             opacity: status === Image.Ready ? 1 : 0
 
                             Behavior on opacity {
-                                NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
+                                enabled: Appearance.animationsEnabled
+                                NumberAnimation { 
+                                    duration: Appearance.animation.elementMoveFast.duration
+                                    easing.type: Appearance.animation.elementMoveFast.type
+                                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                }
                             }
 
                             // Listen for preview updates
@@ -733,12 +746,18 @@ Item {
                             source: AppSearch.getIconSource(windowData.app_id || windowData.appId || "")
                             asynchronous: true
                             fillMode: Image.PreserveAspectFit
-                            visible: !windowPreview.visible
+                            opacity: windowPreview.visible ? 0.6 : 1.0
+                            Behavior on opacity {
+                                enabled: Appearance.animationsEnabled
+                                NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Easing.OutCubic }
+                            }
                             scale: windowItem.hovered ? 1.08 : 1.0
                             Behavior on scale {
+                                enabled: Appearance.animationsEnabled
                                 NumberAnimation {
-                                    duration: 120
-                                    easing.type: Easing.InOutQuad
+                                    duration: Appearance.animation.elementMoveFast.duration
+                                    easing.type: Appearance.animation.elementMoveFast.type
+                                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
                                 }
                             }
                         }
@@ -764,7 +783,7 @@ Item {
                                 }
                                 windowItem.pressed = true
                                 const ws = NiriService.workspaces[windowData.workspace_id]
-                                root.draggingFromWorkspace = ws ? ws.idx : -1
+                                root.draggingFromWorkspace = ws ? ws.id : -1
                                 windowItem.Drag.active = true
                                 windowItem.Drag.source = windowItem
                                 windowItem.Drag.hotSpot.x = mouse.x
@@ -796,7 +815,7 @@ Item {
 
                                 if (movedToOtherWorkspace) {
                                     // Drop válido en otro workspace: mover ventana allí
-                                    NiriService.moveWindowToWorkspace(windowData.id, targetWorkspace, true)
+                                    NiriService.moveWindowToWorkspaceById(windowData.id, targetWorkspace, true)
                                     // Force immediate rebuild after move
                                     Qt.callLater(() => windowSpace.rebuildWindowItems())
                                 } else {
@@ -920,7 +939,7 @@ Item {
                 border.color: root.activeBorderColor
 
                 Behavior on x {
-                    enabled: root.focusAnimEnabled
+                    enabled: root.focusAnimEnabled && Appearance.animationsEnabled
                     animation: NumberAnimation {
                         duration: root.focusAnimDuration
                         easing.type: Appearance.animation.elementMoveFast.type
@@ -928,7 +947,7 @@ Item {
                     }
                 }
                 Behavior on y {
-                    enabled: root.focusAnimEnabled
+                    enabled: root.focusAnimEnabled && Appearance.animationsEnabled
                     animation: NumberAnimation {
                         duration: root.focusAnimDuration
                         easing.type: Appearance.animation.elementMoveFast.type
@@ -936,7 +955,7 @@ Item {
                     }
                 }
                 Behavior on topLeftRadius {
-                    enabled: root.focusAnimEnabled
+                    enabled: root.focusAnimEnabled && Appearance.animationsEnabled
                     animation: NumberAnimation {
                         duration: root.focusAnimDuration
                         easing.type: Appearance.animation.elementMoveEnter.type
@@ -944,7 +963,7 @@ Item {
                     }
                 }
                 Behavior on topRightRadius {
-                    enabled: root.focusAnimEnabled
+                    enabled: root.focusAnimEnabled && Appearance.animationsEnabled
                     animation: NumberAnimation {
                         duration: root.focusAnimDuration
                         easing.type: Appearance.animation.elementMoveEnter.type
@@ -952,7 +971,7 @@ Item {
                     }
                 }
                 Behavior on bottomLeftRadius {
-                    enabled: root.focusAnimEnabled
+                    enabled: root.focusAnimEnabled && Appearance.animationsEnabled
                     animation: NumberAnimation {
                         duration: root.focusAnimDuration
                         easing.type: Appearance.animation.elementMoveEnter.type
@@ -960,7 +979,7 @@ Item {
                     }
                 }
                 Behavior on bottomRightRadius {
-                    enabled: root.focusAnimEnabled
+                    enabled: root.focusAnimEnabled && Appearance.animationsEnabled
                     animation: NumberAnimation {
                         duration: root.focusAnimDuration
                         easing.type: Appearance.animation.elementMoveEnter.type

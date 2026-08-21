@@ -5,6 +5,7 @@ import qs.modules.common
 import qs
 import qs.services
 import QtQuick
+import Quickshell
 import Quickshell.Io
 
 /**
@@ -16,6 +17,10 @@ import Quickshell.Io
 QtObject {
     id: root
 
+    function _log(...args): void {
+        if (Quickshell.env("QS_DEBUG") === "1") console.log(...args);
+    }
+
     property Component wallhavenResponseComponent: BooruResponseData {}
 
     signal responseFinished()
@@ -23,7 +28,29 @@ QtObject {
 
     property string failMessage: Translation.tr("That didn't work. Tips:\n- Check your query and NSFW settings\n- Make sure your Wallhaven API key is set if you want NSFW")
     property var responses: []
+    readonly property int responseLimit: 20
     property int runningRequests: 0
+
+    function _destroyResponsesLater(items) {
+        const doomed = (items || []).filter(item => item !== null && item !== undefined)
+        if (doomed.length === 0)
+            return
+        Qt.callLater(() => {
+            for (let i = 0; i < doomed.length; ++i) {
+                if (typeof doomed[i].destroy === "function")
+                    doomed[i].destroy()
+            }
+        })
+    }
+
+    function _appendResponse(response) {
+        const next = [...root.responses, response]
+        const removed = []
+        while (next.length > root.responseLimit)
+            removed.push(next.shift())
+        root.responses = next
+        root._destroyResponsesLater(removed)
+    }
 
     property string _lastTagSuggestionQuery: ""
     property var _lastTagSuggestions: ([])
@@ -36,10 +63,10 @@ QtObject {
     readonly property bool _active: (Config.options?.sidebar?.wallhaven?.enable ?? true) && (GlobalStates?.sidebarLeftOpen ?? false)
 
     property Timer wallhavenClock: Timer {
+        // Removed: nowMs is updated on-demand in handlers that need it
         interval: 500
-        repeat: true
-        running: root._active
-        onTriggered: root.nowMs = Date.now()
+        repeat: false
+        running: false
     }
 
     Component.onCompleted: {
@@ -60,6 +87,7 @@ QtObject {
         repeat: true
         running: root._active || (root.pendingSearch !== null)
         onTriggered: {
+            root.nowMs = Date.now()
             if (!root.pendingSearch)
                 return
             if (root.isRateLimited)
@@ -78,6 +106,8 @@ QtObject {
     // Tag fetch queue
     property var tagQueue: ([])
     property var wallpaperTagCache: ({})
+    property var _wallpaperTagCacheKeys: []
+    readonly property int wallpaperTagCacheLimit: 256
     property var wallpaperTagRequests: ({})
 
     // Basic settings
@@ -89,13 +119,54 @@ QtObject {
     property string tagSuggestionBase: "https://wallhaven.cc/tag/search"
     property int tagSuggestionCacheMs: 5 * 60 * 1000
     property var _tagSuggestionCache: ({})
+    property var _tagSuggestionCacheKeys: []
+    readonly property int tagSuggestionCacheLimit: 64
     property var currentTagRequest: null
 
     // Cache + queue for counts (meta.total) per tag id
     property int tagCountCacheMs: 10 * 60 * 1000
     property var _tagCountCache: ({})
+    property var _tagCountCacheKeys: []
+    readonly property int tagCountCacheLimit: 256
     property var _tagCountRequests: ({})
     property var _tagCountQueue: ([])
+
+    function _boundedCacheInsert(cache, keys, key, value, limit) {
+        const nextCache = Object.assign({}, cache)
+        const nextKeys = (keys || []).slice()
+        const existingIndex = nextKeys.indexOf(key)
+        if (existingIndex >= 0)
+            nextKeys.splice(existingIndex, 1)
+
+        nextCache[key] = value
+        nextKeys.push(key)
+        while (nextKeys.length > limit) {
+            const oldestKey = nextKeys.shift()
+            delete nextCache[oldestKey]
+        }
+        return { cache: nextCache, keys: nextKeys }
+    }
+
+    function _storeTagSuggestion(key, value) {
+        const bounded = root._boundedCacheInsert(root._tagSuggestionCache,
+            root._tagSuggestionCacheKeys, key, value, root.tagSuggestionCacheLimit)
+        root._tagSuggestionCache = bounded.cache
+        root._tagSuggestionCacheKeys = bounded.keys
+    }
+
+    function _storeTagCount(key, value) {
+        const bounded = root._boundedCacheInsert(root._tagCountCache,
+            root._tagCountCacheKeys, key, value, root.tagCountCacheLimit)
+        root._tagCountCache = bounded.cache
+        root._tagCountCacheKeys = bounded.keys
+    }
+
+    function _storeWallpaperTags(key, value) {
+        const bounded = root._boundedCacheInsert(root.wallpaperTagCache,
+            root._wallpaperTagCacheKeys, key, value, root.wallpaperTagCacheLimit)
+        root.wallpaperTagCache = bounded.cache
+        root._wallpaperTagCacheKeys = bounded.keys
+    }
 
     // Process for main search requests
     property var _currentSearchUrl: ""
@@ -236,14 +307,14 @@ QtObject {
         root._tagCountCurrentId = id
 
         const url = root.apiSearchEndpoint + "?q=" + encodeURIComponent("id:" + id) + "&page=1&per_page=1&categories=111&purity=100&sorting=date_added&order=desc" + ((apiKey && apiKey.length > 0) ? ("&apikey=" + encodeURIComponent(apiKey)) : "")
-        console.log("[Wallhaven] Fetching tag count for", id)
+        _log("[Wallhaven] Fetching tag count for", id)
         root.tagCountProcess.command = ["/usr/bin/curl", "-s", "--max-time", "15", "-H", "User-Agent: " + defaultUserAgent, url]
         root.tagCountProcess.running = true
     }
 
     function _handleTagCountResponse(text): void {
         const id = root._tagCountCurrentId
-        root._tagCountRequests[id] = false
+        delete root._tagCountRequests[id]
         root._tagCountCurrentId = ""
 
         if (!text || text.length === 0) {
@@ -254,7 +325,7 @@ QtObject {
             const payload = JSON.parse(text)
             const meta = payload.meta || {}
             const total = meta.total !== undefined ? parseInt(meta.total) : 0
-            root._tagCountCache[id] = { ts: root.nowMs, total: total }
+            root._storeTagCount(id, { ts: root.nowMs, total: total })
 
             if (root._lastTagSuggestions && root._lastTagSuggestions.length > 0) {
                 let changed = false
@@ -300,7 +371,7 @@ QtObject {
         root._tagSuggestionQuery = q
         root._tagSuggestionPreferQuoted = preferQuoted
         
-        console.log("[Wallhaven] Fetching tag suggestions for", q)
+        _log("[Wallhaven] Fetching tag suggestions for", q)
         root.tagSuggestionProcess.command = ["/usr/bin/curl", "-s", "--max-time", "15", "-H", "User-Agent: " + defaultUserAgent, url]
         root.tagSuggestionProcess.running = true
     }
@@ -310,7 +381,7 @@ QtObject {
         const preferQuoted = root._tagSuggestionPreferQuoted
 
         if (!text || text.length === 0) {
-            console.log("[Wallhaven] Tag suggestion request failed: empty response")
+            _log("[Wallhaven] Tag suggestion request failed: empty response")
             root.tagSuggestion(q, [])
             return
         }
@@ -335,7 +406,7 @@ QtObject {
                 return s
             })
 
-            root._tagSuggestionCache[q] = { ts: root.nowMs, items: enriched }
+            root._storeTagSuggestion(q, { ts: root.nowMs, items: enriched })
             root._lastTagSuggestionQuery = q
             root._lastTagSuggestions = enriched
             root.tagSuggestion(q, enriched)
@@ -404,7 +475,7 @@ QtObject {
         root._tagDetailCurrentId = id
 
         const url = _detailUrl(id)
-        console.log("[Wallhaven] Fetching wallpaper tags for", id)
+        _log("[Wallhaven] Fetching wallpaper tags for", id)
         root.tagDetailProcess.command = ["/usr/bin/curl", "-s", "--max-time", "15", "-H", "User-Agent: " + defaultUserAgent, url]
         root.tagDetailProcess.running = true
     }
@@ -412,10 +483,10 @@ QtObject {
     function _handleTagDetailResponse(text): void {
         const id = root._tagDetailCurrentId
         root._tagDetailCurrentId = ""
-        wallpaperTagRequests[id] = false
+        delete wallpaperTagRequests[id]
 
         if (!text || text.length === 0) {
-            wallpaperTagCache[id] = ""
+            root._storeWallpaperTags(id, "")
             return
         }
 
@@ -427,11 +498,11 @@ QtObject {
             if (tags && tags.length > 0) {
                 joined = tags.map(function(t) { return t.name; }).join(" ")
             }
-            wallpaperTagCache[id] = joined
+            root._storeWallpaperTags(id, joined)
             _applyTagsToResponses(id, joined)
         } catch (e) {
             console.log("[Wallhaven] Failed to parse detail response:", e)
-            wallpaperTagCache[id] = ""
+            root._storeWallpaperTags(id, "")
         }
     }
 
@@ -450,7 +521,9 @@ QtObject {
     property string topRange: "1M"
 
     function clearResponses() {
-        responses = []
+        const previous = root.responses
+        root.responses = []
+        root._destroyResponsesLater(previous)
     }
 
     function addSystemMessage(message) {
@@ -461,7 +534,7 @@ QtObject {
             "images": [],
             "message": message
         })
-        responses = [...responses, resp]
+        root._appendResponse(resp)
         responseFinished()
     }
 
@@ -519,7 +592,7 @@ QtObject {
         root._nextSearchAllowedMs = root.nowMs + root.minSearchIntervalMs
 
         var url = _buildSearchUrl(tags, nsfw, limit, page)
-        console.log("[Wallhaven] Making request to", url)
+        _log("[Wallhaven] Making request to", url)
 
         var newResponse = wallhavenResponseComponent.createObject(null, {
             "provider": "wallhaven",
@@ -547,9 +620,9 @@ QtObject {
         }
 
         if (!text || text.length === 0) {
-            console.log("[Wallhaven] Request failed: empty response")
+            _log("[Wallhaven] Request failed: empty response")
             newResponse.message = failMessage
-            responses = [...responses, newResponse]
+            root._appendResponse(newResponse)
             root.responseFinished()
             root._currentSearchResponse = null
             root._processPendingSearch()
@@ -600,13 +673,14 @@ QtObject {
             newResponse.message = failMessage
         }
 
-        responses = [...responses, newResponse]
+        root._appendResponse(newResponse)
         root.responseFinished()
         root._currentSearchResponse = null
         root._processPendingSearch()
     }
 
     function _processPendingSearch(): void {
+        root.nowMs = Date.now()
         if (root.pendingSearch && !root.isRateLimited) {
             const next = root.pendingSearch
             root.pendingSearch = null

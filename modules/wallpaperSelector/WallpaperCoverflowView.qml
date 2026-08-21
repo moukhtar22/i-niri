@@ -640,24 +640,6 @@ Item {
                             sourceSize.width: Math.round(root.cardW * root._dpr * (slot.isCurrent ? 1.5 : 0.8))
                             sourceSize.height: Math.round(root.cardH * root._dpr * (slot.isCurrent ? 1.5 : 0.8))
 
-                            Connections {
-                                target: Wallpapers
-                                function onThumbnailGenerated(directory) {
-                                    if (thumb.status !== Image.Error) return
-                                    if (!thumb.sourcePath || thumb.sourcePath.length === 0) return
-                                    if (FileUtils.parentDirectory(thumb.sourcePath) !== directory) return
-                                    thumb.source = ""
-                                    thumb.source = thumb.thumbnailPath
-                                }
-                                function onThumbnailGeneratedFile(filePath) {
-                                    if (thumb.status !== Image.Error) return
-                                    if (!thumb.sourcePath || thumb.sourcePath.length === 0) return
-                                    if (Qt.resolvedUrl(thumb.sourcePath) !== Qt.resolvedUrl(filePath)) return
-                                    thumb.source = ""
-                                    thumb.source = thumb.thumbnailPath
-                                }
-                            }
-
                             layer.enabled: true
                             layer.effect: GE.OpacityMask {
                                 maskSource: Rectangle {
@@ -840,8 +822,19 @@ Item {
                     width: parent.width - 32
                     spacing: 8
 
+                    MascotImage {
+                        id: emptyMascot
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.preferredWidth: 96
+                        Layout.preferredHeight: 96
+                        surface: "wallpaperSelector"
+                        fallbackSurface: "emptyStates"
+                        pose: "theme-artist"
+                    }
+
                     MaterialSymbol {
                         Layout.alignment: Qt.AlignHCenter
+                        visible: !emptyMascot.active
                         text: "imagesmode"
                         iconSize: 36
                         color: root._accent

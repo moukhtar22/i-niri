@@ -21,6 +21,9 @@ Item {
     readonly property bool angelStyle: Appearance.angelEverywhere
     readonly property bool inirStyle: Appearance.inirEverywhere
     readonly property bool auroraStyle: Appearance.auroraEverywhere
+    readonly property bool zzzStyle: Appearance.zzzEverywhere
+    property bool panelVisible: true
+    readonly property bool useWallpaperBackdrop: root.panelVisible && (root.angelStyle || root.auroraStyle) && !root.inirStyle && root.wallpaperUrl.length > 0
 
     // ── Screen & wallpaper for blur (angel/aurora) ──
     property int screenWidth: root.QsWindow?.window?.screen?.width ?? 1920
@@ -42,7 +45,7 @@ Item {
 
     // ── Greeting based on time ──
     readonly property string greeting: {
-        const hour = new Date().getHours()
+        const hour = DateTime.clock.hours
         if (hour < 6) return Translation.tr("Good night")
         if (hour < 12) return Translation.tr("Good morning")
         if (hour < 18) return Translation.tr("Good afternoon")
@@ -63,49 +66,12 @@ Item {
 
     // ── Cover art download ──
     property string artDownloadLocation: Directories.coverArt
-    property string artFileName: effectiveArtUrl ? Qt.md5(effectiveArtUrl) : ""
-    property string artFilePath: artFileName ? `${artDownloadLocation}/${artFileName}` : ""
-    property bool downloaded: false
-    property string displayedArtFilePath: downloaded ? Qt.resolvedUrl(artFilePath) : ""
-    property int _downloadRetryCount: 0
+    readonly property bool downloaded: MediaArtwork.ready
+    property string displayedArtFilePath: MediaArtwork.displaySource
 
     function checkAndDownloadArt(): void {
-        if (!effectiveArtUrl) { downloaded = false; _downloadRetryCount = 0; return }
-        artExistsChecker.running = true
+        MediaArtwork.refresh()
     }
-    onArtFilePathChanged: { _downloadRetryCount = 0; checkAndDownloadArt() }
-    onEffectiveArtUrlChanged: { _downloadRetryCount = 0; checkAndDownloadArt() }
-
-    Process {
-        id: artExistsChecker
-        command: ["/usr/bin/test", "-f", root.artFilePath]
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode === 0) { root.downloaded = true }
-            else {
-                root.downloaded = false
-                artDownloader.targetFile = root.effectiveArtUrl ?? ""
-                artDownloader.artPath = root.artFilePath
-                artDownloader.running = true
-            }
-        }
-    }
-    Process {
-        id: artDownloader
-        property string targetFile
-        property string artPath
-        command: ["/usr/bin/bash", "-c", `
-            if [ -f '${artPath}' ]; then exit 0; fi
-            mkdir -p '${root.artDownloadLocation}'
-            tmp='${artPath}.tmp'
-            /usr/bin/curl -sSL --connect-timeout 8 --max-time 20 '${targetFile}' -o "$tmp" && \
-            [ -s "$tmp" ] && /usr/bin/mv -f "$tmp" '${artPath}' || { rm -f "$tmp"; exit 1; }
-        `]
-        onExited: (exitCode) => {
-            if (exitCode === 0) root.downloaded = true
-            else if (root._downloadRetryCount < 2) { root._downloadRetryCount++; retryTimer.start() }
-        }
-    }
-    Timer { id: retryTimer; interval: 1500; onTriggered: root.checkAndDownloadArt() }
 
     // ── Adaptive colors from album art ──
     ColorQuantizer {
@@ -180,16 +146,17 @@ Item {
     readonly property color mediaAccent: hasPlayer ? (angelStyle ? Appearance.angel.colPrimary : inirStyle ? Appearance.inir.colPrimary
         : (blendedColors?.colPrimary ?? Appearance.colors.colPrimary)) : colPrimary
     readonly property color mediaTrack: angelStyle ? Appearance.angel.colGlassCard : inirStyle ? Appearance.inir.colLayer2
+        : zzzStyle ? Appearance.colors.colLayer2
         : (blendedColors?.colSecondaryContainer ?? Appearance.colors.colSecondaryContainer)
     readonly property color mediaHover: angelStyle ? Appearance.angel.colGlassCardHover : inirStyle ? Appearance.inir.colLayer2Hover
         : ColorUtils.transparentize(blendedColors?.colLayer1 ?? Appearance.colors.colLayer1, 0.5)
     readonly property int weatherSystemMinHeight: 190
+    readonly property int weatherCardMinHeight: 132
 
     implicitWidth: dashContainer.implicitWidth + Appearance.sizes.elevationMargin * 2
     implicitHeight: dashContainer.implicitHeight + Appearance.sizes.elevationMargin * 2
 
     Component.onCompleted: ResourceUsage.ensureRunning()
-    Component.onDestruction: ResourceUsage.stop()
 
     Timer {
         running: root.effectiveIsPlaying
@@ -209,27 +176,27 @@ Item {
         id: blurBg
         required property Item targetCard
         anchors.fill: parent
-        visible: (root.angelStyle || root.auroraStyle) && !root.inirStyle
+        visible: root.useWallpaperBackdrop
 
         Image {
             id: blurBgImage
             anchors.centerIn: parent
             width: root.screenWidth
             height: root.screenHeight
-            source: root.wallpaperUrl
+            source: root.useWallpaperBackdrop ? root.wallpaperUrl : ""
             fillMode: Image.PreserveAspectCrop
             cache: true
             sourceSize.width: root.screenWidth
             sourceSize.height: root.screenHeight
             asynchronous: true
 
-            layer.enabled: Appearance.effectsEnabled
+            layer.enabled: Appearance.effectsEnabled && root.useWallpaperBackdrop
             layer.effect: MultiEffect {
                 source: blurBgImage
                 anchors.fill: source
                 saturation: root.angelStyle ? Appearance.angel.blurSaturation : 0.14
                 blurEnabled: Appearance.effectsEnabled
-                blurMax: 100
+                blurMax: 64
                 blur: Appearance.effectsEnabled ? 1.12 : 0
             }
 
@@ -255,6 +222,15 @@ Item {
     // ═══════════════════════════════════════════════════
     // MAIN CONTAINER — transparent, no floating panel
     // ═══════════════════════════════════════════════════
+    ZzzPlate {
+        anchors.fill: dashContainer
+        visible: Appearance.zzzEverywhere
+        fillColor: Appearance.colors.colLayer0
+        strokeColor: Appearance.zzz.hairlineStrong
+        strokeWidth: Appearance.zzz.hairlineThick
+        chamfer: Appearance.zzz.cutCorner
+    }
+
     GlassBackground {
         id: dashContainer
         anchors.centerIn: parent
@@ -263,17 +239,38 @@ Item {
         implicitHeight: Math.min(mainCol.implicitHeight + 24, root.dashboardSafeHeight)
         height: implicitHeight
         radius: root.containerRadius
-        fallbackColor: Appearance.colors.colBackgroundSurfaceContainer
+        fallbackColor: Appearance.zzzEverywhere ? "transparent" : Appearance.colors.colBackgroundSurfaceContainer
         inirColor: root.inirStyle ? Appearance.inir.colLayer1 : root.colCardBg
         auroraTransparency: Math.max(0.16, Appearance.aurora.popupTransparentize - 0.12)
-        border.width: root.angelStyle || root.inirStyle || root.auroraStyle ? 1 : 0
+        wallpaperBackdropEnabled: root.panelVisible
+        border.width: Appearance.zzzEverywhere ? 0
+            : root.angelStyle || root.inirStyle || root.auroraStyle ? 1 : 0
         border.color: root.angelStyle ? Appearance.angel.colCardBorder
             : root.inirStyle ? Appearance.inir.colBorder
             : root.auroraStyle ? ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.70)
             : root.colBorder
+        Behavior on border.width {
+            enabled: Appearance.animationsEnabled
+            NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+        }
+        Behavior on border.color {
+            enabled: Appearance.animationsEnabled
+            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+        }
         clip: true
 
         AngelPartialBorder { visible: root.angelStyle; targetRadius: dashContainer.radius; coverage: 0.4 }
+
+        ZzzPanelBackdrop {
+            anchors.fill: parent
+            label: "OVERVIEW"
+            index: "DB"
+            ghostText: "GRID"
+            accentColor: Appearance.zzz.accent
+            showBurst: false
+            showTicks: false
+            z: 0
+        }
 
         Flickable {
             id: dashboardFlick
@@ -309,7 +306,7 @@ Item {
                 border.color: root.colBorder
                 clip: true
 
-                layer.enabled: (root.angelStyle || root.auroraStyle) && !root.inirStyle
+                layer.enabled: root.useWallpaperBackdrop
                 layer.effect: GE.OpacityMask {
                     maskSource: Rectangle { width: headerCard.width; height: headerCard.height; radius: headerCard.radius }
                 }
@@ -319,19 +316,19 @@ Item {
                     anchors.centerIn: parent
                     width: root.screenWidth
                     height: root.screenHeight
-                    visible: (root.angelStyle || root.auroraStyle) && !root.inirStyle
-                    source: root.wallpaperUrl
+                    visible: root.useWallpaperBackdrop
+                    source: root.useWallpaperBackdrop ? root.wallpaperUrl : ""
                     fillMode: Image.PreserveAspectCrop
                     cache: true
                     sourceSize.width: root.screenWidth
                     sourceSize.height: root.screenHeight
                     asynchronous: true
 
-                    layer.enabled: Appearance.effectsEnabled && (Appearance.auroraEverywhere || Appearance.angelEverywhere) && !Appearance.inirEverywhere
+                    layer.enabled: Appearance.effectsEnabled && root.useWallpaperBackdrop
                     layer.effect: MultiEffect {
                         saturation: root.angelStyle ? Appearance.angel.blurSaturation : 0.2
                         blurEnabled: Appearance.effectsEnabled
-                        blurMax: 100
+                        blurMax: 64
                         blur: 1
                     }
 
@@ -393,7 +390,7 @@ Item {
 
                         StyledText {
                             Layout.alignment: Qt.AlignRight
-                            text: Qt.formatDate(new Date(), "dddd, MMMM d")
+                            text: Qt.formatDate(DateTime.clock.date, "dddd, MMMM d")
                             font.pixelSize: Appearance.font.pixelSize.small
                             color: root.colSubtext
                         }
@@ -401,11 +398,11 @@ Item {
                         RowLayout {
                             Layout.alignment: Qt.AlignRight
                             spacing: 8
-                            visible: Notifications.list.length > 0 || Notifications.silent
 
+                            Revealer {
+                                reveal: Notifications.list.length > 0
                             Row {
                                 spacing: 4
-                                visible: Notifications.list.length > 0
                                 MaterialSymbol {
                                     text: "notifications"
                                     iconSize: 14
@@ -419,10 +416,12 @@ Item {
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
+                            }
 
+                            Revealer {
+                                reveal: Notifications.silent
                             Row {
                                 spacing: 4
-                                visible: Notifications.silent
                                 MaterialSymbol {
                                     text: "do_not_disturb_on"
                                     iconSize: 14
@@ -436,6 +435,7 @@ Item {
                                     color: root.colPrimary
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
+                            }
                             }
                         }
                     }
@@ -499,12 +499,14 @@ Item {
                           active: Network.wifiEnabled
                           onClicked: Network.toggleWifi()
                       }
+                      Revealer {
+                          reveal: BluetoothStatus.available
                       QuickToggle {
                           icon: BluetoothStatus.enabled ? "bluetooth" : "bluetooth_disabled"
                           label: Translation.tr("Bluetooth")
                           active: BluetoothStatus.enabled
-                          visible: BluetoothStatus.available
                           onClicked: BluetoothStatus.toggle()
+                      }
                       }
                       QuickToggle {
                           icon: Notifications.silent ? "notifications_off" : "notifications"
@@ -604,8 +606,9 @@ Item {
             Rectangle {
                 id: mediaCard
                 Layout.fillWidth: true
-                visible: root.cfgMedia && root.hasPlayer
-                implicitHeight: mediaContent.implicitHeight + 24
+                visible: implicitHeight > 0
+                implicitHeight: (root.cfgMedia && root.hasPlayer) ? (mediaContent.implicitHeight + 24) : 0
+                Behavior on implicitHeight { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveEnter.duration; easing.type: Appearance.animation.elementMoveEnter.type; easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve } }
                 radius: root.cardRadius
                 color: root.inirStyle ? root.colCard : "transparent"
                 border.width: root.bw
@@ -629,6 +632,7 @@ Item {
                     source: root.downloaded ? root.displayedArtFilePath : ""
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
+                    cache: false
                     visible: root.displayedArtFilePath !== "" && status === Image.Ready
                     opacity: root.inirStyle ? 0.15 : (root.auroraStyle ? 0.25 : 0.4)
                     layer.enabled: Appearance.effectsEnabled
@@ -678,6 +682,7 @@ Item {
                                 source: root.downloaded ? root.displayedArtFilePath : ""
                                 fillMode: Image.PreserveAspectCrop
                                 asynchronous: true
+                                cache: false
                                 sourceSize { width: 192; height: 192 }
                             }
 
@@ -783,6 +788,7 @@ Item {
                             RippleButton {
                                 implicitWidth: 36
                                 implicitHeight: 36
+                                enabled: MprisController.canGoPrevious
                                 buttonRadius: 18
                                 colBackground: "transparent"
                                 colBackgroundHover: root.mediaHover
@@ -819,6 +825,7 @@ Item {
                             RippleButton {
                                 implicitWidth: 36
                                 implicitHeight: 36
+                                enabled: MprisController.canGoNext
                                 buttonRadius: 18
                                 colBackground: "transparent"
                                 colBackgroundHover: root.mediaHover
@@ -844,8 +851,9 @@ Item {
             Rectangle {
                 id: weatherCard
                 Layout.fillWidth: true
-                visible: root.cfgWeather && Weather.enabled && (Weather.data?.temp ?? "") !== "" && !(Weather.data?.temp ?? "").startsWith("--")
-                implicitHeight: Math.max(weatherContent.implicitHeight + 20, root.weatherSystemMinHeight)
+                visible: implicitHeight > 0
+                implicitHeight: (root.cfgWeather && Weather.enabled && (Weather.data?.temp ?? "") !== "" && !(Weather.data?.temp ?? "").startsWith("--")) ? Math.max(weatherContent.implicitHeight + 24, root.weatherCardMinHeight) : 0
+                Behavior on implicitHeight { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveEnter.duration; easing.type: Appearance.animation.elementMoveEnter.type; easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve } }
                 radius: root.cardRadius
                 color: root.inirStyle ? root.colCard : "transparent"
                 border.width: root.bw
@@ -869,81 +877,105 @@ Item {
 
                 ColumnLayout {
                     id: weatherContent
-                    anchors { fill: parent; margins: 12 }
-                    spacing: 8
+                    anchors { fill: parent; leftMargin: 14; rightMargin: 14; topMargin: 14; bottomMargin: 12 }
+                    spacing: 12
 
+                    // Hero: compact cluster + flex spacer + trailing refresh (M3 toolbar alignment)
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 10
+                        spacing: 14
 
                         MaterialSymbol {
+                            Layout.alignment: Qt.AlignTop
                             text: Icons.getWeatherIcon(Weather.data?.wCode, Weather.isNightNow()) ?? "cloud"
-                            iconSize: 32
+                            iconSize: root.angelStyle ? 40 : 48
+                            fill: root.angelStyle ? 0 : 1
                             color: root.colPrimary
                         }
 
-                        StyledText {
-                            text: Weather.data?.temp ?? "--°"
-                            font {
-                                pixelSize: Appearance.font.pixelSize.huge * 1.2
-                                weight: Font.Medium
-                                family: Appearance.font.family.numbers
-                            }
-                            color: root.colText
-                        }
-
                         ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 0
+                            Layout.alignment: Qt.AlignVCenter
+                            spacing: 2
 
                             StyledText {
-                                Layout.fillWidth: true
                                 text: Weather.data?.description ?? Translation.tr("Weather")
-                                font { pixelSize: Appearance.font.pixelSize.small; weight: Font.Medium }
-                                color: root.colText
+                                font {
+                                    pixelSize: Appearance.font.pixelSize.small
+                                    weight: Font.Medium
+                                    family: Appearance.font.family.title
+                                }
+                                color: root.colSubtext
                                 elide: Text.ElideRight
+                                Layout.maximumWidth: Math.max(120, weatherCard.width - 120)
                             }
 
                             StyledText {
-                                Layout.fillWidth: true
+                                text: Weather.data?.temp ?? "--°"
+                                font {
+                                    pixelSize: Appearance.font.pixelSize.huge * 1.35
+                                    weight: Font.Light
+                                    family: Appearance.font.family.numbers
+                                }
+                                color: root.colText
+                                lineHeight: 0.92
+                            }
+
+                            StyledText {
                                 text: Weather.visibleCity
-                                visible: Weather.showVisibleCity
+                                opacity: Weather.showVisibleCity ? 1 : 0
+                                visible: opacity > 0
+                                Behavior on opacity {
+                                    enabled: Appearance.animationsEnabled
+                                    NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Easing.OutCubic }
+                                }
                                 font.pixelSize: Appearance.font.pixelSize.smallest
                                 color: root.colSubtext
                                 elide: Text.ElideRight
+                                Layout.maximumWidth: Math.max(120, weatherCard.width - 120)
                             }
                         }
 
+                        Item { Layout.fillWidth: true }
+
                         RippleButton {
-                            implicitWidth: 28
-                            implicitHeight: 28
+                            Layout.alignment: Qt.AlignTop
+                            implicitWidth: 36
+                            implicitHeight: 36
                             buttonRadius: root.angelStyle ? Appearance.angel.roundingSmall
                                 : root.inirStyle ? Appearance.inir.roundingSmall : Appearance.rounding.full
-                            colBackground: "transparent"
+                            colBackground: root.angelStyle ? ColorUtils.transparentize(root.colPrimary, 0.82)
+                                : root.inirStyle ? Appearance.inir.colLayer2
+                                : ColorUtils.transparentize(Appearance.colors.colPrimaryContainer, 0.35)
                             colBackgroundHover: root.colCardHover
                             onClicked: Weather.forceRefresh()
                             contentItem: MaterialSymbol {
                                 anchors.centerIn: parent
                                 text: "refresh"
-                                iconSize: 16
-                                color: root.colSubtext
+                                iconSize: 20
+                                fill: 0
+                                color: root.colPrimary
                             }
                             StyledToolTip { text: Translation.tr("Refresh") }
                         }
                     }
 
-                    // Weather details row
-                    RowLayout {
+                    Rectangle {
                         Layout.fillWidth: true
-                        spacing: 14
+                        Layout.preferredHeight: 1
+                        color: root.colBorder
+                        opacity: root.angelStyle ? 0.35 : 0.55
+                    }
+
+                    Flow {
+                        id: weatherChipsFlow
+                        Layout.fillWidth: true
+                        spacing: 8
 
                         WeatherChip { icon: "thermostat"; value: Translation.tr("Feels %1").arg(Weather.data?.tempFeelsLike ?? "--"); visible: (Weather.data?.tempFeelsLike ?? "").length > 0 && !(Weather.data?.tempFeelsLike ?? "").startsWith("--") }
                         WeatherChip { icon: "humidity_percentage"; value: Weather.data?.humidity ?? "" }
                         WeatherChip { icon: "air"; value: Weather.data?.wind ?? "" }
                         WeatherChip { icon: "wb_sunny"; value: Weather.data?.sunrise ?? ""; visible: (Weather.data?.sunrise ?? "") !== "--:--" }
                         WeatherChip { icon: "wb_twilight"; value: Weather.data?.sunset ?? ""; visible: (Weather.data?.sunset ?? "") !== "--:--" }
-
-                        Item { Layout.fillWidth: true }
                     }
                 }
             }
@@ -996,6 +1028,7 @@ Item {
                                     colPrimary: ResourceUsage.cpuUsage > 0.8 ? Appearance.colors.colError : root.colPrimary
                                     colSecondary: root.angelStyle ? Appearance.angel.colGlassCard
                                         : root.inirStyle ? Appearance.inir.colLayer2
+                                        : root.zzzStyle ? Appearance.colors.colLayer2
                                         : Appearance.colors.colSecondaryContainer
                                     enableAnimation: Appearance.animationsEnabled
                                     animationDuration: 600
@@ -1022,7 +1055,9 @@ Item {
                                     }
 
                                     StyledText {
-                                        visible: ResourceUsage.cpuTemp > 0
+                                        opacity: ResourceUsage.cpuTemp > 0 ? 1 : 0
+                                        visible: opacity > 0
+                                        Behavior on opacity { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveFast.duration } }
                                         text: ResourceUsage.cpuTemp + "°C"
                                         font { pixelSize: Appearance.font.pixelSize.smallest; family: Appearance.font.family.numbers }
                                         color: ResourceUsage.cpuTemp > 80 ? Appearance.colors.colError
@@ -1066,6 +1101,7 @@ Item {
                                     colPrimary: ResourceUsage.memoryUsedPercentage > 0.85 ? Appearance.colors.colError : Appearance.colors.colSecondary
                                     colSecondary: root.angelStyle ? Appearance.angel.colGlassCard
                                         : root.inirStyle ? Appearance.inir.colLayer2
+                                        : root.zzzStyle ? Appearance.colors.colLayer2
                                         : Appearance.colors.colSecondaryContainer
                                     enableAnimation: Appearance.animationsEnabled
                                     animationDuration: 600
@@ -1187,11 +1223,13 @@ Item {
                                     : Battery.isCharging ? Appearance.colors.colTertiary
                                     : root.colSubtext
                             }
-                            StyledText {
-                                visible: Battery.isCharging
-                                text: "· " + Translation.tr("Charging")
-                                font.pixelSize: Appearance.font.pixelSize.smallest
-                                color: Appearance.colors.colTertiary
+                            Revealer {
+                                reveal: Battery.isCharging
+                                StyledText {
+                                    text: "· " + Translation.tr("Charging")
+                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                    color: Appearance.colors.colTertiary
+                                }
                             }
                             Item { Layout.fillWidth: true }
                         }
@@ -1273,15 +1311,11 @@ Item {
                 text: toggle.icon
                 iconSize: 22
                 fill: toggle.active ? 1 : 0
+                animateFill: true
                 color: toggle.active ? root.colOnPrimary
                     : (root.angelStyle ? Appearance.angel.colText
                         : root.inirStyle ? Appearance.inir.colText
                         : Appearance.colors.colOnLayer1)
-
-                Behavior on fill {
-                    enabled: Appearance.animationsEnabled
-                    NumberAnimation { duration: Appearance.animation.elementMoveFast.duration }
-                }
                 Behavior on color {
                     enabled: Appearance.animationsEnabled
                     animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
@@ -1363,22 +1397,40 @@ Item {
         }
     }
 
-    component WeatherChip: Row {
+    component WeatherChip: Rectangle {
+        id: weatherChipRoot
         property string icon
         property string value
-        spacing: 4
 
-        MaterialSymbol {
-            text: icon
-            iconSize: 13
-            color: root.colSubtext
-            anchors.verticalCenter: parent.verticalCenter
-        }
-        StyledText {
-            text: value
-            font { pixelSize: Appearance.font.pixelSize.smallest; family: Appearance.font.family.numbers }
-            color: root.colSubtext
-            anchors.verticalCenter: parent.verticalCenter
+        implicitHeight: chipRow.implicitHeight + 10
+        implicitWidth: chipRow.implicitWidth + 20
+        radius: Appearance.rounding.full
+        color: root.angelStyle ? ColorUtils.transparentize(root.colPrimary, 0.78)
+            : root.inirStyle ? Appearance.inir.colLayer2
+            : root.auroraStyle ? ColorUtils.transparentize(Appearance.colors.colSecondaryContainer, 0.45)
+            : root.zzzStyle ? Appearance.colors.colLayer2
+            : Appearance.colors.colSecondaryContainer
+        border.width: root.inirStyle ? 1 : 0
+        border.color: root.inirStyle ? Appearance.inir.colBorderSubtle : "transparent"
+
+        Row {
+            id: chipRow
+            anchors.centerIn: parent
+            spacing: 5
+
+            MaterialSymbol {
+                text: weatherChipRoot.icon
+                iconSize: 14
+                fill: root.angelStyle ? 0 : 1
+                color: root.colPrimary
+                anchors.verticalCenter: parent.verticalCenter
+            }
+            StyledText {
+                text: weatherChipRoot.value
+                font { pixelSize: Appearance.font.pixelSize.smallest; weight: Font.Medium; family: Appearance.font.family.numbers }
+                color: root.colText
+                anchors.verticalCenter: parent.verticalCenter
+            }
         }
     }
 }

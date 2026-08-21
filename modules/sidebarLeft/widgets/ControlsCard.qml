@@ -64,9 +64,11 @@ Item {
             width: 1
             height: 24
             radius: 0.5
-            color: Appearance.angelEverywhere ? Appearance.angel.colBorderSubtle
+            color: Appearance.zzzEverywhere ? Appearance.zzz.hairline
+                : Appearance.angelEverywhere ? Appearance.angel.colBorderSubtle
                 : Appearance.inirEverywhere ? Appearance.inir.colBorderSubtle
                 : Appearance.colors.colOutlineVariant
+            Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
             opacity: 0.5
             Layout.leftMargin: 8
             Layout.rightMargin: 8
@@ -111,14 +113,17 @@ Item {
                 text: btnIcon
                 iconSize: 22
                 fill: active ? 1 : 0
+                animateFill: true
                 color: active
-                    ? (Appearance.angelEverywhere ? Appearance.angel.colPrimary
+                    ? (Appearance.zzzEverywhere ? Appearance.zzz.accent
+                        : Appearance.angelEverywhere ? Appearance.angel.colPrimary
                         : Appearance.inirEverywhere ? Appearance.inir.colPrimary
-                        : Appearance.auroraEverywhere ? Appearance.m3colors.m3primary
+                        : Appearance.auroraEverywhere ? Appearance.colors.colPrimary
                         : Appearance.colors.colPrimary)
-                    : (Appearance.angelEverywhere ? Appearance.angel.colText
+                    : (Appearance.zzzEverywhere ? Appearance.zzz.inkMuted
+                        : Appearance.angelEverywhere ? Appearance.angel.colText
                         : Appearance.inirEverywhere ? Appearance.inir.colText
-                        : Appearance.auroraEverywhere ? Appearance.m3colors.m3onSurface
+                        : Appearance.auroraEverywhere ? Appearance.colors.colOnSurface
                         : Appearance.colors.colOnLayer0)
                 Behavior on fill { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveFast.duration } }
                 Behavior on color { enabled: Appearance.animationsEnabled; animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
@@ -139,7 +144,7 @@ Item {
         colBackground: "transparent"
         colBackgroundHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
             : Appearance.inirEverywhere ? Appearance.inir.colLayer1Hover 
-            : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface : Appearance.colors.colLayer1Hover
+            : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover : Appearance.colors.colLayer1Hover
         colRipple: Appearance.angelEverywhere ? Appearance.angel.colGlassCardActive
             : Appearance.inirEverywhere ? Appearance.inir.colLayer1Active 
             : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceActive : Appearance.colors.colLayer1Active
@@ -149,7 +154,11 @@ Item {
                 anchors.centerIn: parent
                 text: btnIcon
                 iconSize: 20
-                color: Appearance.inirEverywhere ? Appearance.inir.colTextSecondary : Appearance.colors.colSubtext
+                color: Appearance.zzzEverywhere ? Appearance.zzz.inkMuted : Appearance.inirEverywhere ? Appearance.inir.colTextSecondary : Appearance.colors.colSubtext
+                Behavior on color {
+                    enabled: Appearance.animationsEnabled
+                    ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                }
             }
         }
 

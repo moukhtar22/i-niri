@@ -1,6 +1,7 @@
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import QtQuick
 import QtQuick.Layouts
@@ -12,7 +13,14 @@ import Quickshell.Services.UPower
 Item {
     id: root
     property bool borderless: Config.options?.bar?.borderless ?? false
-    implicitWidth: rowLayout.implicitWidth + rowLayout.spacing * 2
+    readonly property color neutralIconColor: Appearance.zzzEverywhere ? Appearance.zzz.ink
+        : Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer2
+    readonly property color dangerIconColor: Appearance.zzzEverywhere ? Appearance.zzz.signal
+        : Appearance.inirEverywhere ? Appearance.inir.colError : Appearance.colors.colError
+    // Exact content width — self-inflating (+spacing*2) made every group that
+    // ends with these buttons read asymmetric: the group's own padding is the
+    // spacing authority, modules must not add their own.
+    implicitWidth: rowLayout.implicitWidth
     implicitHeight: rowLayout.implicitHeight
 
     RowLayout {
@@ -32,7 +40,7 @@ Item {
                     fill: 1
                     text: "screenshot_region"
                     iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer2
+                    color: root.neutralIconColor
                 }
             }
         }
@@ -53,8 +61,13 @@ Item {
                     anchors.fill: parent
 
                     onClicked: {
-                        // Let the script handle everything (notifications, state, etc)
-                        Quickshell.execDetached([Directories.recordScriptPath, "--fullscreen", "--sound"])
+                        const args = [Directories.recordScriptPath]
+                        if (recordButtonWrapper.isRecording)
+                            args.push("--stop")
+                        else
+                            args.push("--fullscreen", "--sound")
+                        Quickshell.execDetached(args)
+                        RecorderStatus.scheduleQuickCheck()
                     }
 
                     Item {
@@ -67,27 +80,37 @@ Item {
                             text: "videocam"
                             iconSize: Appearance.font.pixelSize.large
                             color: recordButtonWrapper.isRecording
-                                ? (Appearance.inirEverywhere ? Appearance.inir.colError : Appearance.colors.colError)
-                                : (Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer2)
+                                ? root.dangerIconColor
+                                : root.neutralIconColor
                         }
 
                         // Pulsating indicator dot when recording
                         Rectangle {
-                            visible: recordButtonWrapper.isRecording
+                            scale: recordButtonWrapper.isRecording ? 1 : 0
+                            visible: scale > 0
                             width: 6
                             height: 6
                             radius: 3
-                            color: Appearance.inirEverywhere ? Appearance.inir.colError : Appearance.colors.colError
+                            color: root.dangerIconColor
                             anchors {
                                 top: parent.top
                                 right: parent.right
                             }
 
+                            Behavior on scale {
+                                enabled: Appearance.animationsEnabled
+                                NumberAnimation {
+                                    duration: Appearance.animation.elementMoveFast.duration
+                                    easing.type: Appearance.animation.elementMoveFast.type
+                                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                }
+                            }
+
                             SequentialAnimation on opacity {
                                 running: recordButtonWrapper.isRecording
                                 loops: Animation.Infinite
-                                NumberAnimation { to: 0.4; duration: 800 }
-                                NumberAnimation { to: 1.0; duration: 800 }
+                                NumberAnimation { to: 0.4; duration: Appearance.animation.elementMove.duration * 2 }
+                                NumberAnimation { to: 1.0; duration: Appearance.animation.elementMove.duration * 2 }
                             }
                         }
                     }
@@ -100,13 +123,13 @@ Item {
             visible: active
             sourceComponent: CircleUtilButton {
                 Layout.alignment: Qt.AlignVCenter
-                onClicked: Quickshell.execDetached(["/usr/bin/hyprpicker", "-a"])
+                onClicked: ShellExec.execDetachedArgs(["/usr/bin/hyprpicker", "-a"], "Pick color")
                 MaterialSymbol {
                     horizontalAlignment: Qt.AlignHCenter
                     fill: 1
                     text: "colorize"
                     iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer2
+                    color: root.neutralIconColor
                 }
             }
         }
@@ -117,17 +140,15 @@ Item {
             sourceComponent: CircleUtilButton {
                 Layout.alignment: Qt.AlignVCenter
                 onClicked: {
-                    GlobalStates.sidebarRightOpen = true
-                    // Ensure bottom widget group is expanded and focused on Notepad tab (index 2)
-                    Persistent.states.sidebar.bottomGroup.collapsed = false
-                    Persistent.states.sidebar.bottomGroup.tab = 2
+                    GlobalStates.sidebarRightRequestedWidget = "notepad"
+                    GlobalStates.openSidebarRight(root.QsWindow.window?.screen?.name ?? "")
                 }
                 MaterialSymbol {
                     horizontalAlignment: Qt.AlignHCenter
                     fill: 0
                     text: "edit_note"
                     iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer2
+                    color: root.neutralIconColor
                 }
             }
         }
@@ -143,7 +164,30 @@ Item {
                     fill: 0
                     text: "keyboard"
                     iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer2
+                    color: root.neutralIconColor
+                }
+            }
+        }
+
+        // Keyboard layout switch (Niri only)
+        Loader {
+            active: (Config.options?.bar?.utilButtons?.showKeyboardLayoutSwitch ?? false)
+                    && CompositorService.isNiri
+                    && NiriService.hasMultipleKeyboardLayouts
+            visible: active
+            sourceComponent: CircleUtilButton {
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: NiriService.switchLayout()
+                Item {
+                    anchors.fill: parent
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        horizontalAlignment: Qt.AlignHCenter
+                        fill: 0
+                        text: "language"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: root.neutralIconColor
+                    }
                 }
             }
         }
@@ -168,29 +212,41 @@ Item {
                         anchors.centerIn: parent
                         horizontalAlignment: Qt.AlignHCenter
                         fill: micButton.isInUse ? 1 : 0
+                        animateFill: true
                         text: micButton.isMuted ? "mic_off" : "mic"
                         iconSize: Appearance.font.pixelSize.large
                         color: micButton.isInUse && !micButton.isMuted
-                            ? (Appearance.inirEverywhere ? Appearance.inir.colError : Appearance.colors.colError)
+                            ? root.dangerIconColor
                             : (Appearance.angelEverywhere ? Appearance.angel.colText
                              : Appearance.inirEverywhere ? Appearance.inir.colOnLayer2
-                             : Appearance.auroraEverywhere ? Appearance.m3colors.m3onSurface
+                             : Appearance.zzzEverywhere ? Appearance.zzz.accent
+                             : Appearance.auroraEverywhere ? Appearance.colors.colOnSurface
                              : Appearance.colors.colOnLayer2)
                     }
 
                     Rectangle {
-                        visible: micButton.isInUse && !micButton.isMuted
+                        scale: micButton.isInUse && !micButton.isMuted ? 1 : 0
+                        visible: scale > 0
                         width: 6
                         height: 6
                         radius: 3
-                        color: Appearance.inirEverywhere ? Appearance.inir.colError : Appearance.colors.colError
+                        color: root.dangerIconColor
                         anchors { top: parent.top; right: parent.right }
+
+                        Behavior on scale {
+                            enabled: Appearance.animationsEnabled
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                            }
+                        }
 
                         SequentialAnimation on opacity {
                             running: micButton.isInUse && !micButton.isMuted
                             loops: Animation.Infinite
-                            NumberAnimation { to: 0.4; duration: 800 }
-                            NumberAnimation { to: 1.0; duration: 800 }
+                            NumberAnimation { to: 0.4; duration: Appearance.animation.elementMove.duration * 2 }
+                            NumberAnimation { to: 1.0; duration: Appearance.animation.elementMove.duration * 2 }
                         }
                     }
                 }
@@ -228,29 +284,40 @@ Item {
                         anchors.centerIn: parent
                         horizontalAlignment: Qt.AlignHCenter
                         fill: screenCastButton.isCasting ? 1 : 0
+                        animateFill: true
                         text: "visibility"
                         iconSize: Appearance.font.pixelSize.large
                         color: screenCastButton.isCasting
-                            ? (Appearance.inirEverywhere ? Appearance.inir.colError : Appearance.colors.colError)
-                            : (Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer2)
+                            ? root.dangerIconColor
+                            : root.neutralIconColor
                     }
 
                     Rectangle {
-                        visible: screenCastButton.isCasting
+                        scale: screenCastButton.isCasting ? 1 : 0
+                        visible: scale > 0
                         width: 6
                         height: 6
                         radius: 3
-                        color: Appearance.inirEverywhere ? Appearance.inir.colError : Appearance.colors.colError
+                        color: root.dangerIconColor
                         anchors {
                             top: parent.top
                             right: parent.right
                         }
 
+                        Behavior on scale {
+                            enabled: Appearance.animationsEnabled
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                            }
+                        }
+
                         SequentialAnimation on opacity {
                             running: screenCastButton.isCasting
                             loops: Animation.Infinite
-                            NumberAnimation { to: 0.4; duration: 800 }
-                            NumberAnimation { to: 1.0; duration: 800 }
+                            NumberAnimation { to: 0.4; duration: Appearance.animation.elementMove.duration * 2 }
+                            NumberAnimation { to: 1.0; duration: Appearance.animation.elementMove.duration * 2 }
                         }
                     }
                 }
@@ -270,7 +337,7 @@ Item {
                     fill: 0
                     text: Appearance.m3colors.darkmode ? "light_mode" : "dark_mode"
                     iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer2
+                    color: root.neutralIconColor
                 }
             }
         }
@@ -303,7 +370,7 @@ Item {
                         case PowerProfile.Performance: return "local_fire_department"
                     }
                     iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer2
+                    color: root.neutralIconColor
                 }
             }
         }

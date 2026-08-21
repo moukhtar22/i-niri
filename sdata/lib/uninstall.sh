@@ -30,6 +30,7 @@ declare -A INIR_ONLY_PATHS=(
     ["${XDG_CONFIG_HOME}/Vesktop/themes/system24.theme.css"]="iNiR Vesktop theme (alt)"
     ["${XDG_CONFIG_HOME}/Vesktop/themes/ii-colors.css"]="iNiR Vesktop colors (alt)"
     ["${XDG_DATA_HOME}/applications/inir.desktop"]="iNiR desktop entry"
+    ["${XDG_DATA_HOME}/applications/inir-settings.desktop"]="iNiR settings desktop entry"
     ["${XDG_DATA_HOME}/icons/hicolor/scalable/apps/inir.svg"]="iNiR launcher icon"
     ["${HOME}/.local/bin/sync-pixel-sddm.py"]="iNiR SDDM theme sync helper"
 )
@@ -70,6 +71,7 @@ declare -A INIR_PACKAGES=(
     ["wl-copy"]="wl-clipboard|Clipboard utilities|system_tool"
     ["brightnessctl"]="brightnessctl|Brightness control|system_tool"
     ["playerctl"]="playerctl|Media control|system_tool"
+    ["plasma-browser-integration-host"]="plasma-browser-integration|Browser media integration|system_tool"
     ["dunstify"]="dunst|Notification daemon|system_tool"
     ["cava"]="cava|Audio visualizer|optional_tool"
     ["easyeffects"]="easyeffects|Audio effects|optional_tool"
@@ -278,9 +280,16 @@ uninstall_stop_services() {
 
     # Stop super daemon if running
     if command -v systemctl &>/dev/null && [[ -d /run/systemd/system ]]; then
-        if systemctl --user is-active inir.service &>/dev/null || systemctl --user is-enabled inir.service &>/dev/null; then
-            systemctl --user disable --now inir.service 2>/dev/null || true
-        fi
+        # Stop the service
+        systemctl --user stop inir.service 2>/dev/null || true
+        # Remove all wants links (compositor-specific and legacy graphical-session)
+        local _sd_user="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+        for _wd in "$_sd_user"/*.wants; do
+            [[ -d "$_wd" ]] || continue
+            rm -f "$_wd/inir.service" 2>/dev/null || true
+        done
+        # Also try legacy disable in case old [Install] symlinks exist
+        systemctl --user disable inir.service 2>/dev/null || true
         systemctl --user reset-failed inir.service 2>/dev/null || true
 
         if systemctl --user is-active inir-super-overview.service &>/dev/null; then
@@ -631,8 +640,8 @@ uninstall_show_manual_steps() {
     echo -e "  ${STY_YELLOW}•${STY_RST} SDDM theme: /usr/share/sddm/themes/ii-pixel"
     echo -e "    ${STY_FAINT}Used by: SDDM login screen${STY_RST}"
     echo ""
-    echo -e "  ${STY_YELLOW}•${STY_RST} SDDM theme drop-in: /etc/sddm.conf.d/inir-theme.conf"
-    echo -e "    ${STY_FAINT}Used by: sets Current=ii-pixel${STY_RST}"
+    echo -e "  ${STY_YELLOW}•${STY_RST} SDDM theme drop-in: /etc/sddm.conf.d/99-inir-theme.conf"
+    echo -e "    ${STY_FAINT}Used by: sets Current=ii-pixel (legacy path: /etc/sddm.conf.d/inir-theme.conf)${STY_RST}"
     echo ""
 
     if $ask && tui_confirm "Show commands to revert these changes?" "no"; then
@@ -652,7 +661,7 @@ uninstall_show_manual_steps() {
         echo -e "  sudo rm -rf /usr/share/sddm/themes/ii-pixel"
         echo ""
         echo -e "  ${STY_CYAN}# Remove SDDM theme config drop-in${STY_RST}"
-        echo -e "  sudo rm -f /etc/sddm.conf.d/inir-theme.conf"
+        echo -e "  sudo rm -f /etc/sddm.conf.d/99-inir-theme.conf /etc/sddm.conf.d/inir-theme.conf"
         echo ""
     fi
 }

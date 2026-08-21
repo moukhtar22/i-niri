@@ -1,6 +1,8 @@
 # Installation
 
-> **Arch Linux only.** The installer only supports Arch-based distros. If you're on something else, you're on your own - check the manual section below and figure out the equivalent packages for your distro. No support provided, no complaints accepted.
+> **Arch Linux only.** The installer only supports Arch-based distros. If you're on something else, you're on your own - check the manual section below and figure out the equivalent packages for your distro.
+>
+> **NixOS:** there is an experimental flake path. See [NixOS](NIXOS.md).
 
 ---
 
@@ -48,6 +50,7 @@ The bare minimum to not crash immediately:
 | `pipewire` + `wireplumber` | Audio. |
 | `grim` + `slurp` | Screenshots. |
 | `materialyoucolor` | Material You colors from wallpaper (Python, installed via venv). |
+| `plasma-browser-integration` | Browser MPRIS sessions, controls, and artwork. |
 | `plasma-integration` | KDE platform theme plugin (reads kdeglobals for Qt app colors). |
 | `darkly-bin` (AUR) | Darkly Qt style (Material You widget rendering). |
 
@@ -58,6 +61,21 @@ For everything else, check [PACKAGES.md](PACKAGES.md). It's organized by categor
 > **Runtime extras used by features:**
 > - `socat` for YTMusic IPC fallback control
 > - `fprintd` for fingerprint lockscreen support
+>
+> **Optional content packs** (`./setup` → Extras): the iNiR-Walls wallpaper
+> pack, the ii-pixel-sddm login theme, YAMIS icons, and the Kira mascot art
+> pack (354 poses and animations, about 32 MiB). The mascot feature ships
+> disabled and does nothing until you install the pack and enable her in
+> Settings › Mascot.
+>
+> The art pack and the shell have separate jobs. `snowarch/inir-mascot`
+> publishes the PNG/GIF files. iNiR ships the required
+> `assets/images/mascot/manifest.json`, dialogue, pose pools, settings and
+> runtime behavior. Updating or reinstalling the art pack does not replace the
+> shell manifest; normal iNiR install/update paths provide it. Extras stages and
+> verifies the complete archive before touching live assets, records the release
+> tag plus an installed-tree hash, and repairs missing or corrupt files during a
+> later `./setup update` without auto-installing the optional pack for new users.
 >
 > **Important for minimal installs (Arch base / netinstall):**
 > If shell startup fails with `module "org.kde.syntaxhighlighting" is not installed`, install:
@@ -85,7 +103,8 @@ This gives you:
 
 ```bash
 inir service install
-systemctl --user enable --now inir.service
+inir service enable
+inir service start
 ```
 
 ### 5. Restart Niri

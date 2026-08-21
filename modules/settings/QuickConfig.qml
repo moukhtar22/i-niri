@@ -11,8 +11,13 @@ import qs.modules.common.widgets
 import qs.modules.common.functions
 
 ContentPage {
+    id: root
     settingsPageIndex: 0
     settingsPageName: Translation.tr("Quick")
+    readonly property bool isOverlayPage: GlobalStates.settingsOverlayOpen ?? false
+    // Deferred in both modes: entering the page must never kick off directory-wide
+    // thumbnail generation. The user asks for the grid explicitly.
+    property bool quickGridLoaded: false
 
     Component.onCompleted: {
         Wallpapers.load()
@@ -146,16 +151,16 @@ ContentPage {
 
                     RippleButtonWithIcon {
                         enabled: !randomWallProc.running
-                        buttonRadius: Appearance.rounding.full
+                        buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.full
                         materialIcon: "ifl"
                         mainText: randomWallProc.running ? Translation.tr("...") : Translation.tr("Konachan")
-                        colBackground: Qt.rgba(0, 0, 0, 0.5)
-                        colBackgroundHover: Qt.rgba(0, 0, 0, 0.65)
+                        colBackground: Qt.rgba(Appearance.colors.colLayer1.r, Appearance.colors.colLayer1.g, Appearance.colors.colLayer1.b, 0.75)
+                        colBackgroundHover: Qt.rgba(Appearance.colors.colLayer1.r, Appearance.colors.colLayer1.g, Appearance.colors.colLayer1.b, 0.85)
                         mainContentComponent: Component {
                             StyledText {
                                 text: randomWallProc.running ? Translation.tr("...") : Translation.tr("Konachan")
                                 font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: "white"
+                                color: Appearance.colors.colOnLayer0
                             }
                         }
                         onClicked: {
@@ -168,16 +173,16 @@ ContentPage {
                     }
                     RippleButtonWithIcon {
                         enabled: !randomWallProc.running
-                        buttonRadius: Appearance.rounding.full
+                        buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.full
                         materialIcon: "ifl"
                         mainText: randomWallProc.running ? Translation.tr("...") : Translation.tr("osu!")
-                        colBackground: Qt.rgba(0, 0, 0, 0.5)
-                        colBackgroundHover: Qt.rgba(0, 0, 0, 0.65)
+                        colBackground: Qt.rgba(Appearance.colors.colLayer1.r, Appearance.colors.colLayer1.g, Appearance.colors.colLayer1.b, 0.75)
+                        colBackgroundHover: Qt.rgba(Appearance.colors.colLayer1.r, Appearance.colors.colLayer1.g, Appearance.colors.colLayer1.b, 0.85)
                         mainContentComponent: Component {
                             StyledText {
                                 text: randomWallProc.running ? Translation.tr("...") : Translation.tr("osu!")
                                 font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: "white"
+                                color: Appearance.colors.colOnLayer0
                             }
                         }
                         onClicked: {
@@ -195,10 +200,10 @@ ContentPage {
                     anchors.bottom: parent.bottom
                     anchors.right: parent.right
                     anchors.margins: 10
-                    buttonRadius: Appearance.rounding.full
+                    buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.full
                     materialIcon: "wallpaper"
-                    colBackground: Qt.rgba(0, 0, 0, 0.5)
-                    colBackgroundHover: Qt.rgba(0, 0, 0, 0.65)
+                    colBackground: Qt.rgba(Appearance.colors.colLayer1.r, Appearance.colors.colLayer1.g, Appearance.colors.colLayer1.b, 0.75)
+                    colBackgroundHover: Qt.rgba(Appearance.colors.colLayer1.r, Appearance.colors.colLayer1.g, Appearance.colors.colLayer1.b, 0.85)
                     onClicked: {
                         Quickshell.execDetached(`${Directories.wallpaperSwitchScriptPath}`);
                     }
@@ -208,7 +213,7 @@ ContentPage {
                             StyledText {
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 text: Translation.tr("Choose file")
-                                color: "white"
+                                color: Appearance.colors.colOnLayer0
                             }
                             RowLayout {
                                 spacing: 2
@@ -217,7 +222,7 @@ ContentPage {
                                 StyledText {
                                     Layout.alignment: Qt.AlignVCenter
                                     text: "+"
-                                    color: Qt.rgba(1, 1, 1, 0.6)
+                                    color: ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.4)
                                     font.pixelSize: Appearance.font.pixelSize.smaller
                                 }
                                 KeyboardKey { key: "T" }
@@ -306,29 +311,31 @@ ContentPage {
             }
 
             // ── Options strip ──
-            SettingsSwitch {
-                buttonIcon: "ev_shadow"
-                text: Translation.tr("Transparency")
-                checked: Config.options?.appearance?.transparency?.enable ?? false
-                onCheckedChanged: {
-                    Config.setNestedValue("appearance.transparency.enable", checked)
+            ConfigRow {
+                SettingsSwitch {
+                    buttonIcon: "ev_shadow"
+                    text: Translation.tr("Transparency")
+                    checked: Config.options?.appearance?.transparency?.enable ?? false
+                    onCheckedChanged: {
+                        Config.setNestedValue("appearance.transparency.enable", checked)
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Might look ass. Unsupported.")
+                    }
                 }
-                StyledToolTip {
-                    text: Translation.tr("Might look ass. Unsupported.")
-                }
-            }
 
-            SettingsSwitch {
-                buttonIcon: "palette"
-                text: Translation.tr("Colors only mode")
-                checked: Config.options?.appearance?.wallpaperTheming?.colorsOnlyMode ?? false
-                onCheckedChanged: {
-                    Config.setNestedValue("appearance.wallpaperTheming.colorsOnlyMode", checked)
-                    if (!checked)
-                        Config.setNestedValue("appearance.wallpaperTheming.previewSourcePath", "")
-                }
-                StyledToolTip {
-                    text: Translation.tr("Use any thumbnail as the theme source while keeping the current wallpaper")
+                SettingsSwitch {
+                    buttonIcon: "palette"
+                    text: Translation.tr("Colors only")
+                    checked: Config.options?.appearance?.wallpaperTheming?.colorsOnlyMode ?? false
+                    onCheckedChanged: {
+                        Config.setNestedValue("appearance.wallpaperTheming.colorsOnlyMode", checked)
+                        if (!checked)
+                            Config.setNestedValue("appearance.wallpaperTheming.previewSourcePath", "")
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Use any thumbnail as the theme source while keeping the current wallpaper")
+                    }
                 }
             }
 
@@ -363,7 +370,7 @@ ContentPage {
                         Item { Layout.fillWidth: true }
 
                         RippleButtonWithIcon {
-                            buttonRadius: Appearance.rounding.full
+                            buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.full
                             materialIcon: "folder_open"
                             mainText: Translation.tr("Current folder")
                             onClicked: {
@@ -379,7 +386,7 @@ ContentPage {
                             }
                         }
                         RippleButtonWithIcon {
-                            buttonRadius: Appearance.rounding.full
+                            buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.full
                             materialIcon: "apps"
                             mainText: Translation.tr("Selector")
                             onClicked: {
@@ -444,17 +451,16 @@ ContentPage {
                     }
 
                     Rectangle {
+                        id: placeholderCard
                         Layout.fillWidth: true
-                        // Dynamic height: min 120, max 400, based on content rows
-                        Layout.preferredHeight: {
-                            const itemCount = Wallpapers.folderModel?.count ?? 0
-                            if (itemCount === 0) return 120
-                            const cols = Math.max(1, Math.floor((width - 2 * Appearance.sizes.spacingSmall) / 110))
-                            const rows = Math.ceil(itemCount / cols)
-                            const cellH = ((width - 2 * Appearance.sizes.spacingSmall) / cols) * 0.67
-                            return Math.min(280, Math.max(120, rows * cellH + 2 * Appearance.sizes.spacingSmall))
-                        }
+                        Layout.preferredHeight: quickGridDeferredContent.implicitHeight + 24
+                        opacity: root.quickGridLoaded ? 0 : 1
+                        visible: opacity > 0
+                        scale: root.quickGridLoaded ? 0.96 : 1
                         radius: Appearance.rounding.normal
+                        Behavior on Layout.preferredHeight { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveExit.duration; easing.type: Appearance.animation.elementMoveExit.type; easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve } }
+                        Behavior on opacity { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveExit.duration; easing.type: Appearance.animation.elementMoveExit.type; easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve } }
+                        Behavior on scale { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveExit.duration; easing.type: Appearance.animation.elementMoveExit.type; easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve } }
                         color: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
                              : Appearance.inirEverywhere ? Appearance.inir.colLayer0
                              : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
@@ -464,103 +470,185 @@ ContentPage {
                         border.color: Appearance.angelEverywhere ? Appearance.angel.colCardBorder
                                    : Appearance.inirEverywhere ? Appearance.inir.colBorder
                                    : Appearance.colors.colLayer0Border
-                        clip: true
 
-                        GridView {
-                            id: wallpaperGrid
+                        ColumnLayout {
+                            id: quickGridDeferredContent
                             anchors.fill: parent
-                            anchors.margins: Appearance.sizes.spacingSmall
-                            model: Wallpapers.folderModel
-                            Component.onCompleted: Wallpapers.generateThumbnail("large")
+                            anchors.margins: 12
+                            spacing: 10
 
-                            Connections {
-                                target: Wallpapers
-                                function onFolderChanged() {
-                                    Wallpapers.generateThumbnail("large")
-                                }
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr("Quick wallpaper thumbnails are loaded on demand.")
+                                wrapMode: Text.WordWrap
+                                color: Appearance.colors.colOnLayer0
+                                font.pixelSize: Appearance.font.pixelSize.normal
+                                font.weight: Font.Medium
                             }
 
-                            // Responsive cell sizing - fill available width
-                            property int minCellWidth: 110
-                            property int columns: Math.max(1, Math.floor(width / minCellWidth))
-                            cellWidth: width / columns
-                            cellHeight: cellWidth * 0.67  // 3:2 aspect ratio
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr("Load them only when you actually need the grid. The full selector button above stays available.")
+                                wrapMode: Text.WordWrap
+                                color: Appearance.colors.colSubtext
+                                font.pixelSize: Appearance.font.pixelSize.small
+                            }
 
-                            interactive: contentHeight > height
-                            boundsBehavior: Flickable.StopAtBounds
-                            cacheBuffer: cellHeight * 2
-                            property int currentHoverIndex: -1
-                            ScrollBar.vertical: StyledScrollBar { policy: wallpaperGrid.interactive ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff }
-
-                            delegate: Item {
-                                id: delegateItem
-                                required property int index
-                                required property bool fileIsDir
-                                required property string filePath
-                                required property string fileName
-                                required property url fileUrl
-
-                                width: wallpaperGrid.cellWidth
-                                height: wallpaperGrid.cellHeight
-
-                                QuickWallpaperItem {
-                                    anchors.fill: parent
-                                    fileModelData: ({
-                                        filePath: delegateItem.filePath,
-                                        fileName: delegateItem.fileName,
-                                        fileIsDir: delegateItem.fileIsDir,
-                                        fileUrl: delegateItem.fileUrl
-                                    })
-                                    isSelected: {
-                                        if (delegateItem.fileIsDir) return false
-                                        if (multiMonitorPanel.visible && multiMonitorPanel.backdropViewActive)
-                                            return delegateItem.filePath === multiMonitorPanel.backdropPath
-                                        if (Config.options?.appearance?.wallpaperTheming?.colorsOnlyMode ?? false) {
-                                            const previewPath = Config.options?.appearance?.wallpaperTheming?.previewSourcePath ?? ""
-                                            return delegateItem.filePath === previewPath
-                                        }
-                                        const multiMon = (Config.options?.background?.multiMonitor?.enable ?? false) && multiMonitorPanel.selectedMonitor
-                                        const currentWallpaperPath = Config.options?.background?.wallpaperPath ?? ""
-                                        return delegateItem.filePath === (multiMon
-                                            ? (WallpaperListener.effectivePerMonitor[multiMonitorPanel.selectedMonitor]?.path ?? currentWallpaperPath)
-                                            : currentWallpaperPath)
-                                    }
-                                    isHovered: delegateItem.index === wallpaperGrid.currentHoverIndex
-
-                                    onEntered: wallpaperGrid.currentHoverIndex = delegateItem.index
-                                    onExited: if (wallpaperGrid.currentHoverIndex === delegateItem.index) wallpaperGrid.currentHoverIndex = -1
-                                    onActivated: {
-                                        if (delegateItem.fileIsDir) {
-                                            Wallpapers.setDirectory(delegateItem.filePath);
-                                        } else if (multiMonitorPanel.visible && multiMonitorPanel.backdropViewActive) {
-                                            const multiMon = Config.options?.background?.multiMonitor?.enable ?? false
-                                            if (multiMon && multiMonitorPanel.selectedMonitor) {
-                                                Wallpapers.updatePerMonitorBackdropConfig(delegateItem.filePath, multiMonitorPanel.selectedMonitor)
-                                            } else {
-                                                Config.setNestedValue("background.backdrop.wallpaperPath", delegateItem.filePath)
-                                            }
-                                            Config.setNestedValue("background.backdrop.useMainWallpaper", false)
-                                            Wallpapers.ensureVideoFirstFrame(delegateItem.filePath)
-                                        } else if (Config.options?.appearance?.wallpaperTheming?.colorsOnlyMode) {
-                                            Wallpapers.applyColorsOnly(delegateItem.filePath, Appearance.m3colors.darkmode)
-                                        } else {
-                                            const mon = (Config.options?.background?.multiMonitor?.enable ?? false) ? (multiMonitorPanel.selectedMonitor || "") : ""
-                                            Wallpapers.select(delegateItem.filePath, Appearance.m3colors.darkmode, mon);
-                                        }
-                                    }
-                                }
+                            RippleButtonWithIcon {
+                                buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.full
+                                materialIcon: "image"
+                                mainText: Translation.tr("Load quick grid")
+                                onClicked: root.quickGridLoaded = true
                             }
                         }
+                    }
 
-                        // Empty state
-                        MaterialPlaceholderMessage {
-                            anchors.centerIn: parent
-                            maximumWidth: 360
-                            shown: Wallpapers.folderModel.count === 0
-                            icon: "image"
-                            text: Translation.tr("No images found")
-                            explanation: Translation.tr("Add wallpapers to this folder or choose a different location")
-                            shape: MaterialShape.Shape.Bun
+                    Item {
+                        id: quickGridHost
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: quickGridLoader.active && quickGridLoader.item ? quickGridLoader.item.implicitHeight : 0
+                        clip: true
+                        Behavior on Layout.preferredHeight { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve } }
+
+                        Loader {
+                            id: quickGridLoader
+                            anchors.fill: parent
+                            active: root.quickGridLoaded
+                            asynchronous: true
+
+                            sourceComponent: Rectangle {
+                                id: gridCard
+                                width: quickGridHost.width
+                                height: implicitHeight
+                                opacity: quickGridLoader.item ? 1 : 0
+                                scale: quickGridLoader.item ? 1 : 0.95
+                                Behavior on opacity { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveEnter.duration; easing.type: Appearance.animation.elementMoveEnter.type; easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve } }
+                                Behavior on scale { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveEnter.duration; easing.type: Appearance.animation.elementMoveEnter.type; easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve } }
+                                implicitHeight: {
+                                    const itemCount = Wallpapers.folderModel?.count ?? 0
+                                    if (itemCount === 0) return 120
+                                    const cols = Math.max(1, Math.floor((width - 2 * Appearance.sizes.spacingSmall) / 110))
+                                    const rows = Math.ceil(itemCount / cols)
+                                    const cellH = ((width - 2 * Appearance.sizes.spacingSmall) / cols) * 0.67
+                                    return Math.min(280, Math.max(120, rows * cellH + 2 * Appearance.sizes.spacingSmall))
+                                }
+                                radius: Appearance.rounding.normal
+                                color: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
+                                     : Appearance.inirEverywhere ? Appearance.inir.colLayer0
+                                     : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
+                                     : Appearance.colors.colLayer0
+                                border.width: Appearance.angelEverywhere ? Appearance.angel.cardBorderWidth
+                                    : Appearance.inirEverywhere ? 1 : (Appearance.auroraEverywhere ? 0 : 1)
+                                border.color: Appearance.angelEverywhere ? Appearance.angel.colCardBorder
+                                           : Appearance.inirEverywhere ? Appearance.inir.colBorder
+                                           : Appearance.colors.colLayer0Border
+                                clip: true
+
+                                GridView {
+                                    id: wallpaperGrid
+                                    anchors.fill: parent
+                                    anchors.margins: Appearance.sizes.spacingSmall
+                                    model: Wallpapers.folderModelReady ? Wallpapers.folderModel : null
+                                    Component.onCompleted: Wallpapers.generateThumbnail("large")
+
+                                    add: Transition {
+                                        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Appearance.animation.elementMoveEnter.duration; easing.type: Appearance.animation.elementMoveEnter.type; easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve }
+                                        NumberAnimation { property: "scale"; from: 0.85; to: 1; duration: Appearance.animation.elementMoveEnter.duration; easing.type: Appearance.animation.elementMoveEnter.type; easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve }
+                                    }
+                                    populate: Transition {
+                                        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Appearance.animation.elementMoveEnter.duration; easing.type: Appearance.animation.elementMoveEnter.type; easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve }
+                                        NumberAnimation { property: "scale"; from: 0.85; to: 1; duration: Appearance.animation.elementMoveEnter.duration; easing.type: Appearance.animation.elementMoveEnter.type; easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve }
+                                    }
+
+                                    Connections {
+                                        target: Wallpapers
+                                        function onFolderChanged() {
+                                            Wallpapers.generateThumbnail("large")
+                                        }
+                                    }
+
+                                    // Responsive cell sizing - fill available width
+                                    property int minCellWidth: 110
+                                    property int columns: Math.max(1, Math.floor(width / minCellWidth))
+                                    cellWidth: width / columns
+                                    cellHeight: cellWidth * 0.67  // 3:2 aspect ratio
+
+                                    interactive: contentHeight > height
+                                    boundsBehavior: Flickable.StopAtBounds
+                                    cacheBuffer: cellHeight * 2
+                                    property int currentHoverIndex: -1
+                                    ScrollBar.vertical: StyledScrollBar { policy: wallpaperGrid.interactive ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff }
+
+                                    delegate: Item {
+                                        id: delegateItem
+                                        required property int index
+                                        required property bool fileIsDir
+                                        required property string filePath
+                                        required property string fileName
+                                        required property url fileUrl
+
+                                        width: wallpaperGrid.cellWidth
+                                        height: wallpaperGrid.cellHeight
+
+                                        QuickWallpaperItem {
+                                            anchors.fill: parent
+                                            fileModelData: ({
+                                                filePath: delegateItem.filePath,
+                                                fileName: delegateItem.fileName,
+                                                fileIsDir: delegateItem.fileIsDir,
+                                                fileUrl: delegateItem.fileUrl
+                                            })
+                                            isSelected: {
+                                                if (delegateItem.fileIsDir) return false
+                                                if (multiMonitorPanel.visible && multiMonitorPanel.backdropViewActive)
+                                                    return delegateItem.filePath === multiMonitorPanel.backdropPath
+                                                if (Config.options?.appearance?.wallpaperTheming?.colorsOnlyMode ?? false) {
+                                                    const previewPath = Config.options?.appearance?.wallpaperTheming?.previewSourcePath ?? ""
+                                                    return delegateItem.filePath === previewPath
+                                                }
+                                                const multiMon = (Config.options?.background?.multiMonitor?.enable ?? false) && multiMonitorPanel.selectedMonitor
+                                                const currentWallpaperPath = Config.options?.background?.wallpaperPath ?? ""
+                                                return delegateItem.filePath === (multiMon
+                                                    ? (WallpaperListener.effectivePerMonitor[multiMonitorPanel.selectedMonitor]?.path ?? currentWallpaperPath)
+                                                    : currentWallpaperPath)
+                                            }
+                                            isHovered: delegateItem.index === wallpaperGrid.currentHoverIndex
+
+                                            onEntered: wallpaperGrid.currentHoverIndex = delegateItem.index
+                                            onExited: if (wallpaperGrid.currentHoverIndex === delegateItem.index) wallpaperGrid.currentHoverIndex = -1
+                                            onActivated: {
+                                                if (delegateItem.fileIsDir) {
+                                                    Wallpapers.setDirectory(delegateItem.filePath);
+                                                } else if (multiMonitorPanel.visible && multiMonitorPanel.backdropViewActive) {
+                                                    const multiMon = Config.options?.background?.multiMonitor?.enable ?? false
+                                                    if (multiMon && multiMonitorPanel.selectedMonitor) {
+                                                        Wallpapers.updatePerMonitorBackdropConfig(delegateItem.filePath, multiMonitorPanel.selectedMonitor)
+                                                    } else {
+                                                        Config.setNestedValue("background.backdrop.wallpaperPath", delegateItem.filePath)
+                                                    }
+                                                    Config.setNestedValue("background.backdrop.useMainWallpaper", false)
+                                                    Wallpapers.ensureVideoFirstFrame(delegateItem.filePath)
+                                                } else if (Config.options?.appearance?.wallpaperTheming?.colorsOnlyMode) {
+                                                    Wallpapers.applyColorsOnly(delegateItem.filePath, Appearance.m3colors.darkmode)
+                                                } else {
+                                                    const mon = (Config.options?.background?.multiMonitor?.enable ?? false) ? (multiMonitorPanel.selectedMonitor || "") : ""
+                                                    Wallpapers.select(delegateItem.filePath, Appearance.m3colors.darkmode, mon);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                MaterialPlaceholderMessage {
+                                    anchors.centerIn: parent
+                                    maximumWidth: 360
+                                    shown: Wallpapers.folderModel.count === 0
+                                    icon: "image"
+                                    text: Translation.tr("No images found")
+                                    explanation: Translation.tr("Add wallpapers to this folder or choose a different location")
+                                    shape: MaterialShape.Shape.Bun
+                                }
+                            }
                         }
                     }
                 }
@@ -780,13 +868,13 @@ ContentPage {
                                             MaterialSymbol {
                                                 text: "blur_on"
                                                 font.pixelSize: Appearance.font.pixelSize.smaller
-                                                color: "white"
+                                                color: Appearance.colors.colOnLayer0
                                                 anchors.verticalCenter: parent.verticalCenter
                                             }
                                             StyledText {
                                                 text: Translation.tr("Backdrop")
                                                 font.pixelSize: Appearance.font.pixelSize.smaller
-                                                color: "white"
+                                                color: Appearance.colors.colOnLayer0
                                                 anchors.verticalCenter: parent.verticalCenter
                                             }
                                         }
@@ -1300,17 +1388,21 @@ ContentPage {
                                 RippleButtonWithIcon {
                                     Layout.fillWidth: true
                                     Layout.preferredWidth: 3
-                                    buttonRadius: Appearance.rounding.small
+                                    buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.small
                                     materialIcon: "wallpaper"
                                     mainText: Translation.tr("Change")
-                                    colBackground: Appearance.colors.colPrimaryContainer
-                                    colBackgroundHover: Appearance.colors.colPrimaryContainerHover
-                                    colRipple: Appearance.colors.colPrimaryContainerActive
+                                    colBackground: Appearance.zzzEverywhere ? Appearance.zzz.sticker : Appearance.colors.colPrimaryContainer
+                                    colBackgroundHover: Appearance.zzzEverywhere ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimaryContainerHover
+                                    colRipple: Appearance.zzzEverywhere ? Appearance.colors.colPrimaryActive : Appearance.colors.colPrimaryContainerActive
                                     mainContentComponent: Component {
                                         StyledText {
                                             text: Translation.tr("Change")
                                             font.pixelSize: Appearance.font.pixelSize.small
-                                            color: Appearance.colors.colOnPrimaryContainer
+                                            color: Appearance.zzzEverywhere ? Appearance.zzz.onSticker : Appearance.colors.colOnPrimaryContainer
+                                            Behavior on color {
+                                                enabled: Appearance.animationsEnabled
+                                                ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                                            }
                                         }
                                     }
                                     onClicked: {
@@ -1325,7 +1417,7 @@ ContentPage {
                                 RippleButtonWithIcon {
                                     Layout.fillWidth: true
                                     Layout.preferredWidth: 2
-                                    buttonRadius: Appearance.rounding.small
+                                    buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.small
                                     materialIcon: "shuffle"
                                     mainText: Translation.tr("Random")
                                     onClicked: {
@@ -1341,7 +1433,7 @@ ContentPage {
                                 RippleButtonWithIcon {
                                     Layout.fillWidth: true
                                     Layout.preferredWidth: 2
-                                    buttonRadius: Appearance.rounding.small
+                                    buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.small
                                     materialIcon: "restart_alt"
                                     mainText: Translation.tr("Reset")
                                     onClicked: {
@@ -1366,7 +1458,7 @@ ContentPage {
                                 RippleButtonWithIcon {
                                     Layout.fillWidth: true
                                     Layout.preferredWidth: 1
-                                    buttonRadius: Appearance.rounding.small
+                                    buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.small
                                     materialIcon: "select_all"
                                     mainText: Translation.tr("Apply to all")
                                     onClicked: {
@@ -1382,7 +1474,7 @@ ContentPage {
                                 RippleButtonWithIcon {
                                     Layout.fillWidth: true
                                     Layout.preferredWidth: 1
-                                    buttonRadius: Appearance.rounding.small
+                                    buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.small
                                     materialIcon: "blur_on"
                                     mainText: Translation.tr("Change backdrop")
                                     visible: multiMonitorPanel.backdropEnabled
@@ -1493,17 +1585,26 @@ ContentPage {
                             {
                                 displayName: Translation.tr("Hug"),
                                 icon: "line_curve",
+                                previewKind: "hug",
                                 value: 0
                             },
                             {
                                 displayName: Translation.tr("Float"),
                                 icon: "page_header",
+                                previewKind: "float",
                                 value: 1
                             },
                             {
                                 displayName: Translation.tr("Rect"),
                                 icon: "toolbar",
+                                previewKind: "rect",
                                 value: 2
+                            },
+                            {
+                                displayName: Translation.tr("Card"),
+                                icon: "branding_watermark",
+                                previewKind: "card",
+                                value: 3
                             }
                         ]
                     }
@@ -1565,7 +1666,6 @@ ContentPage {
         }
     }
 
-    // Game Mode
     SettingsCardSection {
         expanded: false
         icon: "sports_esports"
@@ -1671,7 +1771,7 @@ ContentPage {
 
                 RippleButtonWithIcon {
                     Layout.fillWidth: true
-                    buttonRadius: Appearance.rounding.small
+                    buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.small
                     materialIcon: "refresh"
                     mainText: Translation.tr("Reload shell")
                     onClicked: Quickshell.execDetached(["/usr/bin/bash", Quickshell.shellPath("scripts/restart-shell.sh")])
@@ -1679,7 +1779,7 @@ ContentPage {
 
                 RippleButtonWithIcon {
                     Layout.fillWidth: true
-                    buttonRadius: Appearance.rounding.small
+                    buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.small
                     materialIcon: "terminal"
                     mainText: Translation.tr("Open config")
                     onClicked: Qt.openUrlExternally(`${Directories.config}/illogical-impulse/config.json`)
@@ -1687,7 +1787,7 @@ ContentPage {
 
                 RippleButtonWithIcon {
                     Layout.fillWidth: true
-                    buttonRadius: Appearance.rounding.small
+                    buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.small
                     materialIcon: "keyboard"
                     mainText: Translation.tr("Shortcuts")
                     onClicked: Quickshell.execDetached([Quickshell.shellPath("scripts/inir"), "cheatsheet", "toggle"])
@@ -1717,6 +1817,7 @@ ContentPage {
             }
 
             SettingsSwitch {
+                visible: CompositorService.isNiri
                 buttonIcon: "help"
                 text: Translation.tr("Confirm before closing windows")
                 checked: Config.options?.closeConfirm?.enabled ?? false

@@ -20,24 +20,38 @@ RowLayout {
     property int playButtonSize: 40
     property int iconSize: 22
     property int playIconSize: 24
-    property real buttonRadius: Appearance.angelEverywhere ? Appearance.angel.roundingSmall
+    property real buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius
+        : Appearance.angelEverywhere ? Appearance.angel.roundingSmall
         : Appearance.inirEverywhere ? Appearance.inir.roundingSmall 
         : Appearance.rounding.full
     property real playButtonRadius: buttonRadius
     property color buttonColor: "transparent"
-    property color buttonHoverColor: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
+    property color playButtonColor: root.buttonColor
+    property color buttonHoverColor: Appearance.zzzEverywhere ? Appearance.zzz.paperAlt
+        : Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
         : Appearance.inirEverywhere ? Appearance.inir.colLayer2Hover 
         : Appearance.colors.colLayer1Hover
-    property color buttonRippleColor: Appearance.angelEverywhere ? Appearance.angel.colGlassCardActive
+    property color buttonRippleColor: Appearance.zzzEverywhere ? ColorUtils.transparentize(Appearance.zzz.accent, 0.68)
+        : Appearance.angelEverywhere ? Appearance.angel.colGlassCardActive
         : Appearance.inirEverywhere ? Appearance.inir.colLayer2Active 
         : Appearance.colors.colLayer1Active
-    property color iconColor: Appearance.angelEverywhere ? Appearance.angel.colText
+    property color iconColor: Appearance.zzzEverywhere ? Appearance.zzz.ink
+        : Appearance.angelEverywhere ? Appearance.angel.colText
         : Appearance.inirEverywhere ? Appearance.inir.colText 
         : Appearance.colors.colOnLayer0
-    property color playIconColor: Appearance.angelEverywhere ? Appearance.angel.colPrimary
+    property color playIconColor: Appearance.zzzEverywhere ? Appearance.zzz.accent
+        : Appearance.angelEverywhere ? Appearance.angel.colPrimary
         : Appearance.inirEverywhere ? Appearance.inir.colPrimary 
         : Appearance.colors.colOnLayer1
+    property color playButtonHoverColor: root.playButtonColor.a > 0.01
+        ? ColorUtils.mix(root.playButtonColor, root.playIconColor, 0.90)
+        : root.buttonHoverColor
+    property color playButtonRippleColor: root.playButtonColor.a > 0.01
+        ? ColorUtils.mix(root.playButtonColor, root.playIconColor, 0.78)
+        : root.buttonRippleColor
     property bool showLabels: true
+    property bool canGoPrevious: true
+    property bool canGoNext: true
     
     // Signals
     signal previousClicked()
@@ -48,8 +62,10 @@ RowLayout {
     
     // Previous button
     RippleButton {
+        cookieMorphing: true
         implicitWidth: root.buttonSize
         implicitHeight: root.buttonSize
+        enabled: root.canGoPrevious
         buttonRadius: root.buttonRadius
         colBackground: root.buttonColor
         colBackgroundHover: root.buttonHoverColor
@@ -74,12 +90,13 @@ RowLayout {
     
     // Play/Pause button
     RippleButton {
+        cookieMorphing: true
         implicitWidth: root.playButtonSize
         implicitHeight: root.playButtonSize
         buttonRadius: root.playButtonRadius
-        colBackground: root.buttonColor
-        colBackgroundHover: root.buttonHoverColor
-        colRipple: root.buttonRippleColor
+        colBackground: root.playButtonColor
+        colBackgroundHover: root.playButtonHoverColor
+        colRipple: root.playButtonRippleColor
         onClicked: root.playPauseClicked()
         
         contentItem: Item {
@@ -105,8 +122,10 @@ RowLayout {
     
     // Next button
     RippleButton {
+        cookieMorphing: true
         implicitWidth: root.buttonSize
         implicitHeight: root.buttonSize
+        enabled: root.canGoNext
         buttonRadius: root.buttonRadius
         colBackground: root.buttonColor
         colBackgroundHover: root.buttonHoverColor

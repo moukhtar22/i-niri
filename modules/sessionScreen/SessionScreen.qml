@@ -1,5 +1,6 @@
 import qs
 import qs.services
+import qs.services.deferred
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -14,6 +15,9 @@ import Quickshell.Hyprland
 
 Scope {
     id: root
+    property bool _presentedOpen: false
+    Component.onCompleted: if (GlobalStates.sessionOpen)
+        Qt.callLater(() => { root._presentedOpen = GlobalStates.sessionOpen })
     property var focusedScreen: {
         if (CompositorService.isNiri && typeof NiriService !== "undefined" && NiriService.currentOutput) {
             const name = NiriService.currentOutput;
@@ -35,10 +39,16 @@ Scope {
     component DescriptionLabel: Rectangle {
         id: descriptionLabel
         property string text
-        property color textColor: Appearance.colors.colOnTooltip
-        color: Appearance.colors.colTooltip
+        property color textColor: Appearance.zzzEverywhere ? Appearance.zzz.ink : Appearance.colors.colOnTooltip
+        color: Appearance.zzzEverywhere ? Appearance.zzz.paperAlt : Appearance.colors.colTooltip
         clip: true
-        radius: Appearance.rounding.normal
+        radius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.normal
+        border.width: Appearance.zzzEverywhere ? 1 : 0
+        border.color: Appearance.zzzEverywhere ? Appearance.zzz.hairlineStrong : "transparent"
+        Behavior on radius { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve } }
+        Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+        Behavior on border.width { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+        Behavior on border.color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
         implicitHeight: descriptionLabelText.implicitHeight + 10 * 2
         implicitWidth: descriptionLabelText.implicitWidth + 15 * 2
 
@@ -64,10 +74,12 @@ Scope {
             target: GlobalStates
             function onSessionOpenChanged() {
                 if (GlobalStates.sessionOpen) {
+                    Qt.callLater(() => { root._presentedOpen = GlobalStates.sessionOpen })
                     _sessionCloseTimer.stop()
                     sessionLoader._sessionClosing = false
                     SessionWarnings.refresh()
                 } else {
+                    root._presentedOpen = false
                     sessionLoader._sessionClosing = true
                     _sessionCloseTimer.restart()
                 }
@@ -173,7 +185,35 @@ Scope {
             // Dim overlay for better readability
             Rectangle {
                 anchors.fill: parent
-                color: Qt.rgba(0, 0, 0, 0.4)
+                color: Appearance.zzzEverywhere
+                    ? ColorUtils.applyAlpha(Appearance.zzz.bg0, 0.62)
+                    : Qt.rgba(0, 0, 0, 0.4)
+            }
+
+            ZzzGhostMark {
+                anchors.centerIn: parent
+                visible: Appearance.zzzEverywhere
+                width: Math.min(parent.width * 0.72, 980)
+                height: width * 0.42
+            }
+
+            ZzzBurst {
+                visible: Appearance.zzzEverywhere
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: 96
+                width: 220
+                height: 220
+            }
+
+            ZzzTechFrame {
+                anchors.fill: parent
+                visible: Appearance.zzzEverywhere
+                label: "SESSION"
+                index: "SYS"
+                accentColor: Appearance.zzz.secondary
+                margin: 42
+                showTicks: true
             }
 
             implicitWidth: root.focusedScreen?.width ?? 0
@@ -194,8 +234,8 @@ Scope {
 
                 // Subtle open animation for the session dialog
                 transformOrigin: Item.Center
-                scale: GlobalStates.sessionOpen ? 1.0 : 0.97
-                opacity: GlobalStates.sessionOpen ? 1.0 : 0.0
+                scale: root._presentedOpen ? 1.0 : 0.97
+                opacity: root._presentedOpen ? 1.0 : 0.0
                 Behavior on scale {
                     animation: NumberAnimation { duration: Appearance.animation.elementMoveEnter.duration; easing.type: Appearance.animation.elementMoveEnter.type; easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve }
                 }
@@ -209,6 +249,14 @@ Scope {
                     }
                 }
 
+                MascotImage {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: 110
+                    Layout.preferredHeight: 110
+                    surface: "session"
+                    pose: "goodbye-wave"
+                }
+
                 ColumnLayout {
                     Layout.alignment: Qt.AlignHCenter
                     spacing: 0
@@ -220,13 +268,25 @@ Scope {
                             pixelSize: Appearance.font.pixelSize.title
                             variableAxes: Appearance.font.variableAxes.title
                         }
+                        font.weight: Appearance.zzzEverywhere ? Font.Black : Font.Normal
+                        font.italic: Appearance.zzzEverywhere
                         text: Translation.tr("Session")
+                        color: Appearance.zzzEverywhere ? Appearance.zzz.ink : Appearance.colors.colOnLayer0
+                        Behavior on color {
+                            enabled: Appearance.animationsEnabled
+                            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                        }
                     }
 
                     StyledText { // Small instruction
                         Layout.alignment: Qt.AlignHCenter
                         horizontalAlignment: Text.AlignHCenter
                         font.pixelSize: Appearance.font.pixelSize.normal
+                        color: Appearance.zzzEverywhere ? Appearance.zzz.inkMuted : Appearance.colors.colOnLayer0
+                        Behavior on color {
+                            enabled: Appearance.animationsEnabled
+                            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                        }
                         text: Translation.tr("Arrow keys to navigate, Enter to select\nEsc or click anywhere to cancel")
                     }
                 }
@@ -244,7 +304,7 @@ Scope {
                         onClicked:  { Session.lock(); sessionRoot.hide() }
                         onFocusChanged: { if (focus) sessionRoot.subtitle = buttonText }
                         KeyNavigation.right: sessionSleep
-                        KeyNavigation.down: sessionHibernate
+                        KeyNavigation.down: Session.showHibernateAction ? sessionHibernate : sessionShutdown
                     }
                     SessionActionButton {
                         id: sessionSleep
@@ -257,7 +317,7 @@ Scope {
                         onFocusChanged: { if (focus) sessionRoot.subtitle = buttonText }
                         KeyNavigation.left: sessionLock
                         KeyNavigation.right: sessionLogout
-                        KeyNavigation.down: sessionShutdown
+                        KeyNavigation.down: Session.showHibernateAction ? sessionShutdown : sessionReboot
                     }
                     SessionActionButton {
                         id: sessionLogout
@@ -267,7 +327,7 @@ Scope {
                         onFocusChanged: { if (focus) sessionRoot.subtitle = buttonText }
                         KeyNavigation.left: sessionSleep
                         KeyNavigation.right: sessionTaskManager
-                        KeyNavigation.down: sessionReboot
+                        KeyNavigation.down: Session.showHibernateAction ? sessionReboot : sessionFirmwareReboot
                     }
                     SessionActionButton {
                         id: sessionTaskManager
@@ -281,6 +341,7 @@ Scope {
 
                     SessionActionButton {
                         id: sessionHibernate
+                        visible: Session.showHibernateAction
                         buttonIcon: "downloading"
                         buttonText: Translation.tr("Hibernate")
                         onClicked:  { Session.hibernate(); sessionRoot.hide() }
@@ -294,9 +355,9 @@ Scope {
                         buttonText: Translation.tr("Shutdown")
                         onClicked:  { Session.poweroff(); sessionRoot.hide() }
                         onFocusChanged: { if (focus) sessionRoot.subtitle = buttonText }
-                        KeyNavigation.left: sessionHibernate
+                        KeyNavigation.left: Session.showHibernateAction ? sessionHibernate : null
                         KeyNavigation.right: sessionReboot
-                        KeyNavigation.up: sessionSleep
+                        KeyNavigation.up: Session.showHibernateAction ? sessionSleep : sessionLock
                     }
                     SessionActionButton {
                         id: sessionReboot
@@ -306,7 +367,7 @@ Scope {
                         onFocusChanged: { if (focus) sessionRoot.subtitle = buttonText }
                         KeyNavigation.left: sessionShutdown
                         KeyNavigation.right: sessionFirmwareReboot
-                        KeyNavigation.up: sessionLogout
+                        KeyNavigation.up: Session.showHibernateAction ? sessionLogout : sessionSleep
                     }
                     SessionActionButton {
                         id: sessionFirmwareReboot
@@ -314,7 +375,7 @@ Scope {
                         buttonText: Translation.tr("Reboot to firmware settings")
                         onClicked:  { Session.rebootToFirmware(); sessionRoot.hide() }
                         onFocusChanged: { if (focus) sessionRoot.subtitle = buttonText }
-                        KeyNavigation.up: sessionTaskManager
+                        KeyNavigation.up: Session.showHibernateAction ? sessionTaskManager : sessionLogout
                         KeyNavigation.left: sessionReboot
                     }
                 }
@@ -338,8 +399,12 @@ Scope {
                     visible: active
                     sourceComponent: DescriptionLabel {
                         text: Translation.tr("Your package manager is running")
-                        textColor: Appearance.m3colors.m3onErrorContainer
-                        color: Appearance.m3colors.m3errorContainer
+                        textColor: Appearance.zzzEverywhere ? Appearance.zzz.onSecondary : Appearance.colors.colOnErrorContainer
+                        color: Appearance.zzzEverywhere ? Appearance.zzz.secondary : Appearance.colors.colErrorContainer
+                        Behavior on color {
+                            enabled: Appearance.animationsEnabled
+                            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                        }
                     }
                 }
                 Loader {
@@ -347,57 +412,13 @@ Scope {
                     visible: active
                     sourceComponent: DescriptionLabel {
                         text: Translation.tr("There might be a download in progress")
-                        textColor: Appearance.m3colors.m3onErrorContainer
-                        color: Appearance.m3colors.m3errorContainer
+                        textColor: Appearance.zzzEverywhere ? Appearance.zzz.onSecondary : Appearance.colors.colOnErrorContainer
+                        color: Appearance.zzzEverywhere ? Appearance.zzz.secondary : Appearance.colors.colErrorContainer
+                        Behavior on color {
+                            enabled: Appearance.animationsEnabled
+                            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                        }
                     }
-                }
-            }
-        }
-    }
-
-    IpcHandler {
-        target: "session"
-        enabled: Config.options?.panelFamily !== "waffle"
-
-        function toggle(): void {
-            GlobalStates.sessionOpen = !GlobalStates.sessionOpen;
-        }
-
-        function close(): void {
-            GlobalStates.sessionOpen = false
-        }
-
-        function open(): void {
-            GlobalStates.sessionOpen = true
-        }
-    }
-    Loader {
-        active: CompositorService.isHyprland
-        sourceComponent: Item {
-            GlobalShortcut {
-                name: "sessionToggle"
-                description: "Toggles session screen on press"
-
-                onPressed: {
-                    GlobalStates.sessionOpen = !GlobalStates.sessionOpen;
-                }
-            }
-
-            GlobalShortcut {
-                name: "sessionOpen"
-                description: "Opens session screen on press"
-
-                onPressed: {
-                    GlobalStates.sessionOpen = true
-                }
-            }
-
-            GlobalShortcut {
-                name: "sessionClose"
-                description: "Closes session screen on press"
-
-                onPressed: {
-                    GlobalStates.sessionOpen = false
                 }
             }
         }

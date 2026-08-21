@@ -12,6 +12,7 @@ import Quickshell.Wayland
 
 Item {
     id: root
+    property bool _sortingConsumerAcquired: false
 
     // Debug logging gated behind QS_DEBUG env var (project convention)
     function _log(...args): void {
@@ -25,8 +26,12 @@ Item {
     property bool vertical: false
     property string dockPosition: "bottom"
     property var parentWindow: null
-    readonly property bool pillStyle:   Config.options?.dock?.style === "pill"
-    readonly property bool macosStyle:  Config.options?.dock?.style === "macos"
+    readonly property string surfaceDialect: Appearance.surfaceDialectFor(
+        Config.options?.dock?.style === "island" ? "island" : "")
+    readonly property bool zzzStyle: surfaceDialect === "zzz"
+    readonly property bool inirStyle: surfaceDialect === "inir"
+    readonly property bool pillStyle: Config.options?.dock?.style === "pill" && !zzzStyle
+    readonly property bool macosStyle: Config.options?.dock?.style === "macos" && !zzzStyle
 
     // Propagated hovered index for neighbor magnify in macOS style
     property int macHoveredIndex: -1
@@ -279,6 +284,12 @@ Item {
     // ─── Dock Items Model ────────────────────────────────────────────────
     property var dockItems: []
 
+    // Reactive per-app toplevel map keyed by uniqueId. DockAppButton reads this
+    // instead of its modelData snapshot: ScriptModel matches items by uniqueId,
+    // so a pinned app going open→closed keeps its delegate and the snapshot
+    // would leave a stale running indicator/preview until an unrelated reorder.
+    property var toplevelsByUniqueId: ({})
+
     // Direct reactive binding to Config - will automatically trigger when Config changes
     readonly property bool separatePinnedFromRunning: Config.options?.dock?.separatePinnedFromRunning ?? true
     onSeparatePinnedFromRunningChanged: {
@@ -307,14 +318,30 @@ Item {
         id: rebuildTimer
         interval: 80
         repeat: false
-        onTriggered: root._doRebuildDockItems()
+        onTriggered: {
+            if (root.enabled)
+                root._doRebuildDockItems()
+        }
     }
 
     function rebuildDockItems() {
+        if (!root.enabled)
+            return
         rebuildTimer.restart()
     }
 
-    // Skip model update when structure hasn't changed (same apps, order, toplevels)
+    function _toplevelLiveKey(toplevel) {
+        if (!toplevel) return ""
+        if (toplevel._sourceKey !== undefined && toplevel._sourceKey !== null)
+            return String(toplevel._sourceKey)
+        return `${toplevel.appId || ""}::${toplevel.title || ""}`
+    }
+
+    // Skip model update when structure hasn't changed (same apps, order, toplevels).
+    // Compare toplevels by stable identifier (sourceKey / appId+title) instead of
+    // object reference — sortToplevels() on Niri builds fresh enriched objects on
+    // every focus change, so reference comparison would always trigger a rebuild
+    // and shake the dock layout for non-structural updates.
     function _dockItemsEqual(oldItems, newItems): bool {
         if (oldItems.length !== newItems.length) return false
         for (let i = 0; i < oldItems.length; i++) {
@@ -323,7 +350,8 @@ Item {
             const oTL = o.toplevels, nTL = n.toplevels
             if (oTL.length !== nTL.length) return false
             for (let j = 0; j < oTL.length; j++) {
-                if (oTL[j] !== nTL[j]) return false
+                if (root._toplevelLiveKey(oTL[j]) !== root._toplevelLiveKey(nTL[j])) return false
+                if (!!oTL[j].activated !== !!nTL[j].activated) return false
             }
         }
         return true
@@ -334,25 +362,63 @@ Item {
         const ignoredRegexes = _getIgnoredRegexes();
         const separatePinnedFromRunning = root.separatePinnedFromRunning;
 
-        // Get all open windows
-        const allToplevels = CompositorService.sortedToplevels && CompositorService.sortedToplevels.length
-                ? CompositorService.sortedToplevels
-                : ToplevelManager.toplevels.values;
+        // Source of truth for what's actually open:
+        //   • On Niri: CompositorService.sortedToplevels is built from niri's
+        //     authoritative `windows` array, so we trust it absolutely—even when
+        //     it's empty (means: no windows). Falling back to ToplevelManager
+        //     would resurrect stale Wayland foreign-toplevel handles (ghosts) that
+        //     don't release cleanly when an app closes (zen, electron, etc.).
+        //   • Off Niri (Hyprland / others): use sorted when populated, fall back
+        //     to ToplevelManager only as a last resort. There's no compositor-
+        //     authoritative source to validate against on those.
+        // Note: on Niri there is a sub-second startup gap where `isNiri` is
+        // already true but `windows` (and therefore `sortedToplevels`) is
+        // still empty. During that window the dock will be empty even if
+        // ToplevelManager already lists handles for apps started before the
+        // shell. That's intentional — trusting ToplevelManager during the
+        // gap is what brings the ghost-toplevel bug back.
+        const tmToplevels = ToplevelManager.toplevels.values;
+        const sorted = CompositorService.sortedToplevels;
+        const sortedHasItems = sorted && sorted.length > 0;
+        const niriAuthoritative = CompositorService.isNiri;
+        const allToplevels = niriAuthoritative
+            ? (sorted ?? [])
+            : (sortedHasItems ? sorted : tmToplevels);
+
+        // Off-Niri ghost guard: when we use enriched `sorted` items, cross-check
+        // them against the live ToplevelManager to drop entries that no longer
+        // exist there. On Niri this is redundant (sortToplevels already drops
+        // ghosts).
+        const liveToplevelCounts = new Map();
+        const crossCheck = sortedHasItems && !niriAuthoritative;
+        if (crossCheck) {
+            for (const tl of tmToplevels) {
+                const key = root._toplevelLiveKey(tl);
+                liveToplevelCounts.set(key, (liveToplevelCounts.get(key) ?? 0) + 1);
+            }
+        }
 
         // Build map of running apps (apps with open windows)
         const runningAppsMap = new Map();
         for (const toplevel of allToplevels) {
             if (!toplevel.appId) continue;
             if (toplevel.appId === "" || toplevel.appId === "null") continue;
+            if (crossCheck) {
+                const key = root._toplevelLiveKey(toplevel);
+                const count = liveToplevelCounts.get(key) ?? 0;
+                if (count <= 0) continue;
+                liveToplevelCounts.set(key, count - 1);
+            }
+            const effectiveId = AppSearch.resolveWindowIdentity(toplevel);
+            const lowerAppId = effectiveId.toLowerCase();
 
-            if (ignoredRegexes.some(re => re.test(toplevel.appId))) {
+            if (ignoredRegexes.some(re => re.test(effectiveId))) {
                 continue;
             }
 
-            const lowerAppId = toplevel.appId.toLowerCase();
             if (!runningAppsMap.has(lowerAppId)) {
                 runningAppsMap.set(lowerAppId, {
-                    appId: toplevel.appId,
+                    appId: effectiveId,
                     toplevels: [],
                     pinned: false
                 });
@@ -369,6 +435,9 @@ Item {
             for (const appId of pinnedApps) {
                 const lowerAppId = appId.toLowerCase();
                 const runningEntry = runningAppsMap.get(lowerAppId);
+                // Skip pinned apps with no desktop entry and no running windows
+                if (!runningEntry && !AppSearch.lookupDesktopEntry(appId))
+                    continue;
                 values.push({
                     uniqueId: "app-" + lowerAppId,
                     appId: lowerAppId,
@@ -395,8 +464,11 @@ Item {
                 });
             }
 
-            // Add unpinned running apps
-            for (const [lowerAppId, entry] of runningAppsMap) {
+            // Add unpinned running apps in a stable alphabetical order so they
+            // don't shuffle as sortedToplevels reorders on focus/layout changes.
+            const unpinned = Array.from(runningAppsMap.entries())
+                .sort((a, b) => a[0].localeCompare(b[0]));
+            for (const [lowerAppId, entry] of unpinned) {
                 values.push({
                     uniqueId: "app-" + lowerAppId,
                     appId: lowerAppId,
@@ -414,6 +486,9 @@ Item {
                 const lowerAppId = appId.toLowerCase();
                 // Only show pinned apps that don't have running windows
                 if (!runningAppsMap.has(lowerAppId)) {
+                    // Skip pinned apps with no desktop entry
+                    if (!AppSearch.lookupDesktopEntry(appId))
+                        continue;
                     values.push({
                         uniqueId: "app-" + lowerAppId,
                         appId: lowerAppId,
@@ -450,7 +525,11 @@ Item {
                     entry: entry
                 });
             }
-            // Sort to keep consistency: pinned+running apps first (by pinned order), then unpinned
+            // Sort to keep consistency: pinned+running apps first (by pinned order),
+            // then unpinned apps in a STABLE alphabetical order. Without the
+            // alphabetical fallback, unpinned apps inherit the iteration order of
+            // sortedToplevels which can shuffle as windows are focused / moved
+            // between columns, causing the dock icons to dance.
             sortedRunningApps.sort((a, b) => {
                 const aIndex = pinnedApps.findIndex(p => p.toLowerCase() === a.lowerAppId);
                 const bIndex = pinnedApps.findIndex(p => p.toLowerCase() === b.lowerAppId);
@@ -458,13 +537,11 @@ Item {
                 const aIsPinned = aIndex !== -1;
                 const bIsPinned = bIndex !== -1;
 
-                // Pinned apps first (in their pinned order)
                 if (aIsPinned && bIsPinned) return aIndex - bIndex;
                 if (aIsPinned) return -1;
                 if (bIsPinned) return 1;
 
-                // Unpinned apps maintain their order
-                return 0;
+                return a.lowerAppId.localeCompare(b.lowerAppId);
             });
 
             for (const {lowerAppId, entry} of sortedRunningApps) {
@@ -480,6 +557,12 @@ Item {
             }
         }
 
+        // Always refresh the reactive toplevel map, even when the model
+        // structure is unchanged — delegates bind to it for live window state.
+        const tlMap = {}
+        for (const v of values) tlMap[v.uniqueId] = v.toplevels
+        root.toplevelsByUniqueId = tlMap
+
         // Skip update if the model structure is identical — avoids
         // ScriptModel churn and downstream binding re-evaluations.
         if (!_dockItemsEqual(dockItems, values)) {
@@ -489,6 +572,7 @@ Item {
 
     Connections {
         target: ToplevelManager.toplevels
+        enabled: root.enabled
         function onValuesChanged() {
             root.rebuildDockItems()
         }
@@ -496,6 +580,7 @@ Item {
 
     Connections {
         target: CompositorService
+        enabled: root.enabled
         function onSortedToplevelsChanged() {
             root.rebuildDockItems()
         }
@@ -503,6 +588,7 @@ Item {
 
     Connections {
         target: Config.options?.dock
+        enabled: root.enabled
         function onPinnedAppsChanged() {
             root.rebuildDockItems()
         }
@@ -510,8 +596,32 @@ Item {
             root.rebuildDockItems()
         }
     }
+    Connections {
+        target: Config.options?.windows
+        enabled: root.enabled
+        function onAppIdentityRulesChanged() {
+            root.rebuildDockItems()
+        }
+    }
 
-    Component.onCompleted: rebuildDockItems()
+    function syncSortingDemand(): void {
+        if (root.enabled && !_sortingConsumerAcquired) {
+            CompositorService.acquireSortingConsumer()
+            _sortingConsumerAcquired = true
+            rebuildDockItems()
+        } else if (!root.enabled && _sortingConsumerAcquired) {
+            rebuildTimer.stop()
+            CompositorService.releaseSortingConsumer()
+            _sortingConsumerAcquired = false
+        }
+    }
+
+    onEnabledChanged: syncSortingDemand()
+    Component.onCompleted: syncSortingDemand()
+    Component.onDestruction: {
+        if (_sortingConsumerAcquired)
+            CompositorService.releaseSortingConsumer()
+    }
 
     StyledListView {
         id: listView
@@ -527,16 +637,46 @@ Item {
         implicitHeight: contentHeight
         interactive: false // Dock should never flick/scroll — all items visible
 
+        // Container resizes organically as apps enter/leave; the orientation-aware
+        // delegate transitions below grow/shrink each item in place so the dock
+        // never jump-cuts when an app opens or closes.
         Behavior on implicitWidth {
-            animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+            enabled: Appearance.animationsEnabled
+            animation: NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve }
         }
         Behavior on implicitHeight {
-            animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+            enabled: Appearance.animationsEnabled
+            animation: NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve }
         }
+
+        // ─── Item entrance / exit transitions ───
+        // The new/leaving item itself fades+scales in place. Neighbours are
+        // intentionally NOT animated (no `displaced` / `move` transitions): the
+        // user requested that other dock items don't slide when a new app opens
+        // or closes. The container's implicitWidth Behavior above still smooths
+        // the overall dock resize, so the layout shifts feel continuous without
+        // visible per-item travel. Animations are also suppressed during a
+        // manual reorder drag so they never fight the drag transforms.
+        readonly property bool _animOk: Appearance.animationsEnabled && !root.dragActive
+
+        add: Transition {
+            enabled: listView._animOk
+            NumberAnimation { properties: "opacity,scale"; from: 0; to: 1; duration: Appearance.animation.elementMoveEnter.duration; easing.type: Easing.BezierSpline; easing.bezierCurve: Appearance.animationCurves.emphasizedDecel }
+        }
+        remove: Transition {
+            enabled: listView._animOk
+            NumberAnimation { properties: "opacity,scale"; to: 0; duration: Appearance.animation.elementMoveExit.duration; easing.type: Appearance.animation.elementMoveExit.type; easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve }
+        }
+        // Neighbour displacement deliberately disabled — see comment above.
+        displaced: Transition {}
+        addDisplaced: Transition {}
+        removeDisplaced: Transition {}
+        move: Transition {}
+        moveDisplaced: Transition {}
 
         model: ScriptModel {
             objectProp: "uniqueId"
-            values: root.dockItems
+            values: root.enabled ? root.dockItems : []
         }
 
           delegate: DockAppButton {
@@ -597,15 +737,17 @@ Item {
                 Behavior on x {
                     enabled: Appearance.animationsEnabled && !root.dropSettlingActive && !dockDelegate.isBeingDragged && !dockDelegate.isDropSettling
                     NumberAnimation {
-                        duration: 250
-                        easing.type: Easing.OutCubic
+                        duration: Appearance.animation.elementResize.duration
+                        easing.type: Appearance.animation.elementResize.type
+                        easing.bezierCurve: Appearance.animation.elementResize.bezierCurve
                     }
                 }
                 Behavior on y {
                     enabled: Appearance.animationsEnabled && !root.dropSettlingActive && !dockDelegate.isBeingDragged && !dockDelegate.isDropSettling
                     NumberAnimation {
-                        duration: 250
-                        easing.type: Easing.OutCubic
+                        duration: Appearance.animation.elementResize.duration
+                        easing.type: Appearance.animation.elementResize.type
+                        easing.bezierCurve: Appearance.animation.elementResize.bezierCurve
                     }
                 }
             }
@@ -625,7 +767,7 @@ Item {
                    : root.dragActive ? 0.85 : 1.0
             Behavior on opacity {
                 enabled: Appearance.animationsEnabled
-                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
             }
 
             // ─── Insertion line at drop gap ───────────────────────────
@@ -658,14 +800,19 @@ Item {
                         : -(listView.spacing + height) / 2)
                     : (parent.height - height) / 2
 
-                color: Appearance.inirEverywhere ? Appearance.inir.colPrimary
+                color: root.zzzStyle ? Appearance.zzz.tertiary
+                     : root.inirStyle ? Appearance.inir.colPrimary
                      : Appearance.colors.colPrimary
+                Behavior on color {
+                    enabled: Appearance.animationsEnabled
+                    ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                }
 
                 opacity: dockDelegate.isDropTarget ? 0.9 : 0
 
                 Behavior on opacity {
                     enabled: Appearance.animationsEnabled
-                    NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+                    NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                 }
             }
 
@@ -682,11 +829,13 @@ Item {
             property bool _dragPrimed: false      // Timer fired, awaiting movement
             property bool _longPressTriggered: false // Drag actually started
 
-            downAction: () => {
+            downAction: event => {
                 if (!root.dragEnabled || dockDelegate.isSeparator) return
                 _longPressTriggered = false
                 _dragPrimed = false
-                _hasPressPos = false
+                _pressMouseX = event.x
+                _pressMouseY = event.y
+                _hasPressPos = true
                 _dockPrimeTimer.restart()
             }
 
@@ -694,13 +843,7 @@ Item {
                 // Only track during an active press, not hover
                 if (!dockDelegate.down) return
 
-                // Capture initial press position on first move event
-                if (!_hasPressPos) {
-                    _pressMouseX = event.x
-                    _pressMouseY = event.y
-                    _hasPressPos = true
-                    return
-                }
+                if (!_hasPressPos) return
 
                 const dx = event.x - _pressMouseX
                 const dy = event.y - _pressMouseY
@@ -714,8 +857,11 @@ Item {
                     return
                 }
 
-                // Primed but drag not yet started → start on first movement
-                if (_dragPrimed && !root.dragActive) {
+                // Priming alone must never consume a click. Start dragging only
+                // after the pointer has crossed the same movement threshold
+                // measured from the actual press position.
+                if (_dragPrimed && !root.dragActive
+                        && dist2 > root.dragThreshold * root.dragThreshold) {
                     _longPressTriggered = true
                     const listPos = dockDelegate.mapToItem(listView, _pressMouseX, _pressMouseY)
                     const appId = dockDelegate.appToplevel?.originalAppId
@@ -741,6 +887,14 @@ Item {
                         root.endDrag()
                     }
                     root._suppressNextClick = true
+                    // RippleButton follows releaseAction with click() only for
+                    // a normal release. MouseArea cancellation calls the same
+                    // releaseAction without that click, so expire the guard if
+                    // it was not consumed synchronously.
+                    Qt.callLater(() => {
+                        if (root._suppressNextClick)
+                            root._suppressNextClick = false
+                    })
                     dockDelegate._longPressTriggered = false
                 }
             }

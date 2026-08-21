@@ -18,8 +18,8 @@ Item {
     readonly property bool inirEverywhere: Appearance.inirEverywhere
     readonly property bool auroraEverywhere: Appearance.auroraEverywhere
 
-    function getGreeting(): string {
-        const hour = new Date().getHours()
+    readonly property string greeting: {
+        const hour = DateTime.clock.hours
         if (hour < 5) return Translation.tr("Good Night")
         if (hour < 12) return Translation.tr("Good Morning")
         if (hour < 18) return Translation.tr("Good Afternoon")
@@ -46,15 +46,24 @@ Item {
             Layout.preferredWidth: 48
             Layout.preferredHeight: 48
 
-            // Border ring
+            // Cookie mode keeps the photo familiar and uses one organic frame,
+            // avoiding a second animated mask on the image itself.
+            CookieFace {
+                anchors.fill: parent
+                visible: Appearance.cookieEverywhere
+                role: "badge"
+                selected: true
+                color: Appearance.colors.colPrimaryContainer
+            }
             Rectangle {
                 anchors.fill: parent
+                visible: !Appearance.cookieEverywhere
                 radius: width / 2
                 color: "transparent"
                 border.width: 2
                 border.color: Appearance.angelEverywhere ? Appearance.angel.colPrimary
-                            : root.inirEverywhere ? Appearance.inir.colPrimary 
-                            : root.auroraEverywhere ? Appearance.m3colors.m3primary
+                            : root.inirEverywhere ? Appearance.inir.colPrimary
+                            : root.auroraEverywhere ? Appearance.colors.colPrimary
                             : Appearance.colors.colPrimary
             }
 
@@ -82,8 +91,13 @@ Item {
                     mipmap: true
                     sourceSize.width: 84
                     sourceSize.height: 84
-                    visible: status === Image.Ready
-                    layer.enabled: visible
+                    opacity: status === Image.Ready ? 1 : 0
+                    visible: opacity > 0
+                    Behavior on opacity {
+                        enabled: Appearance.animationsEnabled
+                        NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                    }
+                    layer.enabled: status === Image.Ready
                     layer.effect: GE.OpacityMask {
                         maskSource: avatarMask
                     }
@@ -116,7 +130,12 @@ Item {
                          : root.inirEverywhere ? Appearance.inir.colLayer2 
                          : root.auroraEverywhere ? Appearance.aurora.colSubSurface
                          : Appearance.colors.colLayer2
-                    visible: avatarImg.status !== Image.Ready
+                    opacity: avatarImg.status !== Image.Ready ? 1 : 0
+                    visible: opacity > 0
+                    Behavior on opacity {
+                        enabled: Appearance.animationsEnabled
+                        NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                    }
 
                     MaterialSymbol {
                         anchors.centerIn: parent
@@ -124,7 +143,7 @@ Item {
                         iconSize: 22
                         color: Appearance.angelEverywhere ? Appearance.angel.colPrimary
                              : root.inirEverywhere ? Appearance.inir.colPrimary 
-                             : root.auroraEverywhere ? Appearance.m3colors.m3primary
+                             : root.auroraEverywhere ? Appearance.colors.colPrimary
                              : Appearance.colors.colPrimary
                     }
                 }
@@ -135,11 +154,11 @@ Item {
         ColumnLayout {
             spacing: 0
             StyledText {
-                text: root.getGreeting()
+                text: root.greeting
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 color: Appearance.angelEverywhere ? Appearance.angel.colPrimary
                      : root.inirEverywhere ? Appearance.inir.colPrimary 
-                     : root.auroraEverywhere ? Appearance.m3colors.m3primary
+                     : root.auroraEverywhere ? Appearance.colors.colPrimary
                      : Appearance.colors.colPrimary
             }
             StyledText {
@@ -149,7 +168,7 @@ Item {
                 font.capitalization: Font.Capitalize
                 color: Appearance.angelEverywhere ? Appearance.angel.colText
                      : root.inirEverywhere ? Appearance.inir.colText 
-                     : root.auroraEverywhere ? Appearance.m3colors.m3onSurface
+                     : root.auroraEverywhere ? Appearance.colors.colOnSurface
                      : Appearance.colors.colOnLayer0
             }
         }
@@ -177,7 +196,7 @@ Item {
                     iconSize: 18
                     color: Appearance.angelEverywhere ? Appearance.angel.colText
                          : root.inirEverywhere ? Appearance.inir.colText 
-                         : root.auroraEverywhere ? Appearance.m3colors.m3onSurface
+                         : root.auroraEverywhere ? Appearance.colors.colOnSurface
                          : Appearance.colors.colOnLayer0
                 }
                 StyledToolTip { text: Translation.tr("Lock") }
@@ -200,7 +219,7 @@ Item {
                     iconSize: 18
                     color: Appearance.angelEverywhere ? Appearance.angel.colText
                          : root.inirEverywhere ? Appearance.inir.colText
-                         : root.auroraEverywhere ? Appearance.m3colors.m3onSurface
+                         : root.auroraEverywhere ? Appearance.colors.colOnSurface
                          : Appearance.colors.colOnLayer0
                 }
                 StyledToolTip { text: Translation.tr("Manage my account") }
@@ -225,7 +244,7 @@ Item {
                     text: "power_settings_new"
                     iconSize: 18
                     color: root.inirEverywhere ? Appearance.inir.colError ?? Appearance.colors.colError
-                         : root.auroraEverywhere ? Appearance.m3colors.m3error
+                         : root.auroraEverywhere ? Appearance.colors.colError
                          : Appearance.colors.colError 
                 }
                 StyledToolTip { text: Translation.tr("Power") }
@@ -248,7 +267,7 @@ Item {
                     iconSize: 18
                     color: Appearance.angelEverywhere ? Appearance.angel.colTextSecondary
                          : root.inirEverywhere ? Appearance.inir.colTextSecondary 
-                         : root.auroraEverywhere ? Appearance.m3colors.m3outline
+                         : root.auroraEverywhere ? Appearance.colors.colOutline
                          : Appearance.colors.colSubtext
                 }
                 StyledToolTip { text: Translation.tr("Close") }

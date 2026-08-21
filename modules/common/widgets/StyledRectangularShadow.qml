@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Effects
 import qs.modules.common
@@ -13,21 +15,31 @@ Item {
     property bool hovered: false
     property real radius: (target && target.radius !== undefined) ? Number(target.radius) : 0
     // Passthrough properties for backward compat (some sites override these)
-    property real blur: (Appearance.sizes && Appearance.sizes.elevationMargin !== undefined) ? (0.9 * Number(Appearance.sizes.elevationMargin)) : 0
-    property real spread: 1
-    property color color: Appearance.colors.colShadow
-    property vector2d offset: Qt.vector2d(0.0, 1.0)
+    property real blur: Appearance.cookieEverywhere
+        ? Appearance.cookie.shadowBlur
+        : ((Appearance.sizes && Appearance.sizes.elevationMargin !== undefined)
+            ? (0.9 * Number(Appearance.sizes.elevationMargin)) : 0)
+    property real spread: Appearance.cookieEverywhere ? Appearance.cookie.shadowSpread : 1
+    property color color: Appearance.cookieEverywhere
+        ? Appearance.cookie.shadowColor : Appearance.colors.colShadow
+    property vector2d offset: Appearance.cookieEverywhere
+        ? Qt.vector2d(0.0, Appearance.cookie.shadowOffset)
+        : Qt.vector2d(0.0, 1.0)
 
-    visible: Appearance.angelEverywhere
-        ? true
-        : Appearance.effectsEnabled
+    visible: !Appearance.zzzEverywhere
+        && !Appearance.gameModeMinimal
+        && (Appearance.angelEverywhere || Appearance.effectsEnabled)
     anchors.fill: target
 
     // ─── MATERIAL MODE: standard blur shadow ───
+    // RectangularShadow shrinks its effective corner radius by ~blur*0.75 (see
+    // Qt's clampedRadius()), so with a wide blur the shadow corners turn squarer
+    // than the target and poke out past its rounded corners. Compensate so the
+    // shadow's rendered radius matches the panel outline.
     RectangularShadow {
-        visible: !Appearance.angelEverywhere
+        visible: !Appearance.angelEverywhere && !Appearance.zzzEverywhere
         anchors.fill: parent
-        radius: root.radius
+        radius: root.radius + root.blur * 0.75
         blur: root.blur
         offset: root.offset
         spread: root.spread
@@ -55,15 +67,15 @@ Item {
 
         Behavior on x {
             enabled: Appearance.animationsEnabled
-            NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
         }
         Behavior on y {
             enabled: Appearance.animationsEnabled
-            NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
         }
         Behavior on color {
             enabled: Appearance.animationsEnabled
-            ColorAnimation { duration: 150 }
+            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
         }
     }
 }

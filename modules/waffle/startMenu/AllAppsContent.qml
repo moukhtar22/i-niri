@@ -6,6 +6,7 @@ import Quickshell
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.common.widgets
 import qs.modules.waffle.looks
 
 WPanelPageColumn {
@@ -61,7 +62,7 @@ WPanelPageColumn {
 
     function activateFirst() {
         if (flatApps.length > 0) {
-            flatApps[0].execute()
+            AppSearch.launchEntry(flatApps[0])
             GlobalStates.searchOpen = false
         }
     }
@@ -209,25 +210,34 @@ WPanelPageColumn {
                                     }
                                 }
 
-                                // Grid of apps in this section
-                                Grid {
+                                // Apps in this section — Flow auto-reflows when panel resizes;
+                                // wrapper Item lets us center the row within the parent column.
+                                Item {
                                     width: parent.width
-                                    columns: 6
-                                    rowSpacing: 4
-                                    columnSpacing: 4
+                                    height: appFlow.implicitHeight
 
-                                    Repeater {
-                                        model: sectionDelegate.modelData.apps
+                                    Flow {
+                                        id: appFlow
+                                        readonly property int cellWidth: 88 + spacing
+                                        // Number of columns that fit in the available width
+                                        readonly property int maxCols: Math.max(1, Math.floor((parent.width + spacing) / cellWidth))
+                                        // Trim Flow width to whole cells so the block can center cleanly
+                                        width: Math.min(parent.width, maxCols * cellWidth - spacing)
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        spacing: 4
 
-                                        delegate: WBorderlessButton {
-                                            id: appBtn
-                                            required property var modelData
-                                            required property int index
-                                            implicitWidth: 88
-                                            implicitHeight: 76
+                                        Repeater {
+                                            model: sectionDelegate.modelData.apps
+
+                                            delegate: WBorderlessButton {
+                                                id: appBtn
+                                                required property var modelData
+                                                required property int index
+                                                implicitWidth: 88
+                                                implicitHeight: 76
 
                                             onClicked: {
-                                                appBtn.modelData.execute()
+                                                AppSearch.launchEntry(appBtn.modelData)
                                                 GlobalStates.searchOpen = false
                                             }
 
@@ -246,8 +256,8 @@ WPanelPageColumn {
                                                 id: btnEntryAnim
                                                 PauseAnimation { duration: Looks.transition.staggerDelay(appBtn.index, 25) }
                                                 ParallelAnimation {
-                                                    NumberAnimation { target: appBtn; property: "opacity"; to: 1; duration: 180; easing.type: Easing.OutQuad }
-                                                    NumberAnimation { target: appBtn; property: "scale"; to: 1; duration: 200; easing.type: Easing.OutBack; easing.overshoot: 0.2 }
+                                                    NumberAnimation { target: appBtn; property: "opacity"; to: 1; duration: Looks.transition.enabled ? Looks.transition.duration.normal : 0; easing.type: Easing.OutQuad }
+                                                    NumberAnimation { target: appBtn; property: "scale"; to: 1; duration: Looks.transition.enabled ? Looks.transition.duration.medium : 0; easing.type: Easing.OutBack; easing.overshoot: 0.2 }
                                                 }
                                             }
 
@@ -272,6 +282,7 @@ WPanelPageColumn {
                                             }
                                             WToolTip { text: appBtn.modelData.name || "" }
                                         }
+                                        }
                                     }
                                 }
                             }
@@ -279,11 +290,25 @@ WPanelPageColumn {
                     }
 
                     // Empty state
-                    WText {
+                    ColumnLayout {
                         anchors.centerIn: parent
                         visible: root.groupedApps.length === 0
-                        text: Translation.tr("No apps found")
-                        color: Looks.colors.fg1
+                        spacing: 8
+
+                        MascotImage {
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.preferredWidth: 96
+                            Layout.preferredHeight: 96
+                            surface: "startMenu"
+                            fallbackSurface: "emptyStates"
+                            pose: "fisheye-inspect"
+                        }
+
+                        WText {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: Translation.tr("No apps found")
+                            color: Looks.colors.fg1
+                        }
                     }
                 }
 
@@ -315,7 +340,9 @@ WPanelPageColumn {
                                 radius: Looks.radius.small
                                 color: letterMouse.containsMouse ? Looks.colors.bg1Hover : "transparent"
 
-                                Behavior on color { ColorAnimation { duration: 70 } }
+                                Behavior on color {
+                                    ColorAnimation { duration: Looks.transition.enabled ? 70 : 0 }
+                                }
                             }
 
                             WText {
@@ -326,8 +353,12 @@ WPanelPageColumn {
                                 color: letterItem.isActive ? Looks.colors.accent : Looks.colors.fg1
                                 opacity: letterItem.isActive ? 1.0 : 0.6
 
-                                Behavior on color { ColorAnimation { duration: 70 } }
-                                Behavior on opacity { NumberAnimation { duration: 70 } }
+                                Behavior on color {
+                                    ColorAnimation { duration: Looks.transition.enabled ? 70 : 0 }
+                                }
+                                Behavior on opacity {
+                                    NumberAnimation { duration: Looks.transition.enabled ? Looks.transition.duration.normal : 0 }
+                                }
                             }
 
                             MouseArea {

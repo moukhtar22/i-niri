@@ -1,3 +1,4 @@
+import qs
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
@@ -7,6 +8,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import "root:services"
+import qs.services.deferred
 
 Item {
     id: root
@@ -15,7 +17,7 @@ Item {
     property string selectedDay: "today"
     
     readonly property var daysList: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-    readonly property string todayName: Qt.formatDate(new Date(), "dddd").toLowerCase()
+    readonly property string todayName: Qt.formatDate(DateTime.clock.date, "dddd").toLowerCase()
     
     onFocusChanged: (focus) => {
         if (focus) {
@@ -77,10 +79,12 @@ Item {
                 colBackgroundToggled: Appearance.angelEverywhere ? Appearance.angel.colGlassElevated
                     : Appearance.inirEverywhere ? Appearance.inir.colSecondaryContainer
                     : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
+                    : Appearance.zzzEverywhere ? Appearance.zzz.sticker
                     : Appearance.colors.colSecondaryContainer
                 colBackgroundToggledHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
                     : Appearance.inirEverywhere ? Appearance.inir.colPrimaryContainerHover
                     : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover
+                    : Appearance.zzzEverywhere ? Appearance.colors.colPrimaryHover
                     : Appearance.colors.colSecondaryContainerHover
                 onClicked: {
                     tabGroup.clickIndex = 0
@@ -105,10 +109,12 @@ Item {
                 colBackgroundToggled: Appearance.angelEverywhere ? Appearance.angel.colGlassElevated
                     : Appearance.inirEverywhere ? Appearance.inir.colSecondaryContainer
                     : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
+                    : Appearance.zzzEverywhere ? Appearance.zzz.sticker
                     : Appearance.colors.colSecondaryContainer
                 colBackgroundToggledHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
                     : Appearance.inirEverywhere ? Appearance.inir.colPrimaryContainerHover
                     : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover
+                    : Appearance.zzzEverywhere ? Appearance.colors.colPrimaryHover
                     : Appearance.colors.colSecondaryContainerHover
                 onClicked: {
                     tabGroup.clickIndex = 1
@@ -133,10 +139,12 @@ Item {
                 colBackgroundToggled: Appearance.angelEverywhere ? Appearance.angel.colGlassElevated
                     : Appearance.inirEverywhere ? Appearance.inir.colSecondaryContainer
                     : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
+                    : Appearance.zzzEverywhere ? Appearance.zzz.sticker
                     : Appearance.colors.colSecondaryContainer
                 colBackgroundToggledHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
                     : Appearance.inirEverywhere ? Appearance.inir.colPrimaryContainerHover
                     : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover
+                    : Appearance.zzzEverywhere ? Appearance.colors.colPrimaryHover
                     : Appearance.colors.colSecondaryContainerHover
                 onClicked: {
                     tabGroup.clickIndex = 2
@@ -156,7 +164,8 @@ Item {
             visible: Layout.preferredHeight > 0
             
             Behavior on Layout.preferredHeight {
-                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+                enabled: Appearance.animationsEnabled
+                NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve }
             }
             
             ButtonGroup {
@@ -187,9 +196,11 @@ Item {
                             : Appearance.colors.colLayer1Hover
                         colBackgroundToggled: Appearance.inirEverywhere ? Appearance.inir.colSecondaryContainer
                             : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
+                            : Appearance.zzzEverywhere ? Appearance.zzz.sticker
                             : Appearance.colors.colSecondaryContainer
                         colBackgroundToggledHover: Appearance.inirEverywhere ? Appearance.inir.colPrimaryContainerHover
                             : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover
+                            : Appearance.zzzEverywhere ? Appearance.colors.colPrimaryHover
                             : Appearance.colors.colSecondaryContainerHover
                         
                         onClicked: {
@@ -210,7 +221,8 @@ Item {
             visible: Layout.preferredHeight > 0
             
             Behavior on Layout.preferredHeight {
-                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+                enabled: Appearance.animationsEnabled
+                NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve }
             }
             
             RowLayout {
@@ -431,17 +443,19 @@ Item {
                 onClicked: root.refreshCurrentTab()
                 
                 contentItem: MaterialSymbol {
+                    id: refreshIcon
                     anchors.centerIn: parent
                     text: "refresh"
                     iconSize: 18
                     color: Appearance.colors.colOnLayer1
                     
                     RotationAnimation on rotation {
-                        running: AnimeService.loading
+                        running: AnimeService.loading && GlobalStates.sidebarLeftOpen
                         from: 0
                         to: 360
                         duration: 1000
                         loops: Animation.Infinite
+                        onRunningChanged: if (!running) refreshIcon.rotation = 0
                     }
                 }
                 

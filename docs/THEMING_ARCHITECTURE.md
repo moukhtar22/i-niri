@@ -59,12 +59,12 @@ Important practical rule:
 - `palette.json` is the explicit shell palette contract for future target consumers
 - `terminal.json` is the explicit terminal palette contract for future target consumers
 - `theme-meta.json` carries generation metadata such as source, mode, scheme, and generator
-- `generate_colors_material.py` is the single authoritative palette generator — it handles
+- `generate_colors_material.py` is the single authoritative palette generator: it handles
   both Material You color extraction AND template rendering (GTK, fuzzel, KDE, etc.)
 
 Current state:
 
-- `matugen` has been removed as a dependency — all color generation and template rendering
+- `matugen` has been removed as a dependency. All color generation and template rendering
   is handled by Python (`materialyoucolor` library + built-in template engine)
 - templates use `{{colors.token.mode.hex}}` syntax (compatible with former matugen templates)
 - template manifest: `defaults/matugen/templates.json` (declares input/output paths)
@@ -99,4 +99,4 @@ The intended next improvements are:
 - migrate target consumers from compatibility files toward the explicit generated contracts
 - cleaner separation between `generate`, `apply`, and `reload`
 
-A compiled-language migration (Go themegen) is partially in place for some targets. See `scripts/colors/system24_themegen/` for the current Go generator.
+A compiled-language migration (Go themegen) is in place for some editor targets: the Go sources live in `scripts/colors/{opencode,vscode,zed}_themegen/` (built on demand, with Python `theme_generator.py` fallbacks if Go is unavailable). System24 theming is handled by `scripts/colors/system24_palette.sh`, not a Go binary.

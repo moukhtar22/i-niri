@@ -12,7 +12,7 @@ Item {
     property int lineWidth: 2
     property real value: 0
     property color colPrimary: Appearance.angelEverywhere ? Appearance.angel.colPrimary
-        : Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.m3colors.m3onSecondaryContainer
+        : Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnSecondaryContainer
     property color colSecondary: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
         : Appearance.inirEverywhere ? Appearance.inir.colLayer2 
         : Appearance.auroraEverywhere ? Appearance.aurora.colElevatedSurface 
@@ -34,7 +34,7 @@ Item {
     property real startAngle: -90
 
     Behavior on degree {
-        enabled: root.enableAnimation
+        enabled: root.enableAnimation && Appearance.animationsEnabled
         NumberAnimation {
             duration: root.animationDuration
             easing.type: root.easingType
@@ -54,8 +54,6 @@ Item {
 
     Shape {
         anchors.fill: parent
-        layer.enabled: true
-        layer.smooth: true
         preferredRendererType: Shape.CurveRenderer
         ShapePath {
             id: secondaryPath

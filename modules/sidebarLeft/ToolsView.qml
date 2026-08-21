@@ -7,6 +7,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.services
+import qs.services.deferred
 import "root:"
 
 Item {
@@ -132,6 +133,7 @@ Item {
                     columnSpacing: 4
 
                     ActionTile {
+                        visible: CompositorService.isNiri
                         tileIcon: "screenshot"
                         label: Translation.tr("Screenshot")
                         onClicked: Quickshell.execDetached(["niri", "msg", "action", "screenshot"])
@@ -152,11 +154,13 @@ Item {
                         onClicked: Quickshell.execDetached([Quickshell.shellPath("scripts/inir"), "region", "ocr"])
                     }
                     ActionTile {
+                        visible: CompositorService.isNiri
                         tileIcon: "colorize"
                         label: Translation.tr("Color")
                         onClicked: Quickshell.execDetached(["niri", "msg", "action", "pick-color"])
                     }
                     ActionTile {
+                        visible: CompositorService.isNiri
                         tileIcon: "screenshot_monitor"
                         label: Translation.tr("Window")
                         onClicked: Quickshell.execDetached(["niri", "msg", "action", "screenshot-window"])
@@ -180,17 +184,17 @@ Item {
                     ActionTile {
                         tileIcon: "terminal"
                         label: Translation.tr("Terminal")
-                        onClicked: Quickshell.execDetached([Quickshell.shellPath("scripts/inir"), "terminal"])
+                        onClicked: AppLauncher.launch("terminal")
                     }
                     ActionTile {
                         tileIcon: "folder"
                         label: Translation.tr("Files")
-                        onClicked: Quickshell.execDetached(["/usr/bin/nautilus"])
+                        onClicked: ShellExec.execDetachedArgs(["/usr/bin/nautilus"], "Launch Files")
                     }
                     ActionTile {
                         tileIcon: "settings"
                         label: Translation.tr("Settings")
-                        onClicked: Quickshell.execDetached([Quickshell.shellPath("scripts/inir"), "settings"])
+                        onClicked: ShellExec.execDetachedArgs([Quickshell.shellPath("scripts/inir"), "settings"], "Open iNiR settings")
                     }
                     ActionTile {
                         tileIcon: "tune"
@@ -205,7 +209,7 @@ Item {
                     ActionTile {
                         tileIcon: "code"
                         label: Translation.tr("Editor")
-                        onClicked: Quickshell.execDetached([Config.options?.apps?.editor ?? "/usr/bin/code"])
+                        onClicked: ShellExec.execCmd(Config.options?.apps?.editor ?? "/usr/bin/code")
                     }
                 }
             }
@@ -231,6 +235,7 @@ Item {
 
             // === Niri Debug ===
             CollapsibleSection {
+                visible: CompositorService.isNiri
                 title: Translation.tr("Niri Debug")
                 icon: "bug_report"
                 expanded: false
@@ -310,17 +315,17 @@ Item {
                 ActionButton {
                     btnIcon: "system_update"
                     label: Translation.tr("Check for updates")
-                    onClicked: Quickshell.execDetached([Config.options?.apps?.terminal ?? "/usr/bin/kitty", "-e", "fish", "-c", "yay -Syu; read -P 'Press Enter to close...'"])
+                    onClicked: ShellExec.execDetachedArgs([Config.options?.apps?.terminal ?? "/usr/bin/kitty", "-e", "fish", "-c", "yay -Syu; read -P 'Press Enter to close...'"], "Check for updates")
                 }
                 ActionButton {
                     btnIcon: "cleaning_services"
                     label: Translation.tr("Clean package cache")
-                    onClicked: Quickshell.execDetached([Config.options?.apps?.terminal ?? "/usr/bin/kitty", "-e", "fish", "-c", "sudo paccache -rk1; read -P 'Press Enter to close...'"])
+                    onClicked: ShellExec.execDetachedArgs([Config.options?.apps?.terminal ?? "/usr/bin/kitty", "-e", "fish", "-c", "sudo paccache -rk1; read -P 'Press Enter to close...'"], "Clean package cache")
                 }
                 ActionButton {
                     btnIcon: "info"
                     label: Translation.tr("System info")
-                    onClicked: Quickshell.execDetached([Config.options?.apps?.terminal ?? "/usr/bin/kitty", "-e", "fish", "-c", "fastfetch; read -P 'Press Enter to close...'"])
+                    onClicked: ShellExec.execDetachedArgs([Config.options?.apps?.terminal ?? "/usr/bin/kitty", "-e", "fish", "-c", "fastfetch; read -P 'Press Enter to close...'"], "Show system info")
                 }
             }
 
@@ -357,6 +362,7 @@ Item {
                 text: profileIcon
                 iconSize: 20
                 fill: isActive ? 1 : 0
+                animateFill: true
                 color: isActive ? Appearance.colors.colOnPrimary : root.colText
             }
             StyledText {

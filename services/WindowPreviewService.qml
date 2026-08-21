@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import qs
 import qs.services
+import qs.services.deferred
 import qs.modules.common
 import qs.modules.common.functions
 
@@ -19,6 +20,10 @@ import qs.modules.common.functions
  */
 Singleton {
     id: root
+
+    function _log(...args): void {
+        if (Quickshell.env("QS_DEBUG") === "1") console.log(...args);
+    }
 
     readonly property string previewDir: FileUtils.trimFileProtocol(Directories.genericCache) + "/inir/window-previews"
     
@@ -42,62 +47,6 @@ Singleton {
     property double _lastCaptureEndTime: 0
     readonly property int _captureCooldownMs: 2000  // 2 seconds between capture cycles
     
-    // Clipboard save/restore: the script does its own save/restore but there's a race
-    // with async niri screenshot-window IPC. We do a SECOND restore from QML after 
-    // the cliphistRestoreTimer fires, guaranteeing the clipboard is clean.
-    property string _savedClipMime: ""
-    property string _savedClipFile: ""
-
-    Process {
-        id: clipboardSaveProcess
-        property bool saveOk: false
-        // Dynamically set command before running
-        onExited: (exitCode) => {
-            clipboardSaveProcess.saveOk = (exitCode === 0)
-            if (exitCode !== 0) {
-                root._savedClipMime = ""
-                root._savedClipFile = ""
-            }
-        }
-    }
-
-    Process {
-        id: clipboardRestoreProcess
-        onExited: {
-            // Cleanup temp file
-            if (root._savedClipFile.length > 0) {
-                Quickshell.execDetached(["/usr/bin/rm", "-f", root._savedClipFile])
-                root._savedClipFile = ""
-                root._savedClipMime = ""
-            }
-        }
-    }
-
-    function _saveClipboard(): void {
-        const tmpFile = "/tmp/inir-clipboard-qml-" + Date.now() + ".tmp"
-        root._savedClipFile = tmpFile
-        // Detect MIME and save in one shot
-        clipboardSaveProcess.command = ["/usr/bin/bash", "-c",
-            `mime=$(/usr/bin/wl-paste -l 2>/dev/null | head -1); ` +
-            `[ -z "$mime" ] && exit 1; ` +
-            `echo "$mime" > '${tmpFile}.mime'; ` +
-            `/usr/bin/wl-paste --type "$mime" > '${tmpFile}' 2>/dev/null`
-        ]
-        clipboardSaveProcess.running = true
-    }
-
-    function _restoreClipboard(): void {
-        if (root._savedClipFile.length === 0) return
-        const tmpFile = root._savedClipFile
-        clipboardRestoreProcess.command = ["/usr/bin/bash", "-c",
-            `[ -f '${tmpFile}.mime' ] && [ -f '${tmpFile}' ] || exit 1; ` +
-            `mime=$(cat '${tmpFile}.mime'); ` +
-            `/usr/bin/wl-copy --type "$mime" < '${tmpFile}' 2>/dev/null; ` +
-            `rm -f '${tmpFile}' '${tmpFile}.mime' 2>/dev/null`
-        ]
-        clipboardRestoreProcess.running = true
-    }
-
     signal captureComplete()
     signal previewUpdated(int windowId)
 
@@ -134,7 +83,7 @@ Singleton {
             }
         }
         onExited: {
-            console.log("[WindowPreviewService] Loaded", Object.keys(root.previewCache).length, "cached previews")
+            _log("[WindowPreviewService] Loaded", Object.keys(root.previewCache).length, "cached previews")
             root.cleanupOrphans()
         }
     }
@@ -211,11 +160,10 @@ Singleton {
             return
         }
         
-        console.log("[WindowPreviewService] Capturing", idsToCapture.length, "windows")
+        _log("[WindowPreviewService] Capturing", idsToCapture.length, "windows")
         capturing = true
         initialCapturesDone = true
         Cliphist.suppressRefresh = true
-        root._saveClipboard()
         
         // Build command with IDs
         const cmd = ShellExec.supportsFish()
@@ -239,10 +187,9 @@ Singleton {
         const windows = NiriService.windows ?? []
         if (windows.length === 0) return
         
-        console.log("[WindowPreviewService] Force capturing all", windows.length, "windows")
+        _log("[WindowPreviewService] Force capturing all", windows.length, "windows")
         capturing = true
         Cliphist.suppressRefresh = true
-        root._saveClipboard()
         
         const ids = windows.map(w => w.id)
         captureProcess.idsToCapture = ids
@@ -257,10 +204,10 @@ Singleton {
         property var idsToCapture: []
 
         stdout: SplitParser {
-            onRead: (line) => console.log("[WindowPreviewService:capture]", line)
+            onRead: (line) => _log("[WindowPreviewService:capture]", line)
         }
         stderr: SplitParser {
-            onRead: (line) => console.log("[WindowPreviewService:capture][err]", line)
+            onRead: (line) => _log("[WindowPreviewService:capture][err]", line)
         }
         
         onExited: (exitCode, exitStatus) => {
@@ -283,8 +230,10 @@ Singleton {
             }
             
             idsToCapture = []
-            // Restore clipboard refresh after script cleanup has finished
-            cliphistRestoreTimer.restart()
+            // The capture script has already removed only its own entries and
+            // conditionally restored the clipboard before returning.
+            Cliphist.suppressRefresh = false
+            Cliphist.refresh()
             root.captureComplete()
         }
     }
@@ -299,18 +248,6 @@ Singleton {
         }
     }
     
-    Timer {
-        id: cliphistRestoreTimer
-        interval: 1500
-        onTriggered: {
-            Cliphist.suppressRefresh = false
-            Cliphist.refresh()
-            // Restore the real Wayland clipboard — the script's own restore may have
-            // been raced by async niri screenshot-window IPC side-effects.
-            root._restoreClipboard()
-        }
-    }
-
     Timer {
         id: cleanupTimer
         interval: 1000

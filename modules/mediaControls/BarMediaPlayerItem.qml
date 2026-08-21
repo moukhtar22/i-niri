@@ -20,29 +20,31 @@ Item { // Player instance - Old style design
     property int visualizerSmoothing: 2
     property real radius: Appearance.angelEverywhere ? Appearance.angel.roundingNormal : Appearance.rounding.normal
 
-    property var artUrl: player?.trackArtUrl
+    property var artUrl: MprisController.effectiveArtUrl(player)
     property string artDownloadLocation: Directories.coverArt
-    property string artFileName: artUrl ? Qt.md5(artUrl) : ""
-    property string artFilePath: artFileName ? `${artDownloadLocation}/${artFileName}` : ""
-    property color artDominantColor: ColorUtils.mix((colorQuantizer?.colors[0] ?? Appearance.colors.colPrimary), Appearance.colors.colPrimaryContainer, 0.8) || Appearance.m3colors.m3secondaryContainer
-    property bool downloaded: false
+    property color artDominantColor: ColorUtils.mix((colorQuantizer?.colors[0] ?? Appearance.colors.colPrimary), Appearance.colors.colPrimaryContainer, 0.8) || Appearance.colors.colSecondaryContainer
+    readonly property bool downloaded: artworkResolver.ready
 
-    property string displayedArtFilePath: root.downloaded ? Qt.resolvedUrl(artFilePath) : ""
+    property string displayedArtFilePath: artworkResolver.displaySource
 
     component TrackChangeButton: RippleButton {
         implicitWidth: 24
         implicitHeight: 24
+        buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.full
 
         property var iconName
-        colBackground: Appearance.angelEverywhere ? "transparent"
+        colBackground: Appearance.zzzEverywhere ? Appearance.colors.colLayer1
+            : Appearance.angelEverywhere ? "transparent"
             : Appearance.inirEverywhere ? "transparent"
             : Appearance.auroraEverywhere ? "transparent"
             : ColorUtils.transparentize(blendedColors.colSecondaryContainer, 1)
-        colBackgroundHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
+        colBackgroundHover: Appearance.zzzEverywhere ? Appearance.colors.colLayer1Hover
+            : Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
             : Appearance.inirEverywhere ? Appearance.inir.colLayer2Hover
             : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
             : blendedColors.colSecondaryContainerHover
-        colRipple: Appearance.angelEverywhere ? Appearance.angel.colGlassCardActive
+        colRipple: Appearance.zzzEverywhere ? Appearance.colors.colLayer1Active
+            : Appearance.angelEverywhere ? Appearance.angel.colGlassCardActive
             : Appearance.inirEverywhere ? Appearance.inir.colLayer2Active
             : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceActive
             : blendedColors.colSecondaryContainerActive
@@ -51,7 +53,8 @@ Item { // Player instance - Old style design
             iconSize: Appearance.font.pixelSize.huge
             fill: 1
             horizontalAlignment: Text.AlignHCenter
-            color: Appearance.angelEverywhere ? Appearance.angel.colText
+            color: Appearance.zzzEverywhere ? Appearance.colors.colOnLayer1
+                : Appearance.angelEverywhere ? Appearance.angel.colText
                 : Appearance.inirEverywhere ? Appearance.inir.colText
                 : Appearance.auroraEverywhere ? Appearance.colors.colOnLayer0
                 : blendedColors.colOnSecondaryContainer
@@ -72,53 +75,13 @@ Item { // Player instance - Old style design
         }
     }
 
-    onArtFilePathChanged: {
-        if (!root.artUrl || root.artUrl.length == 0) {
-            root.artDominantColor = Appearance.m3colors.m3secondaryContainer
-            return;
-        }
-
-        // Check if file exists first
-        artExistsChecker.running = true
-    }
-
-    Process {
-        id: artExistsChecker
-        command: ["/usr/bin/test", "-f", root.artFilePath]
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode === 0) {
-                root.downloaded = true
-            } else {
-                root.downloaded = false
-                coverArtDownloader.targetFile = root.artUrl ?? ""
-                coverArtDownloader.artFilePath = root.artFilePath
-                coverArtDownloader.running = true
-            }
-        }
-    }
-
-    Process { // Cover art downloader
-        id: coverArtDownloader
-        property string targetFile
-        property string artFilePath
-        command: ["/usr/bin/bash", "-c", `
-            target="$1"
-            out="$2"
-            dir="$3"
-            if [ -f "$out" ]; then exit 0; fi
-            mkdir -p "$dir"
-            tmp="$out.tmp"
-            /usr/bin/curl -sSL --connect-timeout 10 --max-time 30 "$target" -o "$tmp" && \
-            [ -s "$tmp" ] && /usr/bin/mv -f "$tmp" "$out" || { rm -f "$tmp"; exit 1; }
-        `,
-        "_",
-        targetFile,
-        artFilePath,
-        root.artDownloadLocation
-        ]
-        onExited: (exitCode) => {
-            root.downloaded = (exitCode === 0)
-        }
+    MediaArtworkResolver {
+        id: artworkResolver
+        sourceUrl: root.artUrl ?? ""
+        title: root.player?.trackTitle ?? ""
+        artist: root.player?.trackArtist ?? ""
+        album: root.player?.trackAlbum ?? ""
+        cacheDirectory: root.artDownloadLocation
     }
 
     ColorQuantizer {
@@ -169,7 +132,7 @@ Item { // Player instance - Old style design
             id: auroraWallpaper
             anchors.fill: parent
             visible: Appearance.auroraEverywhere && !Appearance.inirEverywhere
-            source: Wallpapers.effectiveWallpaperUrl
+            source: visible ? Wallpapers.effectiveWallpaperUrl : ""
             fillMode: Image.PreserveAspectCrop
             cache: true
             sourceSize.width: background.width
@@ -184,7 +147,7 @@ Item { // Player instance - Old style design
                     ? Appearance.angel.blurSaturation
                     : (Appearance.effectsEnabled ? 0.2 : 0)
                 blurEnabled: Appearance.effectsEnabled
-                blurMax: 100
+                blurMax: 64
                 blur: Appearance.effectsEnabled ? 1 : 0
             }
         }
@@ -205,7 +168,7 @@ Item { // Player instance - Old style design
             sourceSize.width: background.width
             sourceSize.height: background.height
             fillMode: Image.PreserveAspectCrop
-            cache: true
+            cache: false
             antialiasing: true
             asynchronous: true
             opacity: Appearance.inirEverywhere ? 0.5 : 0.3
@@ -217,7 +180,7 @@ Item { // Player instance - Old style design
                 anchors.fill: source
                 saturation: Appearance.effectsEnabled ? 0.2 : 0
                 blurEnabled: Appearance.effectsEnabled
-                blurMax: 100
+                blurMax: 64
                 blur: Appearance.effectsEnabled ? 1 : 0
             }
 
@@ -273,7 +236,7 @@ Item { // Player instance - Old style design
 
                     source: root.displayedArtFilePath
                     fillMode: Image.PreserveAspectCrop
-                    cache: true
+                    cache: false
                     antialiasing: true
 
                     width: size
@@ -343,7 +306,8 @@ Item { // Player instance - Old style design
                         }
                         TrackChangeButton {
                             iconName: "skip_previous"
-                            downAction: () => root.player?.previous()
+                            enabled: MprisController.canGoPreviousForPlayer(root.player)
+                            downAction: () => MprisController.previousForPlayer(root.player)
                         }
                         Item {
                             id: progressBarContainer
@@ -394,7 +358,8 @@ Item { // Player instance - Old style design
                         }
                         TrackChangeButton {
                             iconName: "skip_next"
-                            downAction: () => root.player?.next()
+                            enabled: MprisController.canGoNextForPlayer(root.player)
+                            downAction: () => MprisController.nextForPlayer(root.player)
                         }
                     }
 

@@ -33,10 +33,6 @@ binds {
     // iNiR shell overlays & tools
     // ═══════════════════════════════════════════════════════════════════════
 
-    // Alt-Tab window switcher (iNiR's animated switcher).
-    Alt+Tab { spawn "inir" "altSwitcher" "next"; }
-    Alt+Shift+Tab { spawn "inir" "altSwitcher" "previous"; }
-
     // Crosshair overlay toggle.
     Super+G { spawn "inir" "overlay" "toggle"; }
 
@@ -48,11 +44,15 @@ binds {
 
     // Lock screen.
     Mod+Alt+L allow-when-locked=true { spawn "inir" "lock" "activate"; }
+    // Re-focus the lock surface (workaround when input feels dead after suspend/resume).
+    Mod+Ctrl+Shift+L allow-when-locked=true { spawn "inir" "lock" "focus"; }
 
     // Region selector: screenshot / OCR / Google Lens search.
     Mod+Shift+S { spawn "inir" "region" "screenshot"; }
     Mod+Shift+X { spawn "inir" "region" "ocr"; }
     Mod+Shift+A { spawn "inir" "region" "search"; }
+    // Unified snip menu (pick action/scope from the in-overlay toolbar).
+    Ctrl+Shift+S { spawn "inir" "region" "menu"; }
 
     // Wallpaper picker, settings, cheatsheet, panel family switch.
     Ctrl+Alt+T { spawn "inir" "wallpaperSelector" "toggle"; }
@@ -101,8 +101,8 @@ binds {
     // Cycle through preset column widths (1/3 → 1/2 → 2/3, set in layout).
     Mod+R { switch-preset-column-width; }
 
-    // Cycle through preset window heights (within a stacked column).
-    Mod+Shift+R { switch-preset-window-height; }
+    // Screen recording — region select with audio.
+    Mod+Shift+R { spawn "inir" "region" "recordWithSound"; }
 
     // Reset window height to default.
     Mod+Ctrl+R { reset-window-height; }
@@ -266,4 +266,11 @@ binds {
     Mod+Shift+P    { spawn "inir" "mpris" "playPause"; }
     Mod+Shift+N    { spawn "inir" "mpris" "next"; }
     Mod+Shift+B    { spawn "inir" "mpris" "previous"; }
+}
+
+recent-windows {
+    binds {
+        Alt+Tab { next-window; }
+        Alt+Shift+Tab { previous-window; }
+    }
 }

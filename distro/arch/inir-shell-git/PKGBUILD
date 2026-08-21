@@ -6,7 +6,7 @@ pkgrel=1
 pkgdesc='iNiR shell payload, launcher, and user service (git)'
 arch=(any)
 url='https://github.com/snowarch/iNiR'
-license=('MIT')
+license=('GPL-3.0-only')
 depends=(
   bash
   brightnessctl
@@ -50,7 +50,7 @@ depends=(
   xwayland-satellite
 )
 optdepends=(
-  'awww-bin: animated wallpaper support'
+  'awww: animated wallpaper support'
   'blueman: Bluetooth device management'
   'breeze-icons: fallback icon theme'
   'cava: audio visualizer'
@@ -76,6 +76,7 @@ optdepends=(
   'nm-connection-editor: default network settings GUI'
   'pavucontrol: advanced audio mixer UI'
   'pacman-contrib: package update checking'
+  'plasma-browser-integration: browser MPRIS sessions and artwork'
   'plasma-integration: Qt platform theme integration'
   'qt6ct: Qt theme configuration'
   'songrec: music recognition support'
@@ -90,6 +91,8 @@ optdepends=(
   'wtype: Wayland text injection helper'
   'ydotool: virtual keyboard and clipboard paste helper'
   'yt-dlp: YouTube media backend'
+  'python-ytmusicapi: YouTube Music browsing (InnerTube engine)'
+  'millennium-bin: Steam theming via Millennium (requires steam)'
 )
 makedepends=(git)
 install=inir-shell-git.install
@@ -135,6 +138,9 @@ package() {
     [[ -n "$dir" ]] || continue
     cp -a "$srcroot/$dir" "$shellroot/"
   done < "$srcroot/sdata/runtime-payload-dirs.txt"
+
+  find "$shellroot" \( -name AGENTS.md -o -name CLAUDE.md -o -name CODEX.md -o -name PI.md -o -name codemap.md -o -name .mcp.json -o -name opencode.json -o -name skills-lock.json \) -delete
+  find "$shellroot" \( -name .agents -o -name .claude -o -name .codex -o -name .factory -o -name .opencode -o -name .codebase-memory -o -name .impeccable -o -name .pi-subagents \) -type d -prune -exec rm -rf {} +
 
   find "$shellroot/scripts" -type f \( -name '*.sh' -o -name '*.fish' -o -name '*.py' \) -exec chmod +x {} +
 

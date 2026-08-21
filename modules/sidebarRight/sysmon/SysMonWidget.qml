@@ -14,7 +14,6 @@ Item {
     property int margin: 10
 
     Component.onCompleted: ResourceUsage.ensureRunning()
-    Component.onDestruction: ResourceUsage.stop()
 
     // Style tokens
     readonly property color colText: Appearance.angelEverywhere ? Appearance.angel.colText
@@ -112,7 +111,7 @@ Item {
                     SysStatCard {
                         visible: ResourceUsage.swapTotal > 1024
                         icon: "swap_horiz"
-                        title: "Swap"
+                        title: Translation.tr("Swap")
                         valueText: Math.round(ResourceUsage.swapUsedPercentage * 100) + "%"
                         subText: formatBytes(ResourceUsage.swapUsed * 1024) + " / " + formatBytes(ResourceUsage.swapTotal * 1024)
                         graphValues: ResourceUsage.swapUsageHistory
@@ -127,7 +126,7 @@ Item {
                         valueText: Math.round(ResourceUsage.diskUsedPercentage * 100) + "%"
                         subText: formatBytes(ResourceUsage.diskUsed) + " / " + formatBytes(ResourceUsage.diskTotal)
                         progressValue: ResourceUsage.diskUsedPercentage
-                        progressColor: ResourceUsage.diskUsedPercentage > 0.9 ? Appearance.colors.colError : Appearance.colors.colPrimary
+                        progressColor: ResourceUsage.diskUsedPercentage > 0.9 ? (Appearance.colors?.colError ?? "transparent") : (Appearance.colors?.colPrimary ?? "transparent")
                         showGraph: false
                     }
 
@@ -144,11 +143,11 @@ Item {
                             return parts.join(" • ")
                         }
                         progressValue: ResourceUsage.tempPercentage
-                        progressColor: ResourceUsage.maxTemp >= ResourceUsage.tempWarningThreshold 
-                            ? Appearance.colors.colError 
-                            : ResourceUsage.maxTemp >= 60 
-                                ? Appearance.colors.colWarning ?? "#FFA500"
-                                : Appearance.colors.colPrimary
+                        progressColor: ResourceUsage.maxTemp >= ResourceUsage.tempWarningThreshold
+                            ? (Appearance.colors?.colError ?? "transparent")
+                            : ResourceUsage.maxTemp >= 60
+                                ? (Appearance.colors?.colWarning ?? "transparent")
+                                : (Appearance.colors?.colPrimary ?? "transparent")
                         showGraph: false
                     }
 
@@ -233,21 +232,10 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 2
 
-                property real maxValue: {
-                    let max = 0
-                    for (let i = 0; i < graphValues.length; i++) {
-                        if (graphValues[i] > max) max = graphValues[i]
-                    }
-                    return max > 0.1 ? max : 1
-                }
-
-                values: {
-                    let res = []
-                    for (let i = 0; i < graphValues.length; i++) {
-                        res.push(graphValues[i] / maxValue)
-                    }
-                    return res
-                }
+                // graphValues are already 0.0-1.0 fractions; pass them
+                // directly so 11% RAM draws at 11% height, not normalized
+                // to the history max.
+                values: graphValues
 
                 color: graphColor
                 fillOpacity: 0.25

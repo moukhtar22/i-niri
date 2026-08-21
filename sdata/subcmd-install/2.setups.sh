@@ -80,6 +80,32 @@ function setup_systemd_services(){
   if command -v bluetoothctl &>/dev/null; then
     v pkg_sudo systemctl enable bluetooth --now
   fi
+
+  # SDDM display manager (enable if installed but not yet active)
+  # This runs unconditionally of the theme install — theme is cosmetic, service is functional.
+  if command -v sddm &>/dev/null; then
+    if ! systemctl is-enabled sddm.service &>/dev/null 2>&1; then
+      # Remove conflicting display-manager.service symlink if it points elsewhere
+      if [[ -L /etc/systemd/system/display-manager.service ]]; then
+        local current_dm
+        current_dm=$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null | xargs basename 2>/dev/null || echo "unknown")
+        if [[ "$current_dm" != "sddm.service" ]]; then
+          log_info "Removing conflicting display-manager.service -> ${current_dm}"
+          elevate rm -f /etc/systemd/system/display-manager.service 2>/dev/null || true
+        fi
+      fi
+
+      # Disable known conflicting display managers
+      for dm in gdm lightdm lxdm greetd plasmalogin; do
+        if systemctl is-enabled "${dm}.service" &>/dev/null 2>&1; then
+          log_info "Disabling conflicting display manager: ${dm}"
+          elevate systemctl disable "${dm}.service" 2>/dev/null || true
+        fi
+      done
+
+      elevate systemctl enable sddm.service 2>/dev/null && log_success "SDDM service enabled"
+    fi
+  fi
   
   log_success "Services configured"
 }
@@ -205,6 +231,16 @@ function setup_desktop_settings(){
     log_success "Nautilus defaults configured"
   fi
 
+  # Materialize the cursor everywhere XWayland apps look. niri already exports
+  # XCURSOR_* to the clients it spawns, but X11/Electron apps (Spotify, etc.)
+  # that request the core X cursor resolve it through ~/.icons/default, which
+  # otherwise inherits Adwaita and shows a different pointer. sync-cursor reads
+  # the theme from the niri KDL and writes the default-theme inheritance file.
+  if command -v python3 &>/dev/null && [[ -f "${REPO_ROOT}/scripts/niri-config.py" ]]; then
+    python3 "${REPO_ROOT}/scripts/niri-config.py" sync-cursor >/dev/null 2>&1 || true
+    log_success "Cursor theme synced for XWayland apps"
+  fi
+
   # xdg-desktop-portal config for Niri (required for dark mode in GTK4/libadwaita apps)
   mkdir -p "${XDG_CONFIG_HOME}/xdg-desktop-portal"
   if [[ -f "dots/.config/xdg-desktop-portal/niri-portals.conf" ]]; then
@@ -247,6 +283,7 @@ else
   v disable_super_daemon_if_present
 fi
 
+# NOTE: SDDM service enablement happens above in setup_systemd_services().
 # NOTE: SDDM theme setup is in 3.files.sh AFTER the theming templates are deployed.
 # NOTE: install-python-packages is called in 3.files.sh after requirements.txt
 # is deployed to the target. No need to call it here.

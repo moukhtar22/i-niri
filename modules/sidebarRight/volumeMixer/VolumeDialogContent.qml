@@ -10,11 +10,17 @@ import Quickshell
 ColumnLayout {
     id: root
     required property bool isSink
+    required property bool dialogShown
     readonly property list<var> appPwNodes: isSink ? Audio.outputAppNodes : Audio.inputAppNodes
     readonly property list<var> devices: isSink ? Audio.outputDevices : Audio.inputDevices
     readonly property bool hasApps: appPwNodes.length > 0
     readonly property var currentDevice: isSink ? Audio.defaultSink : Audio.source
     spacing: 16
+
+    onDialogShownChanged: {
+        if (!dialogShown && devicePopup.visible)
+            devicePopup.close()
+    }
 
     // Device selector button
     RippleButton {
@@ -26,7 +32,7 @@ ColumnLayout {
         colBackground: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
             : Appearance.auroraEverywhere ? "transparent" : Appearance.colors.colLayer2
         colBackgroundHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
-            : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface : Appearance.colors.colLayer2Hover
+            : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover : Appearance.colors.colLayer2Hover
         colRipple: Appearance.angelEverywhere ? Appearance.angel.colGlassCardActive
             : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceActive : Appearance.colors.colLayer2Active
         buttonRadius: Appearance.rounding.normal
@@ -118,7 +124,7 @@ ColumnLayout {
                         text: Audio.friendlyDeviceName(modelData)
                         font.pixelSize: Appearance.font.pixelSize.normal
                         elide: Text.ElideRight
-                        color: isSelected ? Appearance.colors.colOnPrimaryContainer : Appearance.m3colors.m3onSurface
+                        color: isSelected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
                     }
                 }
 

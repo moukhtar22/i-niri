@@ -1,5 +1,6 @@
 //@ pragma UseQApplication
 //@ pragma Env QS_NO_RELOAD_POPUP=1
+//@ pragma Env INIR_STANDALONE_WINDOW=1
 //@ pragma Env QT_QUICK_CONTROLS_STYLE=Basic
 //@ pragma Env QT_QUICK_FLICKABLE_WHEEL_DECELERATION=10000
 
@@ -21,20 +22,260 @@ Scope {
     property string firstRunFilePath: FileUtils.trimFileProtocol(`${Directories.state}/user/first_run.txt`)
     property string firstRunFileContent: "This file is just here to confirm you've been greeted :>"
     property int currentStep: 0
+
+    // ─── Responsive scale ───
+    readonly property real screenWidth: focusedScreen?.width ?? 1920
+    readonly property real screenHeight: focusedScreen?.height ?? 1080
+    readonly property bool compact: screenHeight < 1000
+    readonly property bool veryCompact: screenHeight < 720
+    readonly property int screenPadding: compact ? 24 : 60
+    readonly property int cardPadding: compact ? 20 : 36
+    readonly property real stepWidth: Math.min(720, screenWidth - 2 * screenPadding - 2 * cardPadding)
     readonly property int totalSteps: 5
     property var focusedScreen: GlobalStates.primaryScreen
+
+    readonly property string selectedProfile: Config.options?.welcomeWizard?.profile ?? "balanced"
+    property bool profileCustomized: false
+    property bool initialProfileApplied: false
+    readonly property bool firstRunSetup: !(Config.options?.welcomeWizard?.completed ?? false)
+        && !(Config.options?.welcomeWizard?.skipped ?? false)
+
+    readonly property string selectedProfileTitle: selectedProfile === "minimum"
+        ? Translation.tr("Minimum")
+        : selectedProfile === "full" ? Translation.tr("Full") : Translation.tr("Balanced")
+    readonly property string selectedProfileDescription: selectedProfile === "minimum"
+        ? Translation.tr("A calm desktop. Bar, dock and dashboard with one sidebar tab, two panel widgets and a bare wallpaper.")
+        : selectedProfile === "full"
+            ? Translation.tr("Everything local, composed on purpose. Five sidebar tabs, eight panel widgets, eight quick toggles, a placed desktop clock and system monitor, and Kira on the desktop.")
+            : Translation.tr("Three sidebar tabs, six panel widgets, system usage in the bar, the control and status cards, and an auto-placed desktop clock.")
+    readonly property string selectedProfileAudience: selectedProfile === "minimum"
+        ? Translation.tr("Best if you want the shell out of the way and will add pieces yourself.")
+        : selectedProfile === "full"
+            ? Translation.tr("Best if you want to see everything iNiR can do on day one.")
+            : Translation.tr("Best for most people. This is what a fresh install ships.")
+
+    // Every starting profile prepares shared services and the Material II
+    // family. Waffle keeps its independent `waffles.*` configuration intact,
+    // so switching families never erases or silently reconfigures it.
+    readonly property var profileEssentials: ({
+        "dock.enable": true,
+        "dock.hoverToReveal": false,
+        "dock.pinnedOnStartup": true,
+        "dashboard.enable": true,
+        "bar.weather.enable": true,
+        "bar.modules.weather": true,
+        "bar.modules.battery": true,
+        "bar.modules.sysTray": true,
+        "bar.modules.clock": true,
+        "bar.modules.workspaces": true,
+        "bar.modules.activeWindow": true,
+        "bar.modules.leftSidebarButton": true,
+        "bar.modules.rightSidebarButton": true,
+        "sounds.notifications": true,
+        "gameMode.autoDetect": true,
+        "audio.protection.enable": true,
+        "performance.reduceAnimations": false,
+        "sidebar.collapseEmptyNotifications": false,
+        "sidebar.collapseWidgetsTab": false,
+        "sidebar.right.headerBanner": "wallpaper",
+        "sidebar.right.sectionOrder": ["system", "sliders", "toggles", "notifications", "widgets"],
+        "sidebar.quickToggles.style": "android",
+        "sidebar.quickToggles.android.columns": 4,
+        // Material II's embedded bar taskbar duplicates the Material II dock.
+        // Waffle owns a separate taskbar under `waffles.bar.*` and is unaffected.
+        "bar.modules.taskbar": false
+    })
+
+    // Ordering only; no profile enables a provider-backed tab.
+    readonly property var profileTabOrder: [
+        "widgets", "wallhaven", "news", "tools", "software",
+        "ai", "translator", "anime", "animeSchedule", "ytmusic"
+    ]
+
+    // Desktop widgets all default to the same corner and "leastBusy" cannot see
+    // a sibling, so a profile composing more than one must place them by hand.
+    function profileComposition(profile: string): var {
+        if (profile === "minimum")
+            return {
+                "bar.modules.resources": false,
+                "bar.modules.utilButtons": false,
+                "bar.modules.media": false,
+                "sidebar.news.enable": false,
+                "sidebar.wallhaven.enable": false,
+                "sidebar.tools.enable": false,
+                "sidebar.software.enable": false,
+                "sidebar.widgets.context": true,
+                "sidebar.widgets.week": true,
+                "sidebar.widgets.media": true,
+                "sidebar.widgets.controls": false,
+                "sidebar.widgets.status": false,
+                "sidebar.widgets.note": false,
+                "sidebar.widgets.launch": false,
+                "sidebar.widgets.worldClock": false,
+                "sidebar.right.enabledWidgets": ["calendar", "todo"],
+                "sidebar.quickToggles.android.toggles": [
+                    { "size": 1, "type": "network" },
+                    { "size": 1, "type": "bluetooth" },
+                    { "size": 1, "type": "audio" },
+                    { "size": 1, "type": "mic" }
+                ],
+                "background.widgets.clock.enable": false,
+                "background.widgets.clock.quote.enable": false,
+                "background.widgets.visualizer.enable": false,
+                "background.widgets.systemMonitor.enable": false,
+                "background.widgets.weather.enable": false,
+                "background.widgets.battery.enable": false,
+                "background.widgets.mediaControls.enable": false,
+                "background.widgets.calendarUpcoming.enable": false,
+                "mascot.enable": false
+            }
+        if (profile === "full")
+            return {
+                "bar.modules.resources": true,
+                "bar.modules.utilButtons": true,
+                "bar.modules.media": true,
+                "sidebar.news.enable": true,
+                "sidebar.wallhaven.enable": true,
+                "sidebar.tools.enable": true,
+                "sidebar.software.enable": true,
+                "sidebar.widgets.context": true,
+                "sidebar.widgets.week": true,
+                "sidebar.widgets.media": true,
+                "sidebar.widgets.controls": true,
+                "sidebar.widgets.status": true,
+                "sidebar.widgets.note": true,
+                "sidebar.widgets.launch": true,
+                "sidebar.widgets.worldClock": true,
+                "sidebar.right.enabledWidgets": [
+                    "calendar", "events", "todo", "notepad",
+                    "calculator", "sysmon", "weather", "timer"
+                ],
+                "sidebar.quickToggles.android.toggles": [
+                    { "size": 1, "type": "network" },
+                    { "size": 1, "type": "bluetooth" },
+                    { "size": 1, "type": "audio" },
+                    { "size": 1, "type": "mic" },
+                    { "size": 1, "type": "nightLight" },
+                    { "size": 1, "type": "gameMode" },
+                    { "size": 1, "type": "screenSnip" },
+                    { "size": 1, "type": "colorPicker" }
+                ],
+                "background.widgets.clock.enable": true,
+                "background.widgets.clock.placementStrategy": "free",
+                "background.widgets.clock.x": 60,
+                "background.widgets.clock.y": 90,
+                "background.widgets.clock.quote.enable": true,
+                "background.widgets.visualizer.enable": true,
+                "background.widgets.visualizer.placementStrategy": "free",
+                "background.widgets.visualizer.x": 60,
+                "background.widgets.visualizer.y": 400,
+                "background.widgets.clock.backgroundOpacity": 0,
+                "background.widgets.clock.borderOpacity": 0.08,
+                "background.widgets.visualizer.backgroundOpacity": 0.16,
+                "background.widgets.visualizer.borderOpacity": 0.2,
+                "background.widgets.systemMonitor.enable": false,
+                "background.widgets.weather.enable": false,
+                "background.widgets.battery.enable": false,
+                "background.widgets.mediaControls.enable": false,
+                "background.widgets.calendarUpcoming.enable": false,
+                "mascot.enable": true
+            }
+        return {
+            "bar.modules.resources": true,
+            "bar.modules.utilButtons": true,
+            "bar.modules.media": true,
+            "sidebar.news.enable": true,
+            "sidebar.wallhaven.enable": true,
+            "sidebar.tools.enable": false,
+            "sidebar.software.enable": false,
+            "sidebar.widgets.context": true,
+            "sidebar.widgets.week": true,
+            "sidebar.widgets.media": true,
+            "sidebar.widgets.controls": true,
+            "sidebar.widgets.status": true,
+            "sidebar.widgets.note": false,
+            "sidebar.widgets.launch": false,
+            "sidebar.widgets.worldClock": false,
+            "sidebar.right.enabledWidgets": [
+                "calendar", "events", "todo", "calculator", "sysmon", "weather"
+            ],
+            "sidebar.quickToggles.android.toggles": [
+                { "size": 1, "type": "network" },
+                { "size": 1, "type": "bluetooth" },
+                { "size": 1, "type": "audio" },
+                { "size": 1, "type": "mic" }
+            ],
+            // One widget is the only case where leastBusy is safe.
+            "background.widgets.clock.enable": true,
+            "background.widgets.clock.placementStrategy": "leastBusy",
+            "background.widgets.clock.quote.enable": false,
+            "background.widgets.clock.backgroundOpacity": 0,
+            "background.widgets.clock.borderOpacity": 0.08,
+            "background.widgets.visualizer.enable": false,
+            "background.widgets.systemMonitor.enable": false,
+            "background.widgets.weather.enable": false,
+            "background.widgets.battery.enable": false,
+            "background.widgets.mediaControls.enable": false,
+            "background.widgets.calendarUpcoming.enable": false,
+            "mascot.enable": false
+        }
+    }
+
+    function applyProfile(profile: string): void {
+        Config.setNestedValues(Object.assign({},
+            root.profileEssentials,
+            root.profileComposition(profile), {
+                "sidebar.left.tabOrder": root.profileTabOrder,
+                "welcomeWizard.profile": profile
+            }))
+        root.profileCustomized = false
+    }
+
+    function setProfileFeature(path: string, value: var): void {
+        root.profileCustomized = true
+        Config.setNestedValue(path, value)
+    }
+
+    onCurrentStepChanged: {
+        if (root.currentStep !== 1 || root.initialProfileApplied || !root.firstRunSetup)
+            return
+        root.initialProfileApplied = true
+        root.applyProfile(root.selectedProfile)
+    }
 
     // ─── Entry/exit animation state (gate pattern) ───
     property bool _entryReady: false
     property bool _contentReady: false
     property bool _closing: false
 
+    // The starting point runs before Appearance and Layout: a profile writes
+    // composition keys wholesale and would overwrite anything refined earlier.
     readonly property var steps: [
-        { icon: "waving_hand", title: Translation.tr("Welcome") },
-        { icon: "palette", title: Translation.tr("Appearance") },
-        { icon: "dashboard", title: Translation.tr("Layout") },
-        { icon: "tune", title: Translation.tr("Features") },
-        { icon: "rocket_launch", title: Translation.tr("Ready") }
+        {
+            icon: "waving_hand", title: Translation.tr("Welcome"),
+            headline: Translation.tr("Welcome to iNiR"),
+            subtitle: Translation.tr("Five short steps. Everything here can be changed later in Settings.")
+        },
+        {
+            icon: "tune", title: Translation.tr("Starting point"),
+            headline: Translation.tr("How much should be set up for you?"),
+            subtitle: Translation.tr("Pick a starting composition, then adjust the essentials underneath. Accounts and API-backed tabs are never enabled for you.")
+        },
+        {
+            icon: "palette", title: Translation.tr("Appearance"),
+            headline: Translation.tr("Make it yours"),
+            subtitle: Translation.tr("Your wallpaper generates the palette. The visual style sets the shape of every surface.")
+        },
+        {
+            icon: "dashboard", title: Translation.tr("Layout"),
+            headline: Translation.tr("Arrange the desktop"),
+            subtitle: Translation.tr("Where the bar and dock live, and how the shell is shaped around them.")
+        },
+        {
+            icon: "celebration", title: Translation.tr("Ready"),
+            headline: Translation.tr("You're all set"),
+            subtitle: Translation.tr("A few things worth knowing before you start.")
+        }
     ]
 
     function finish(skipped: bool): void {
@@ -61,6 +302,7 @@ Scope {
     }
 
     Component.onCompleted: {
+        Quickshell.watchFiles = false
         MaterialThemeLoader.reapplyTheme()
         Config.readWriteDelay = 0
         // Staggered entry: scrim first, then card content
@@ -170,8 +412,8 @@ Scope {
         Item {
             id: wizardCard
             anchors.centerIn: parent
-            width: Math.min(960, parent.width * 0.75)
-            height: Math.min(parent.height * 0.85, parent.height - 60)
+            width: Math.max(360, Math.min(1040, parent.width - 2 * root.screenPadding))
+            height: Math.max(320, Math.min(parent.height - 2 * root.screenPadding, 1100))
             focus: true
 
             // Staggered entry animation — card comes in after scrim
@@ -215,10 +457,12 @@ Scope {
                 radius: Appearance.inirEverywhere ? Appearance.inir.roundingLarge
                       : Appearance.rounding.large
 
-                // Base color
+                // Base color — colLayer1Base is the raw m3surfaceContainerLow without
+                // contentTransparency mixing, so the wizard stays solid even when the user
+                // has transparency enabled in Material/Cards styles.
                 color: Appearance.inirEverywhere ? Appearance.inir.colLayer1
                      : Appearance.auroraEverywhere ? "transparent"
-                     : Appearance.colors.colLayer1
+                     : Appearance.colors.colLayer1Base
 
                 border.width: Appearance.inirEverywhere ? 1 : (Appearance.auroraEverywhere ? 0 : 1)
                 border.color: Appearance.inirEverywhere ? Appearance.inir.colBorder
@@ -280,17 +524,22 @@ Scope {
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 36
-                spacing: 24
+                anchors.margins: root.cardPadding
+                spacing: root.compact ? 14 : 24
 
                 // Header with step indicator
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 12
+                    spacing: 10
 
-                    // Step circles
+                    // Wrapped so the stepper centres on the card, not on itself.
+                    Item {
+                        Layout.fillWidth: true
+                        implicitHeight: stepperRow.implicitHeight
+
                     Row {
-                        Layout.alignment: Qt.AlignHCenter
+                        id: stepperRow
+                        anchors.horizontalCenter: parent.horizontalCenter
                         spacing: 0
 
                         Repeater {
@@ -299,37 +548,67 @@ Scope {
                                 required property int index
                                 required property var modelData
 
-                                Rectangle {
-                                    id: stepCircle
-                                    width: 38; height: 38; radius: 19
+                                ColumnLayout {
+                                    spacing: 4
 
-                                    color: index < root.currentStep ? Appearance.colors.colPrimary
-                                         : index === root.currentStep ? Appearance.colors.colPrimaryContainer
-                                         : Appearance.colors.colLayer2
+                                    Rectangle {
+                                        id: stepCircle
+                                        Layout.alignment: Qt.AlignHCenter
+                                        implicitWidth: root.compact ? 30 : 38
+                                        implicitHeight: implicitWidth
+                                        radius: implicitWidth / 2
 
-                                    border.width: index === root.currentStep ? 2 : 0
-                                    border.color: Appearance.colors.colPrimary
+                                        color: index < root.currentStep ? Appearance.colors.colPrimary
+                                             : index === root.currentStep ? Appearance.colors.colPrimaryContainer
+                                             : Appearance.colors.colLayer2
 
-                                    Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
-                                    Behavior on scale {
-                                        NumberAnimation {
-                                            duration: Appearance.animation.elementMove.duration
-                                            easing.type: Easing.OutBack
+                                        border.width: index === root.currentStep ? 2 : 0
+                                        border.color: Appearance.colors.colPrimary
+
+                                        Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+                                        Behavior on scale {
+                                            NumberAnimation {
+                                                duration: Appearance.animation.elementMove.duration
+                                                easing.type: Easing.OutBack
+                                            }
+                                        }
+                                        Behavior on border.width { NumberAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+
+                                        scale: index === root.currentStep ? 1.12 : 1.0
+
+                                        MaterialSymbol {
+                                            anchors.centerIn: parent
+                                            text: index < root.currentStep ? "check" : modelData.icon
+                                            iconSize: index === root.currentStep ? 20 : 18
+                                            color: index < root.currentStep ? Appearance.colors.colOnPrimary
+                                                 : index === root.currentStep ? Appearance.colors.colOnPrimaryContainer
+                                                 : Appearance.colors.colOnLayer2
+
+                                            Behavior on iconSize { NumberAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+                                        }
+
+                                        // Click on a past step to jump back to it (forward jumping disabled to keep flow)
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: index <= root.currentStep ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                            enabled: index <= root.currentStep
+                                            onClicked: root.currentStep = index
                                         }
                                     }
-                                    Behavior on border.width { NumberAnimation { duration: Appearance.animation.elementMoveFast.duration } }
 
-                                    scale: index === root.currentStep ? 1.12 : 1.0
-
-                                    MaterialSymbol {
-                                        anchors.centerIn: parent
-                                        text: index < root.currentStep ? "check" : modelData.icon
-                                        iconSize: index === root.currentStep ? 20 : 18
-                                        color: index < root.currentStep ? Appearance.colors.colOnPrimary
-                                             : index === root.currentStep ? Appearance.colors.colOnPrimaryContainer
-                                             : Appearance.colors.colOnLayer2
-
-                                        Behavior on iconSize { NumberAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+                                    StyledText {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        Layout.preferredWidth: root.compact ? 58 : 70
+                                        visible: !root.veryCompact
+                                        text: modelData.title
+                                        horizontalAlignment: Text.AlignHCenter
+                                        font.pixelSize: Appearance.font.pixelSize.smallest
+                                        font.weight: index === root.currentStep ? Font.Medium : Font.Normal
+                                        color: index === root.currentStep
+                                            ? Appearance.colors.colOnLayer1
+                                            : Appearance.colors.colSubtext
+                                        elide: Text.ElideRight
+                                        Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
                                     }
                                 }
 
@@ -337,7 +616,7 @@ Scope {
                                 Item {
                                     visible: index < root.steps.length - 1
                                     width: 36; height: 4
-                                    anchors.verticalCenter: parent.verticalCenter
+                                    y: 17  // align with circle vertical center (38/2 - 4/2)
 
                                     Rectangle {
                                         anchors.fill: parent
@@ -363,13 +642,28 @@ Scope {
                         }
                     }
 
-                    // Step title
+                    }
+
                     StyledText {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: root.steps[root.currentStep].title
+                        Layout.fillWidth: true
+                        Layout.topMargin: 10
+                        text: root.steps[root.currentStep].headline
+                        horizontalAlignment: Text.AlignHCenter
                         font.family: Appearance.font.family.title
                         font.pixelSize: Appearance.font.pixelSize.hugeass
                         color: Appearance.colors.colOnLayer1
+                        elide: Text.ElideRight
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: 620
+                        Layout.alignment: Qt.AlignHCenter
+                        text: root.steps[root.currentStep].subtitle
+                        horizontalAlignment: Text.AlignHCenter
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colSubtext
+                        wrapMode: Text.WordWrap
                     }
                 }
 
@@ -463,43 +757,53 @@ Scope {
 
                         Item {
                             WelcomeContent {
+                                id: welcomePage
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.top: parent.top
                                 anchors.bottom: parent.bottom
                             }
-                        }
-                        Item {
-                            ThemeContent {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                            }
-                        }
-                        Item {
-                            LayoutContent {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                            }
+                            ScrollEdgeFade { target: welcomePage }
                         }
                         Item {
                             FeaturesContent {
+                                id: featuresPage
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.top: parent.top
                                 anchors.bottom: parent.bottom
                             }
+                            ScrollEdgeFade { target: featuresPage }
+                        }
+                        Item {
+                            ThemeContent {
+                                id: themePage
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                            }
+                            ScrollEdgeFade { target: themePage }
+                        }
+                        Item {
+                            LayoutContent {
+                                id: layoutPage
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                            }
+                            ScrollEdgeFade { target: layoutPage }
                         }
                         Item {
                             ReadyContent {
+                                id: readyPage
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.top: parent.top
                                 anchors.bottom: parent.bottom
                             }
+                            ScrollEdgeFade { target: readyPage }
                         }
                     }
                 }
 
-                // Navigation buttons
+                // Navigation buttons — Back / hint / Continue (Skip moved to top-right corner)
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 12
@@ -534,19 +838,60 @@ Scope {
                     Item { Layout.fillWidth: true }
 
                     DialogButton {
-                        buttonText: Translation.tr("Skip")
-                        colBackground: "transparent"
-                        colBackgroundHover: Appearance.colors.colLayer2Hover
-                        onClicked: root.finish(true)
-                    }
-
-                    DialogButton {
                         buttonText: root.currentStep === root.totalSteps - 1 ? Translation.tr("Get Started") : Translation.tr("Continue")
                         colBackground: Appearance.colors.colPrimary
                         colBackgroundHover: Appearance.colors.colPrimaryHover
                         colText: Appearance.colors.colOnPrimary
                         onClicked: root.currentStep < root.totalSteps - 1 ? root.currentStep++ : root.finish(false)
                     }
+                }
+            }
+
+            // Subtle "Skip setup" escape hatch in the top-right corner of the card.
+            // Hidden on the last step (where "Get Started" is the right action).
+            RippleButton {
+                id: skipButton
+                property bool _hovered: false
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.topMargin: 14
+                anchors.rightMargin: 14
+                visible: root.currentStep < root.totalSteps - 1
+                opacity: visible ? (_hovered ? 1.0 : 0.65) : 0
+                Behavior on opacity { NumberAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+
+                implicitHeight: 30
+                implicitWidth: skipRow.implicitWidth + 20
+                buttonRadius: Appearance.rounding.full
+                colBackground: "transparent"
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+
+                onClicked: root.finish(true)
+
+                contentItem: RowLayout {
+                    id: skipRow
+                    anchors.centerIn: parent
+                    spacing: 4
+
+                    StyledText {
+                        text: Translation.tr("Skip setup")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colSubtext
+                    }
+                    MaterialSymbol {
+                        text: "close"
+                        iconSize: 14
+                        color: Appearance.colors.colSubtext
+                    }
+                }
+
+                StyledToolTip {
+                    text: Translation.tr("You can re-open this wizard anytime with:\n  inir welcome")
+                }
+
+                HoverHandler {
+                    cursorShape: Qt.PointingHandCursor
+                    onHoveredChanged: skipButton._hovered = hovered
                 }
             }
         }
@@ -556,11 +901,19 @@ Scope {
     // STEP CONTENT COMPONENTS
     // ═══════════════════════════════════════════════════════════════════════
 
-    component WelcomeContent: ColumnLayout {
-        width: 600
-        spacing: 24
+    component WelcomeContent: Flickable {
+        id: welcomeFlickable
+        width: root.stepWidth
+        contentHeight: welcomeColumn.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        bottomMargin: 16
+        topMargin: Math.max(0, (height - contentHeight - 16) / 2)
 
-        Item { Layout.fillHeight: true }
+        ColumnLayout {
+            id: welcomeColumn
+            width: parent.width
+            spacing: root.compact ? 12 : 18
 
         MaterialShapeWrappedMaterialSymbol {
             Layout.alignment: Qt.AlignHCenter
@@ -574,24 +927,21 @@ Scope {
 
         StyledText {
             Layout.alignment: Qt.AlignHCenter
-            text: Translation.tr("Welcome to inir")
-            font.family: Appearance.font.family.title
-            font.pixelSize: Appearance.font.pixelSize.hugeass + 6
-        }
-
-        StyledText {
-            Layout.alignment: Qt.AlignHCenter
-            text: Translation.tr("A modern, customizable shell for Niri compositor")
+            text: Translation.tr("A Wayland shell for Niri, built to be lived in.")
             color: Appearance.colors.colSubtext
             font.pixelSize: Appearance.font.pixelSize.normal
+            wrapMode: Text.WordWrap
+            horizontalAlignment: Text.AlignHCenter
+            Layout.maximumWidth: 520
         }
 
-        // Keyboard shortcuts
+        // "What we'll set up" — gives users a preview so they see VALUE before skipping
         Rectangle {
             Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: 20
-            implicitWidth: shortcutsGrid.implicitWidth + 40
-            implicitHeight: shortcutsGrid.implicitHeight + 28
+            Layout.topMargin: 6
+            Layout.maximumWidth: 540
+            implicitWidth: 520
+            implicitHeight: previewCol.implicitHeight + 24
             radius: Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
             color: Appearance.inirEverywhere ? Appearance.inir.colLayer2
                  : Appearance.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
@@ -599,52 +949,263 @@ Scope {
             border.width: Appearance.inirEverywhere ? 1 : 0
             border.color: Appearance.inir.colBorderSubtle
 
-            GridLayout {
-                id: shortcutsGrid
-                anchors.centerIn: parent
-                columns: 2
-                columnSpacing: 40
-                rowSpacing: 8
+            ColumnLayout {
+                id: previewCol
+                anchors {
+                    fill: parent
+                    margins: 12
+                }
+                spacing: 10
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("What this setup covers")
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    font.weight: Font.Medium
+                    color: Appearance.colors.colSubtext
+                }
 
                 Repeater {
                     model: [
-                        { keys: "Super+Space", desc: Translation.tr("App launcher") },
-                        { keys: "Super+/", desc: Translation.tr("All shortcuts") },
-                        { keys: "Super+Q", desc: Translation.tr("Close window") },
-                        { keys: "Super+,", desc: Translation.tr("Settings") }
+                        { icon: "palette",   label: Translation.tr("Look"),       desc: Translation.tr("Theme, wallpaper, and visual style") },
+                        { icon: "dashboard", label: Translation.tr("Structure"),  desc: Translation.tr("Bar, dock, and panel family") },
+                        { icon: "tune",      label: Translation.tr("Essentials"), desc: Translation.tr("Only the daily features worth deciding now") }
                     ]
                     RowLayout {
+                        Layout.fillWidth: true
                         required property var modelData
-                        spacing: 10
-                        Row {
-                            spacing: 3
-                            Repeater {
-                                model: modelData.keys.split("+")
-                                KeyboardKey {
-                                    required property string modelData
-                                    key: modelData
-                                }
-                            }
+                        spacing: 12
+
+                        MaterialSymbol {
+                            text: modelData.icon
+                            iconSize: 22
+                            color: Appearance.colors.colPrimary
+                            Layout.preferredWidth: 24
                         }
-                        StyledText {
-                            text: modelData.desc
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            color: Appearance.colors.colSubtext
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: modelData.label
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                font.weight: Font.Medium
+                                color: Appearance.colors.colOnSurface
+                            }
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: modelData.desc
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colSubtext
+                                wrapMode: Text.WordWrap
+                                elide: Text.ElideRight
+                            }
                         }
                     }
                 }
             }
         }
 
-        Item { Layout.fillHeight: true }
+        // Settings UI experience choice — Easy vs Advanced
+        ColumnLayout {
+            Layout.alignment: Qt.AlignHCenter
+            Layout.topMargin: 12
+            Layout.maximumWidth: 560
+            spacing: 8
+
+            StyledText {
+                Layout.alignment: Qt.AlignHCenter
+                text: Translation.tr("How much should Settings show at first?")
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.weight: Font.Medium
+                color: Appearance.colors.colOnSurface
+            }
+
+            RowLayout {
+                id: settingsDepthRow
+                Layout.fillWidth: true
+                Layout.maximumWidth: 520
+                Layout.alignment: Qt.AlignHCenter
+                spacing: 12
+
+                readonly property real cardHeight: Math.max(
+                    easyCardCol.implicitHeight, advancedCardCol.implicitHeight) + 24
+
+                // Easy mode card
+                Rectangle {
+                    id: easyCard
+                    readonly property bool selected: (Config.options?.settingsUi?.easyMode ?? false) === true
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: settingsDepthRow.cardHeight
+                    radius: Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
+                    color: selected
+                        ? Appearance.colors.colPrimaryContainer
+                        : (Appearance.inirEverywhere ? Appearance.inir.colLayer2
+                          : Appearance.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
+                          : Appearance.colors.colLayer2)
+                    border.width: selected ? 2 : 1
+                    border.color: selected
+                        ? Appearance.colors.colPrimary
+                        : (Appearance.inirEverywhere ? Appearance.inir.colBorderSubtle
+                          : Appearance.colors.colLayer0Border)
+
+                    Behavior on color {
+                        enabled: Appearance.animationsEnabled
+                        animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                    }
+
+                    ColumnLayout {
+                        id: easyCardCol
+                        anchors {
+                            fill: parent
+                            margins: 12
+                        }
+                        spacing: 6
+
+                        RowLayout {
+                            spacing: 8
+                            MaterialSymbol {
+                                text: "school"
+                                iconSize: 22
+                                color: easyCard.selected
+                                    ? Appearance.colors.colOnPrimaryContainer
+                                    : Appearance.colors.colPrimary
+                            }
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr("Focused")
+                                font.pixelSize: Appearance.font.pixelSize.normal
+                                font.weight: Font.Medium
+                                color: easyCard.selected
+                                    ? Appearance.colors.colOnPrimaryContainer
+                                    : Appearance.colors.colOnSurface
+                            }
+                            Rectangle {
+                                visible: !easyCard.selected
+                                implicitWidth: easyRecommendedLabel.implicitWidth + 12
+                                implicitHeight: easyRecommendedLabel.implicitHeight + 4
+                                radius: height / 2
+                                color: Appearance.colors.colPrimaryContainer
+                                StyledText {
+                                    id: easyRecommendedLabel
+                                    anchors.centerIn: parent
+                                    text: Translation.tr("Recommended")
+                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                    color: Appearance.colors.colOnPrimaryContainer
+                                }
+                            }
+                            MaterialSymbol {
+                                visible: easyCard.selected
+                                text: "check_circle"
+                                iconSize: 18
+                                color: Appearance.colors.colOnPrimaryContainer
+                            }
+                        }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("A shorter navigation with the controls most people need.")
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            wrapMode: Text.WordWrap
+                            color: easyCard.selected
+                                ? Appearance.colors.colOnPrimaryContainer
+                                : Appearance.colors.colSubtext
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: Config.setNestedValue("settingsUi.easyMode", true)
+                    }
+                }
+
+                // Advanced mode card
+                Rectangle {
+                    id: advancedCard
+                    readonly property bool selected: (Config.options?.settingsUi?.easyMode ?? false) === false
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: settingsDepthRow.cardHeight
+                    radius: Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
+                    color: selected
+                        ? Appearance.colors.colPrimaryContainer
+                        : (Appearance.inirEverywhere ? Appearance.inir.colLayer2
+                          : Appearance.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
+                          : Appearance.colors.colLayer2)
+                    border.width: selected ? 2 : 1
+                    border.color: selected
+                        ? Appearance.colors.colPrimary
+                        : (Appearance.inirEverywhere ? Appearance.inir.colBorderSubtle
+                          : Appearance.colors.colLayer0Border)
+
+                    Behavior on color {
+                        enabled: Appearance.animationsEnabled
+                        animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                    }
+
+                    ColumnLayout {
+                        id: advancedCardCol
+                        anchors {
+                            fill: parent
+                            margins: 12
+                        }
+                        spacing: 6
+
+                        RowLayout {
+                            spacing: 8
+                            MaterialSymbol {
+                                text: "tune"
+                                iconSize: 22
+                                color: advancedCard.selected
+                                    ? Appearance.colors.colOnPrimaryContainer
+                                    : Appearance.colors.colPrimary
+                            }
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr("Complete")
+                                font.pixelSize: Appearance.font.pixelSize.normal
+                                font.weight: Font.Medium
+                                color: advancedCard.selected
+                                    ? Appearance.colors.colOnPrimaryContainer
+                                    : Appearance.colors.colOnSurface
+                            }
+                            MaterialSymbol {
+                                visible: advancedCard.selected
+                                text: "check_circle"
+                                iconSize: 18
+                                color: Appearance.colors.colOnPrimaryContainer
+                            }
+                        }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Every page and advanced control. You can switch between both views at any time.")
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            wrapMode: Text.WordWrap
+                            color: advancedCard.selected
+                                ? Appearance.colors.colOnPrimaryContainer
+                                : Appearance.colors.colSubtext
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: Config.setNestedValue("settingsUi.easyMode", false)
+                    }
+                }
+            }
+        }
+        }
     }
 
     component ThemeContent: Flickable {
         id: themeFlickable
-        width: 600
+        width: root.stepWidth
         contentHeight: themeColumn.implicitHeight
         clip: true
         boundsBehavior: Flickable.StopAtBounds
+        bottomMargin: 16
+        topMargin: Math.max(0, (height - contentHeight - 16) / 2)
         
         ColumnLayout {
             id: themeColumn
@@ -652,17 +1213,38 @@ Scope {
             spacing: 16
 
         // Light/Dark toggle
-        RowLayout {
+        SettingsGroup {
+            Layout.fillWidth: true
             Layout.alignment: Qt.AlignHCenter
-            spacing: 16
-            LightDarkPreferenceButton { dark: false }
-            LightDarkPreferenceButton { dark: true }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    MaterialSymbol { text: "contrast"; iconSize: 20; color: Appearance.colors.colPrimary }
+                    StyledText { text: Translation.tr("Theme"); font.pixelSize: Appearance.font.pixelSize.normal }
+                    Item { Layout.fillWidth: true }
+                    StyledText {
+                        text: Translation.tr("Applies everywhere")
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        color: Appearance.colors.colSubtext
+                    }
+                }
+
+                RowLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: 16
+                    LightDarkPreferenceButton { dark: false }
+                    LightDarkPreferenceButton { dark: true }
+                }
+            }
         }
 
         // Global style selector
         SettingsGroup {
             Layout.fillWidth: true
-            Layout.maximumWidth: 560
             Layout.alignment: Qt.AlignHCenter
 
             ColumnLayout {
@@ -698,9 +1280,17 @@ Scope {
                         { displayName: "Material", icon: "dashboard", value: "material" },
                         { displayName: "Cards", icon: "crop_square", value: "cards" },
                         { displayName: "Aurora", icon: "blur_on", value: "aurora" },
-                        { displayName: "Angel", icon: "auto_awesome", value: "angel" },
                         { displayName: "Inir", icon: "terminal", value: "inir" }
                     ]
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("More experimental styles remain available in Settings.")
+                    color: Appearance.colors.colSubtext
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
                 }
             }
         }
@@ -709,7 +1299,6 @@ Scope {
         SettingsGroup {
             id: wallpaperGroup
             Layout.fillWidth: true
-            Layout.maximumWidth: 560
             Layout.alignment: Qt.AlignHCenter
 
             property var wallpapersList: []
@@ -862,6 +1451,11 @@ Scope {
                             }
                         }
                     }
+
+                    ScrollEdgeFade {
+                        target: wallpaperCarousel
+                        vertical: false
+                    }
                 }
 
                 // Empty state
@@ -891,11 +1485,19 @@ Scope {
         }
     }
 
-    component LayoutContent: ColumnLayout {
-        width: 600
-        spacing: 16
+    component LayoutContent: Flickable {
+        id: layoutFlickable
+        width: root.stepWidth
+        contentHeight: layoutColumn.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        bottomMargin: 16
+        topMargin: Math.max(0, (height - contentHeight - 16) / 2)
 
-        Item { Layout.fillHeight: true; Layout.maximumHeight: 16 }
+        ColumnLayout {
+            id: layoutColumn
+            width: parent.width
+            spacing: root.compact ? 12 : 16
 
         GridLayout {
             Layout.alignment: Qt.AlignHCenter
@@ -903,7 +1505,7 @@ Scope {
             columnSpacing: 20
             rowSpacing: 16
 
-            // Bar position
+            // Material II bar position. Waffle owns `waffles.bar.bottom`.
             SettingsGroup {
                 Layout.preferredWidth: 260
                 ColumnLayout {
@@ -911,12 +1513,15 @@ Scope {
                     spacing: 8
                     RowLayout {
                         MaterialSymbol { text: "web_asset"; iconSize: 18; color: Appearance.colors.colPrimary }
-                        StyledText { text: Translation.tr("Bar"); font.pixelSize: Appearance.font.pixelSize.small }
+                        StyledText {
+                            text: "Material II · " + Translation.tr("Bar")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                        }
                     }
                     ConfigSelectionArray {
                         Layout.fillWidth: true
                         currentValue: Config.options?.bar?.bottom ?? false
-                        onSelected: v => Config.setNestedValue("bar.bottom", v)
+                        onSelected: v => root.setProfileFeature("bar.bottom", v)
                         options: [
                             { displayName: Translation.tr("Top"), icon: "vertical_align_top", value: false },
                             { displayName: Translation.tr("Bottom"), icon: "vertical_align_bottom", value: true }
@@ -925,30 +1530,7 @@ Scope {
                 }
             }
 
-            // Bar style
-            SettingsGroup {
-                Layout.preferredWidth: 260
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    RowLayout {
-                        MaterialSymbol { text: "rounded_corner"; iconSize: 18; color: Appearance.colors.colPrimary }
-                        StyledText { text: Translation.tr("Bar Style"); font.pixelSize: Appearance.font.pixelSize.small }
-                    }
-                    ConfigSelectionArray {
-                        Layout.fillWidth: true
-                        currentValue: Config.options?.bar?.cornerStyle ?? 0
-                        onSelected: v => Config.setNestedValue("bar.cornerStyle", v)
-                        options: [
-                            { displayName: Translation.tr("Hug"), icon: "line_curve", value: 0 },
-                            { displayName: Translation.tr("Float"), icon: "crop_free", value: 1 },
-                            { displayName: Translation.tr("Full"), icon: "rectangle", value: 2 }
-                        ]
-                    }
-                }
-            }
-
-            // Dock position
+            // Material II dock position. Waffle family modules are independent.
             SettingsGroup {
                 Layout.preferredWidth: 260
                 ColumnLayout {
@@ -956,12 +1538,15 @@ Scope {
                     spacing: 8
                     RowLayout {
                         MaterialSymbol { text: "dock_to_bottom"; iconSize: 18; color: Appearance.colors.colPrimary }
-                        StyledText { text: Translation.tr("Dock"); font.pixelSize: Appearance.font.pixelSize.small }
+                        StyledText {
+                            text: "Material II · " + Translation.tr("Dock")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                        }
                     }
                     ConfigSelectionArray {
                         Layout.fillWidth: true
                         currentValue: Config.options?.dock?.position ?? "bottom"
-                        onSelected: v => Config.setNestedValue("dock.position", v)
+                        onSelected: v => root.setProfileFeature("dock.position", v)
                         options: [
                             { displayName: Translation.tr("Bottom"), icon: "arrow_downward", value: "bottom" },
                             { displayName: Translation.tr("Left"), icon: "arrow_back", value: "left" },
@@ -971,20 +1556,22 @@ Scope {
                 }
             }
 
-            // Panel family
+            // Selects which family starts active. Both family configurations
+            // remain stored and switching later does not reset either one.
             SettingsGroup {
-                Layout.preferredWidth: 260
+                Layout.columnSpan: 2
+                Layout.fillWidth: true
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 8
                     RowLayout {
                         MaterialSymbol { text: "view_quilt"; iconSize: 18; color: Appearance.colors.colPrimary }
-                        StyledText { text: Translation.tr("Panel Style"); font.pixelSize: Appearance.font.pixelSize.small }
+                        StyledText { text: Translation.tr("Panel family"); font.pixelSize: Appearance.font.pixelSize.small }
                     }
                     ConfigSelectionArray {
                         Layout.fillWidth: true
                         currentValue: Config.options?.panelFamily ?? "ii"
-                        onSelected: v => Config.setNestedValue("panelFamily", v)
+                        onSelected: v => root.setProfileFeature("panelFamily", v)
                         options: [
                             { displayName: "Material II", icon: "dashboard", value: "ii" },
                             { displayName: "Waffle", icon: "grid_view", value: "waffle" }
@@ -992,208 +1579,626 @@ Scope {
                     }
                 }
             }
+
+            // Only the ii horizontal bar reads bar.appearanceStyle.
+            SettingsGroup {
+                Layout.columnSpan: 2
+                Layout.fillWidth: true
+                visible: (Config.options?.panelFamily ?? "ii") === "ii"
+                    && !(Config.options?.bar?.vertical ?? false)
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    RowLayout {
+                        MaterialSymbol { text: "wysiwyg"; iconSize: 18; color: Appearance.colors.colPrimary }
+                        StyledText {
+                            text: "Material II · " + Translation.tr("Bar shape")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                        }
+                        Item { Layout.fillWidth: true }
+                        StyledText {
+                            text: Translation.tr("Changes how the whole bar reads")
+                            font.pixelSize: Appearance.font.pixelSize.smallest
+                            color: Appearance.colors.colSubtext
+                        }
+                    }
+                    ConfigSelectionArray {
+                        Layout.fillWidth: true
+                        currentValue: Config.options?.bar?.appearanceStyle ?? "classic"
+                        onSelected: v => root.setProfileFeature("bar.appearanceStyle", v)
+                        options: [
+                            { displayName: Translation.tr("Classic"), icon: "horizontal_rule", value: "classic" },
+                            { displayName: Translation.tr("Islands"), icon: "view_column", value: "islands" },
+                            { displayName: "Material 3", icon: "widgets", value: "m3" },
+                            { displayName: Translation.tr("Pill"), icon: "blur_circular", value: "pill" }
+                        ]
+                    }
+                }
+            }
         }
 
-        // Additional layout options
         SettingsGroup {
             Layout.fillWidth: true
-            Layout.maximumWidth: 560
             Layout.alignment: Qt.AlignHCenter
 
             ConfigSwitch {
-                buttonIcon: "visibility"
-                text: Translation.tr("Show bar background")
-                checked: Config.options?.bar?.showBackground ?? false
-                onCheckedChanged: Config.setNestedValue("bar.showBackground", checked)
+                buttonIcon: "dock_to_bottom"
+                text: "Material II · " + Translation.tr("Show dock")
+                description: Translation.tr("Keep dock visible at all times (Empty workspace mode only)")
+                checked: Config.options?.dock?.enable ?? true
+                onToggledByUser: checked => root.setProfileFeature("dock.enable", checked)
+            }
+            ConfigSwitch {
+                buttonIcon: "dashboard"
+                text: "Material II · " + Translation.tr("Show dashboard")
+                description: Translation.tr("Keep a centered home panel for notifications, media, weather and daily controls.")
+                checked: Config.options?.dashboard?.enable ?? true
+                onToggledByUser: checked => root.setProfileFeature("dashboard.enable", checked)
             }
             ConfigSwitch {
                 buttonIcon: "auto_awesome_motion"
-                text: Translation.tr("Bar auto-hide")
+                text: "Material II · " + Translation.tr("Auto-hide the bar")
+                description: Translation.tr("A quieter desktop; the bar returns from the edge or while holding Super.")
                 checked: Config.options?.bar?.autoHide?.enable ?? false
-                onCheckedChanged: Config.setNestedValue("bar.autoHide.enable", checked)
+                onToggledByUser: checked => root.setProfileFeature("bar.autoHide.enable", checked)
             }
         }
-
-        Item { Layout.fillHeight: true }
+        }
     }
 
-    component FeaturesContent: ColumnLayout {
-        width: 640
-        spacing: 16
+    component FeaturesContent: Flickable {
+        id: featuresFlickable
+        width: root.stepWidth
+        contentHeight: featuresColumn.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        bottomMargin: 16
+        topMargin: Math.max(0, (height - contentHeight - 16) / 2)
 
-        Item { Layout.fillHeight: true; Layout.maximumHeight: 12 }
+        ColumnLayout {
+            id: featuresColumn
+            width: parent.width
+            spacing: 16
 
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.maximumWidth: 600
-            Layout.alignment: Qt.AlignHCenter
-            spacing: 20
+            Item { Layout.preferredHeight: 4 }
 
-            // Left column
             SettingsGroup {
                 Layout.fillWidth: true
+                Layout.maximumWidth: 600
+                Layout.alignment: Qt.AlignHCenter
 
-                ConfigSwitch {
-                    buttonIcon: "auto_awesome"
-                    text: Translation.tr("AI Assistant")
-                    checked: (Config.options?.policies?.ai ?? 0) >= 1
-                    onCheckedChanged: Config.setNestedValue("policies.ai", checked ? 1 : 0)
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Choose your starting point")
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        font.weight: Font.Medium
+                        color: Appearance.colors.colOnLayer1
+                    }
+
+                    StyledText {
+                        text: Translation.tr("Balanced is recommended")
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        color: Appearance.colors.colPrimary
+                    }
                 }
-                ConfigSwitch {
-                    buttonIcon: "image"
-                    text: Translation.tr("Anime wallpapers")
-                    checked: (Config.options?.policies?.weeb ?? 0) >= 1
-                    onCheckedChanged: Config.setNestedValue("policies.weeb", checked ? 1 : 0)
+
+                ConfigSelectionArray {
+                    Layout.fillWidth: true
+                    currentValue: root.selectedProfile
+                    options: [
+                        { displayName: Translation.tr("Minimum"), icon: "filter_1", value: "minimum" },
+                        { displayName: Translation.tr("Balanced"), icon: "tune", value: "balanced" },
+                        { displayName: Translation.tr("Full"), icon: "auto_awesome", value: "full" }
+                    ]
+                    onSelected: value => root.applyProfile(value)
                 }
-                ConfigSwitch {
-                    buttonIcon: "notifications_active"
-                    text: Translation.tr("Sound effects")
-                    checked: Config.options?.sounds?.notifications ?? true
-                    onCheckedChanged: Config.setNestedValue("sounds.notifications", checked)
-                }
-                ConfigSwitch {
-                    buttonIcon: "sports_esports"
-                    text: Translation.tr("Game mode")
-                    checked: Config.options?.gameMode?.autoDetect ?? true
-                    onCheckedChanged: Config.setNestedValue("gameMode.autoDetect", checked)
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: profileSummaryColumn.implicitHeight + 20
+                    radius: Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.small
+                    color: root.profileCustomized
+                        ? Appearance.colors.colLayer2
+                        : Appearance.colors.colPrimaryContainer
+                    border.width: 1
+                    border.color: root.profileCustomized
+                        ? Appearance.colors.colOutlineVariant
+                        : Appearance.colors.colPrimary
+
+                    RowLayout {
+                        anchors {
+                            fill: parent
+                            margins: 10
+                        }
+                        spacing: 10
+
+                        MaterialSymbol {
+                            text: root.profileCustomized ? "tune" : "check_circle"
+                            iconSize: 20
+                            color: root.profileCustomized
+                                ? Appearance.colors.colPrimary
+                                : Appearance.colors.colOnPrimaryContainer
+                        }
+
+                        ColumnLayout {
+                            id: profileSummaryColumn
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: root.profileCustomized
+                                    ? Translation.tr("Custom setup")
+                                    : root.selectedProfileTitle
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                font.weight: Font.Medium
+                                color: root.profileCustomized
+                                    ? Appearance.colors.colOnSurface
+                                    : Appearance.colors.colOnPrimaryContainer
+                            }
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: root.profileCustomized
+                                    ? Translation.tr("Your individual choices are now in control.")
+                                    : root.selectedProfileDescription
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: root.profileCustomized
+                                    ? Appearance.colors.colSubtext
+                                    : Appearance.colors.colOnPrimaryContainer
+                                wrapMode: Text.WordWrap
+                            }
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: root.profileCustomized
+                                    ? Translation.tr("You can still choose a starting point above to reset these essentials.")
+                                    : root.selectedProfileAudience
+                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                color: root.profileCustomized
+                                    ? Appearance.colors.colSubtext
+                                    : Appearance.colors.colOnPrimaryContainer
+                                opacity: 0.8
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+                    }
                 }
             }
 
-            // Right column
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.maximumWidth: 600
+                Layout.alignment: Qt.AlignHCenter
+                spacing: 20
+
+                SettingsGroup {
+                    Layout.fillWidth: true
+
+                    ConfigSwitch {
+                        buttonIcon: "notifications_active"
+                        text: Translation.tr("Notification sounds")
+                        description: Translation.tr("Keep the desktop silent, or add subtle feedback for notifications.")
+                        checked: Config.options?.sounds?.notifications ?? false
+                        onToggledByUser: checked => root.setProfileFeature("sounds.notifications", checked)
+                    }
+                    ConfigSwitch {
+                        buttonIcon: "sports_esports"
+                        text: Translation.tr("Automatic game mode")
+                        description: Translation.tr("Pauses expensive effects while a fullscreen game is active.")
+                        checked: Config.options?.gameMode?.autoDetect ?? true
+                        onToggledByUser: checked => root.setProfileFeature("gameMode.autoDetect", checked)
+                    }
+                    ConfigSwitch {
+                        buttonIcon: "schedule"
+                        text: Translation.tr("Desktop clock")
+                        description: Translation.tr("Adds a quiet clock to the wallpaper. The bar clock remains available either way.")
+                        checked: Config.getNestedValue("background.widgets.clock.enable", false)
+                        onToggledByUser: checked => root.setProfileFeature("background.widgets.clock.enable", checked)
+                    }
+                }
+
+                SettingsGroup {
+                    Layout.fillWidth: true
+
+                    ConfigSwitch {
+                        buttonIcon: "cloud"
+                        text: Translation.tr("Weather")
+                        description: Translation.tr("Shows weather in the bar and glance cards after location resolves.")
+                        checked: (Config.options?.bar?.weather?.enable ?? false)
+                            && (Config.options?.bar?.modules?.weather ?? false)
+                        onToggledByUser: checked => {
+                            root.profileCustomized = true
+                            Config.setNestedValues({
+                                "bar.weather.enable": checked,
+                                "bar.modules.weather": checked
+                            })
+                        }
+                    }
+                    ConfigSwitch {
+                        buttonIcon: "bolt"
+                        text: Translation.tr("Reduce animations")
+                        description: Translation.tr("Calmer motion and less graphics work on slower hardware.")
+                        checked: Config.options?.performance?.reduceAnimations ?? false
+                        onToggledByUser: checked => root.setProfileFeature("performance.reduceAnimations", checked)
+                    }
+                    ConfigSwitch {
+                        buttonIcon: "hearing"
+                        text: Translation.tr("Volume protection")
+                        description: Translation.tr("Prevents sudden output jumps without changing normal volume control.")
+                        checked: Config.options?.audio?.protection?.enable ?? true
+                        onToggledByUser: checked => root.setProfileFeature("audio.protection.enable", checked)
+                    }
+                }
+            }
+
             SettingsGroup {
                 Layout.fillWidth: true
+                Layout.maximumWidth: 600
+                Layout.alignment: Qt.AlignHCenter
 
                 ConfigSwitch {
-                    buttonIcon: "dock_to_bottom"
-                    text: Translation.tr("Show dock")
-                    checked: Config.options?.dock?.enable ?? true
-                    onCheckedChanged: Config.setNestedValue("dock.enable", checked)
-                }
-                ConfigSwitch {
-                    buttonIcon: "schedule"
-                    text: Translation.tr("Desktop clock")
-                    checked: Config.options?.background?.widgets?.clock?.enable ?? true
-                    onCheckedChanged: Config.setNestedValue("background.widgets.clock.enable", checked)
-                }
-                ConfigSwitch {
-                    buttonIcon: "bolt"
-                    text: Translation.tr("Reduce animations")
-                    checked: Config.options?.performance?.reduceAnimations ?? false
-                    onCheckedChanged: Config.setNestedValue("performance.reduceAnimations", checked)
-                }
-                ConfigSwitch {
-                    buttonIcon: "hearing"
-                    text: Translation.tr("Volume protection")
-                    checked: Config.options?.audio?.protection?.enable ?? true
-                    onCheckedChanged: Config.setNestedValue("audio.protection.enable", checked)
+                    buttonIcon: "pets"
+                    text: Translation.tr("Kira, the desktop companion")
+                    description: Translation.tr("iNiR's mascot peeks in from the screen edges and reacts to what you do. Purely decorative, and she never takes focus.")
+                    checked: Config.options?.mascot?.enable ?? false
+                    onToggledByUser: checked => root.setProfileFeature("mascot.enable", checked)
                 }
             }
+
         }
-
-        // Extra options
-        SettingsGroup {
-            Layout.fillWidth: true
-            Layout.maximumWidth: 600
-            Layout.alignment: Qt.AlignHCenter
-
-            ConfigSwitch {
-                buttonIcon: "dark_mode"
-                text: Translation.tr("Night light (auto)")
-                checked: Config.options?.light?.night?.automatic ?? false
-                onCheckedChanged: Config.setNestedValue("light.night.automatic", checked)
-            }
-            ConfigSwitch {
-                buttonIcon: "translate"
-                text: Translation.tr("Sidebar translator")
-                checked: Config.options?.sidebar?.translator?.enable ?? true
-                onCheckedChanged: Config.setNestedValue("sidebar.translator.enable", checked)
-            }
-        }
-
-        Item { Layout.fillHeight: true }
     }
 
-    component ReadyContent: ColumnLayout {
-        width: 500
-        spacing: 24
+    component ReadyContent: Flickable {
+        id: readyFlickable
+        width: root.stepWidth
+        contentHeight: readyColumn.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        bottomMargin: 16
+        topMargin: Math.max(0, (height - contentHeight - 16) / 2)
 
-        Item { Layout.fillHeight: true }
+        ColumnLayout {
+            id: readyColumn
+            width: parent.width
+            spacing: 18
 
-        MaterialShapeWrappedMaterialSymbol {
-            Layout.alignment: Qt.AlignHCenter
-            text: "check_circle"
-            iconSize: 60
-            padding: 20
-            shape: MaterialShape.Shape.Circle
-            color: Appearance.colors.colPrimaryContainer
-            colSymbol: Appearance.colors.colOnPrimaryContainer
-        }
+            Item { Layout.preferredHeight: 4 }
 
-        StyledText {
-            Layout.alignment: Qt.AlignHCenter
-            text: Translation.tr("You're all set!")
-            font.family: Appearance.font.family.title
-            font.pixelSize: Appearance.font.pixelSize.hugeass + 6
-        }
+            MaterialShapeWrappedMaterialSymbol {
+                Layout.alignment: Qt.AlignHCenter
+                text: "check_circle"
+                iconSize: 50
+                padding: 16
+                shape: MaterialShape.Shape.Circle
+                color: Appearance.colors.colPrimaryContainer
+                colSymbol: Appearance.colors.colOnPrimaryContainer
+            }
 
-        StyledText {
-            Layout.alignment: Qt.AlignHCenter
-            Layout.maximumWidth: 400
-            horizontalAlignment: Text.AlignHCenter
-            text: Translation.tr("Your desktop is configured and ready to use.\nYou can always change these settings later.")
-            color: Appearance.colors.colSubtext
-            wrapMode: Text.WordWrap
-        }
+            StyledText {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.maximumWidth: 540
+                horizontalAlignment: Text.AlignHCenter
+                text: Translation.tr("Four shortcuts cover most daily navigation. The full list is always one key away.")
+                color: Appearance.colors.colSubtext
+                wrapMode: Text.WordWrap
+            }
 
-        // Quick actions
-        RowLayout {
-            Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: 16
-            spacing: 12
+            // Two cards side by side: shortcuts + first actions
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 8
+                Layout.maximumWidth: 700
+                spacing: 14
 
-            RippleButton {
-                implicitWidth: 130; implicitHeight: 42
-                buttonRadius: Appearance.rounding.small
-                colBackground: Appearance.colors.colLayer2
-                colBackgroundHover: Appearance.colors.colLayer2Hover
-                onClicked: Quickshell.execDetached([Quickshell.shellPath("scripts/inir"), "settings"])
-                RowLayout {
-                    anchors.centerIn: parent
-                    spacing: 8
-                    MaterialSymbol { text: "settings"; iconSize: 18 }
-                    StyledText { text: Translation.tr("Settings"); font.pixelSize: Appearance.font.pixelSize.small }
+                // Keyboard shortcuts card
+                Rectangle {
+                    Layout.preferredWidth: 340
+                    Layout.alignment: Qt.AlignTop
+                    implicitHeight: shortcutsCardCol.implicitHeight + 24
+                    radius: Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
+                    color: Appearance.inirEverywhere ? Appearance.inir.colLayer2
+                         : Appearance.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
+                         : Appearance.colors.colLayer2
+                    border.width: Appearance.inirEverywhere ? 1 : 0
+                    border.color: Appearance.inir.colBorderSubtle
+
+                    ColumnLayout {
+                        id: shortcutsCardCol
+                        anchors {
+                            fill: parent
+                            margins: 12
+                        }
+                        spacing: 10
+
+                        RowLayout {
+                            spacing: 8
+                            MaterialSymbol { text: "keyboard"; iconSize: 18; color: Appearance.colors.colPrimary }
+                            StyledText {
+                                text: Translation.tr("Keyboard")
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                font.weight: Font.Medium
+                            }
+                            Item { Layout.fillWidth: true }
+                            StyledText {
+                                text: Translation.tr("Press Super+/ for full list")
+                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                color: Appearance.colors.colSubtext
+                            }
+                        }
+
+                        Repeater {
+                            model: [
+                                { keys: "Super+/",     desc: Translation.tr("All shortcuts") },
+                                { keys: "Super+Space", desc: Translation.tr("App launcher") },
+                                { keys: "Super+,",     desc: Translation.tr("Settings") },
+                                { keys: "Super+V",     desc: Translation.tr("Clipboard history") }
+                            ]
+                            RowLayout {
+                                Layout.fillWidth: true
+                                required property var modelData
+                                spacing: 10
+
+                                Row {
+                                    spacing: 2
+                                    Repeater {
+                                        model: modelData.keys.split("+")
+                                        KeyboardKey {
+                                            required property string modelData
+                                            key: modelData
+                                        }
+                                    }
+                                }
+                                Item { Layout.fillWidth: true }
+                                StyledText {
+                                    text: modelData.desc
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colSubtext
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Try it now — interactive action card
+                Rectangle {
+                    Layout.preferredWidth: 340
+                    Layout.alignment: Qt.AlignTop
+                    implicitHeight: tryItCardCol.implicitHeight + 24
+                    radius: Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
+                    color: Appearance.inirEverywhere ? Appearance.inir.colLayer2
+                         : Appearance.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
+                         : Appearance.colors.colLayer2
+                    border.width: Appearance.inirEverywhere ? 1 : 0
+                    border.color: Appearance.inir.colBorderSubtle
+
+                    ColumnLayout {
+                        id: tryItCardCol
+                        anchors {
+                            fill: parent
+                            margins: 12
+                        }
+                        spacing: 8
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            MaterialSymbol { text: "rocket_launch"; iconSize: 18; color: Appearance.colors.colPrimary }
+                            StyledText {
+                                text: Translation.tr("Try it now")
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                font.weight: Font.Medium
+                            }
+                            Item { Layout.fillWidth: true }
+                            StyledText {
+                                text: Translation.tr("one click, no typing")
+                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                color: Appearance.colors.colSubtext
+                            }
+                        }
+
+                        Repeater {
+                            model: [
+                                {
+                                    icon: "tune",
+                                    label: Translation.tr("Open quick settings"),
+                                    sub: Translation.tr("Wi-Fi, audio, brightness"),
+                                    target: "controlPanel",
+                                    fn: "toggle"
+                                },
+                                {
+                                    icon: "wallpaper",
+                                    label: Translation.tr("Pick a wallpaper"),
+                                    sub: Translation.tr("Browse and apply"),
+                                    target: "wallpaperSelector",
+                                    fn: "toggle"
+                                },
+                                {
+                                    icon: "keyboard",
+                                    label: Translation.tr("Show all shortcuts"),
+                                    sub: Translation.tr("Cheatsheet overlay"),
+                                    target: "cheatsheet",
+                                    fn: "toggle"
+                                }
+                            ]
+                            RippleButton {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 46
+                                required property var modelData
+                                buttonRadius: Appearance.rounding.small
+                                colBackground: Appearance.colors.colLayer1
+                                colBackgroundHover: Appearance.colors.colLayer1Hover
+
+                                onClicked: Quickshell.execDetached([
+                                    Quickshell.shellPath("scripts/inir"),
+                                    modelData.target,
+                                    modelData.fn
+                                ])
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    spacing: 10
+
+                                    MaterialSymbol {
+                                        text: modelData.icon
+                                        iconSize: 22
+                                        color: Appearance.colors.colPrimary
+                                        Layout.preferredWidth: 26
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 0
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: modelData.label
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            font.weight: Font.Medium
+                                            color: Appearance.colors.colOnLayer1
+                                            elide: Text.ElideRight
+                                        }
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: modelData.sub
+                                            font.pixelSize: Appearance.font.pixelSize.smallest
+                                            color: Appearance.colors.colSubtext
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+                                    MaterialSymbol {
+                                        text: "arrow_forward"
+                                        iconSize: 16
+                                        color: Appearance.colors.colSubtext
+                                        opacity: 0.6
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
+            // Need help? clickable callout — opens troubleshooting wiki
             RippleButton {
-                implicitWidth: 130; implicitHeight: 42
-                buttonRadius: Appearance.rounding.small
-                colBackground: Appearance.colors.colLayer2
-                colBackgroundHover: Appearance.colors.colLayer2Hover
-                onClicked: Qt.openUrlExternally("https://github.com/YaLTeR/niri/wiki")
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 4
+                Layout.preferredWidth: 694
+                Layout.maximumWidth: 700
+                Layout.preferredHeight: helpCalloutRow.implicitHeight + 18
+                buttonRadius: Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
+                colBackground: ColorUtils.transparentize(Appearance.colors.colPrimaryContainer, 0.6)
+                colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colPrimaryContainer, 0.4)
+
+                onClicked: Qt.openUrlExternally("https://github.com/snowarch/inir/wiki/Troubleshooting")
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: parent.buttonRadius
+                    color: "transparent"
+                    border.width: 1
+                    border.color: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.6)
+                }
+
                 RowLayout {
-                    anchors.centerIn: parent
-                    spacing: 8
-                    MaterialSymbol { text: "menu_book"; iconSize: 18 }
-                    StyledText { text: Translation.tr("Niri Wiki"); font.pixelSize: Appearance.font.pixelSize.small }
+                    id: helpCalloutRow
+                    anchors.fill: parent
+                    anchors.leftMargin: 14
+                    anchors.rightMargin: 14
+                    anchors.topMargin: 9
+                    anchors.bottomMargin: 9
+                    spacing: 10
+
+                    MaterialSymbol {
+                        text: "support"
+                        iconSize: 20
+                        color: Appearance.colors.colOnPrimaryContainer
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 1
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Something not working?")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.weight: Font.Medium
+                            color: Appearance.colors.colOnPrimaryContainer
+                            elide: Text.ElideRight
+                        }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Open the troubleshooting guide — common fixes, in plain English.")
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: ColorUtils.transparentize(Appearance.colors.colOnPrimaryContainer, 0.2)
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                    MaterialSymbol {
+                        text: "open_in_new"
+                        iconSize: 16
+                        color: ColorUtils.transparentize(Appearance.colors.colOnPrimaryContainer, 0.3)
+                    }
                 }
             }
 
-            RippleButton {
-                implicitWidth: 130; implicitHeight: 42
-                buttonRadius: Appearance.rounding.small
-                colBackground: Appearance.colors.colLayer2
-                colBackgroundHover: Appearance.colors.colLayer2Hover
-                onClicked: Qt.openUrlExternally("https://github.com/snowarch/inir")
-                RowLayout {
-                    anchors.centerIn: parent
-                    spacing: 8
-                    StyledText { text: "󰊤"; font.family: Appearance.font.family.iconNerd; font.pixelSize: 18 }
-                    StyledText { text: "GitHub"; font.pixelSize: Appearance.font.pixelSize.small }
+            // Quick actions
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 8
+                spacing: 10
+
+                RippleButton {
+                    implicitWidth: settingsChipRow.implicitWidth + 32
+                    implicitHeight: 38
+                    buttonRadius: Appearance.rounding.small
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    onClicked: Quickshell.execDetached([Quickshell.shellPath("scripts/inir"), "settings"])
+                    RowLayout {
+                        id: settingsChipRow
+                        anchors.centerIn: parent
+                        spacing: 8
+                        MaterialSymbol { text: "settings"; iconSize: 16 }
+                        StyledText { text: Translation.tr("Settings"); font.pixelSize: Appearance.font.pixelSize.small }
+                    }
                 }
+
+                RippleButton {
+                    implicitWidth: docsChipRow.implicitWidth + 32
+                    implicitHeight: 38
+                    buttonRadius: Appearance.rounding.small
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    onClicked: Qt.openUrlExternally("https://github.com/snowarch/inir/wiki")
+                    RowLayout {
+                        id: docsChipRow
+                        anchors.centerIn: parent
+                        spacing: 8
+                        MaterialSymbol { text: "menu_book"; iconSize: 16 }
+                        StyledText { text: Translation.tr("Documentation"); font.pixelSize: Appearance.font.pixelSize.small }
+                    }
+                }
+
+                RippleButton {
+                    implicitWidth: issueChipRow.implicitWidth + 32
+                    implicitHeight: 38
+                    buttonRadius: Appearance.rounding.small
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    onClicked: Qt.openUrlExternally("https://github.com/snowarch/inir/issues")
+                    RowLayout {
+                        id: issueChipRow
+                        anchors.centerIn: parent
+                        spacing: 8
+                        MaterialSymbol { text: "bug_report"; iconSize: 16 }
+                        StyledText { text: Translation.tr("Report issue"); font.pixelSize: Appearance.font.pixelSize.small }
+                    }
+                }
+
             }
+
+            Item { Layout.preferredHeight: 8 }
         }
-
-        Item { Layout.fillHeight: true }
     }
 }

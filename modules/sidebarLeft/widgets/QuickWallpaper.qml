@@ -21,7 +21,7 @@ Item {
     readonly property real itemWidth: 130
     readonly property real itemHeight: 78  // ~16:10 aspect
     readonly property bool showHeader: Config.options?.sidebar?.widgets?.quickWallpaper?.showHeader ?? true
-    readonly property string wallpapersPath: `${FileUtils.trimFileProtocol(Directories.pictures)}/Wallpapers`
+    readonly property string wallpapersPath: Directories.wallpapersPath
     
     property var wallpapersList: []
     
@@ -44,7 +44,7 @@ Item {
     Process {
         id: scanProc
         // Use %C@ (ctime - when file was added/changed) instead of %T@ (mtime - content modification)
-        command: ["/usr/bin/fish", "-c", `find '${root.wallpapersPath}' -maxdepth 1 -type f \\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.avif' -o -iname '*.bmp' -o -iname '*.svg' \\) -printf '%C@\\t%p\\n'`]
+        command: ["find", root.wallpapersPath, "-maxdepth", "1", "-type", "f", "(", "-iname", "*.jpg", "-o", "-iname", "*.jpeg", "-o", "-iname", "*.png", "-o", "-iname", "*.webp", "-o", "-iname", "*.avif", "-o", "-iname", "*.bmp", "-o", "-iname", "*.svg", ")", "-printf", "%C@\t%p\n"]
         stdout: SplitParser {
             splitMarker: ""
             onRead: data => {
@@ -183,7 +183,7 @@ Item {
                     // Smooth scroll animation
                     Behavior on contentX {
                         enabled: Appearance.animationsEnabled
-                        NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: Appearance.animation.scroll.duration; easing.type: Appearance.animation.scroll.type; easing.bezierCurve: Appearance.animation.scroll.bezierCurve }
                     }
 
                     WheelHandler {
@@ -240,12 +240,12 @@ Item {
                                 }
                             }
 
-                            Image {
+                            ThumbnailImage {
                                 anchors.fill: parent
-                                source: wallpaperDelegate.filePath ? `file://${wallpaperDelegate.filePath}` : ""
+                                sourcePath: wallpaperDelegate.filePath
+                                generateThumbnail: true
                                 fillMode: Image.PreserveAspectCrop
-                                asynchronous: true
-                                cache: false
+                                cache: true
                                 sourceSize.width: root.itemWidth * 2
                                 sourceSize.height: root.itemHeight * 2
                             }
@@ -257,7 +257,7 @@ Item {
                                 color: wallpaperDelegate.isHovered && !wallpaperDelegate.isCurrentWallpaper
                                     ? ColorUtils.transparentize("black", 0.7)
                                     : "transparent"
-                                Behavior on color { animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+                                Behavior on color { enabled: Appearance.animationsEnabled; animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
                             }
 
                             // Check icon for selected

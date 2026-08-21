@@ -9,7 +9,7 @@
 //   1 = Notifications
 //   2+ = Widgets  (calendar / events / todo / notepad / calc / sysmon / timer)
 //
-// Fully compatible with all global styles: material, aurora, inir, angel.
+// Fully compatible with all global styles: material, aurora, inir, angel, zzz.
 
 import qs
 import qs.services
@@ -17,6 +17,7 @@ import qs.modules.common
 import qs.modules.common.models
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.pill
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -42,6 +43,8 @@ import qs.modules.sidebarRight.notepad
 import qs.modules.sidebarRight.calculator
 import qs.modules.sidebarRight.sysmon
 import qs.modules.sidebarRight.events
+import qs.modules.sidebarRight.screenTime
+import qs.modules.sidebarRight.weather
 
 Item {
     id: root
@@ -52,6 +55,8 @@ Item {
     property int screenWidth: 1920
     property int screenHeight: 1080
     property var panelScreen: null
+    property bool panelVisible: false
+    property bool geometryPreviewActive: false
 
     property bool showAudioOutputDialog: false
     property bool showAudioInputDialog: false
@@ -65,6 +70,25 @@ Item {
     property var eventsDialogEditEvent: null
     property bool reloadButtonEnabled: true
     property bool settingsButtonEnabled: true
+    readonly property real preferredContentHeight: Math.max(520,
+        root.screenHeight * SidebarGeometry.rightFitExpandedPreferredRatio)
+    readonly property real minimumUsefulHeight: Math.max(420,
+        root.screenHeight * SidebarGeometry.rightFitExpandedMinRatio)
+    readonly property real minimumUsefulWidth: 360
+    readonly property real maximumUsefulWidth: 900
+    readonly property bool compactTightHeight: height > 0 && height < 760
+    readonly property bool compactNarrowWidth: width > 0 && width < 420
+    readonly property int compactPanelPadding: Math.max(6, Math.min(sidebarPadding, Math.round(Math.min(width || sidebarWidth, height || screenHeight) * 0.018)))
+    readonly property int compactContentPadding: Math.max(6, Math.min(10, compactPanelPadding))
+    readonly property int compactRailWidth: Math.max(50, Math.min(58, Math.round((width || sidebarWidth) * 0.13)))
+    readonly property int compactRailMargin: Math.max(6, Math.min(9, Math.round(compactRailWidth * 0.15)))
+    readonly property int compactNavItemHeight: compactTightHeight ? 40 : 46
+    readonly property int compactNavBgHeight: compactTightHeight ? 34 : 38
+    readonly property int compactNavSpacing: compactTightHeight ? 2 : 4
+    readonly property int compactActionItemHeight: compactTightHeight ? 36 : 40
+    readonly property int compactActionBgHeight: compactTightHeight ? 30 : 34
+    readonly property int compactSectionSpacing: compactTightHeight ? Appearance.sizes.spacingSmall : Appearance.sizes.spacingMedium
+    readonly property int compactGridSpacing: compactNarrowWidth ? 4 : 5
     
     // Controls section order from config
     readonly property var defaultSectionOrder: ["sliders", "toggles", "devices", "media", "quickActions"]
@@ -108,10 +132,28 @@ Item {
         })
     }
 
+    function handleRequestedWidget(): void {
+        const w = GlobalStates.sidebarRightRequestedWidget
+        if (!w) return
+        const idx = root.sections.findIndex(s => s.id === w)
+        if (idx !== -1) root.activeSection = idx
+        GlobalStates.sidebarRightRequestedWidget = ""
+    }
+
+    Component.onCompleted: {
+        Notifications.ensureInitialized()
+        handleRequestedWidget()
+    }
+
+    Connections {
+        target: GlobalStates
+        function onSidebarRightRequestedWidgetChanged() {
+            root.handleRequestedWidget()
+        }
+    }
+
     // Notification count for badge
     readonly property int notificationCount: Notifications.list?.length ?? 0
-
-    Component.onCompleted: Notifications.ensureInitialized()
 
     property int configVersion: 0
     Connections {
@@ -125,40 +167,204 @@ Item {
         { id: "notifications", icon: "notifications", label: Translation.tr("Notifications") },
     ]
 
+    component CompactContentSurface: Rectangle {
+        id: surface
+
+        default property alias content: contentHolder.data
+
+        anchors.margins: root.compactContentPadding
+        radius: 0
+        color: "transparent"
+        border.width: 0
+        border.color: "transparent"
+        clip: false
+
+        Behavior on radius { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+        Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+        Behavior on border.width { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+        Behavior on border.color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+
+        Item {
+            id: contentHolder
+            anchors.fill: parent
+        }
+    }
+
     Component {
         id: calendarComponent
         Item {
             anchors.fill: parent
 
-            StyledRectangularShadow {
-                target: calendarSurface
-                visible: !bg.inirEverywhere && !bg.auroraEverywhere && !bg.angelEverywhere
-                blur: 0.35 * Appearance.sizes.elevationMargin
-            }
-
-            Rectangle {
-                id: calendarSurface
+            ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 8
-                radius: bg.angelEverywhere ? Appearance.angel.roundingNormal
-                    : bg.inirEverywhere ? Appearance.inir.roundingNormal
-                    : Appearance.rounding.normal
-                color: bg.angelEverywhere ? Appearance.angel.colGlassCard
-                    : bg.inirEverywhere ? Appearance.inir.colLayer1
-                    : bg.colDarkSurface
-                border.width: bg.angelEverywhere ? Appearance.angel.cardBorderWidth : 1
-                border.color: bg.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colCardBorder, 0.22)
-                    : bg.inirEverywhere ? Appearance.inir.colBorder
-                    : bg.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.78)
-                    : ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.72)
-                clip: true
+                anchors.margins: root.compactContentPadding
+                spacing: root.compactNavSpacing
 
-                CalendarWidget {
-                    anchors.fill: parent
-                    anchors.margins: 6
-                    onDayWithEventsClicked: (date) => {
-                        const eventsIdx = root.sections.findIndex(s => s.id === "events")
-                        if (eventsIdx !== -1) root.activeSection = eventsIdx
+                // Calendar grid card
+                Item {
+                    Layout.fillWidth: true
+                    implicitHeight: calendarSurface.implicitHeight
+
+                    StyledRectangularShadow {
+                        target: calendarSurface
+                        visible: false
+                        blur: 0.35 * Appearance.sizes.elevationMargin
+                    }
+
+                    Rectangle {
+                        id: calendarSurface
+                        anchors.fill: parent
+                        implicitHeight: calWidget.implicitHeight + 12
+                        radius: 0
+                        color: "transparent"
+                        border.width: 0
+                        Behavior on border.width {
+                            enabled: Appearance.animationsEnabled
+                            NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                        }
+                        border.color: "transparent"
+                        clip: false
+
+                        CalendarWidget {
+                            id: calWidget
+                            anchors.fill: parent
+                            anchors.margins: root.compactGridSpacing
+                            onDayWithEventsClicked: (date) => {
+                                const eventsIdx = root.sections.findIndex(s => s.id === "events")
+                                if (eventsIdx !== -1) root.activeSection = eventsIdx
+                            }
+                            onOpenEventsDialog: (editEvent) => {
+                                const eventsIdx = root.sections.findIndex(s => s.id === "events")
+                                if (eventsIdx !== -1) root.activeSection = eventsIdx
+                            }
+                        }
+                    }
+                }
+
+                // Upcoming events below the calendar
+                Item {
+                    id: upcomingArea
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    readonly property color _colText: bg.inirEverywhere ? Appearance.inir.colText
+                        : bg.angelEverywhere ? Appearance.angel.colText
+                        : Appearance.colors.colOnLayer1
+                    readonly property color _colSub: bg.inirEverywhere ? Appearance.inir.colTextSecondary
+                        : bg.angelEverywhere ? Appearance.angel.colTextSecondary
+                        : Appearance.colors.colSubtext
+                    readonly property color _colPrimary: bg.inirEverywhere ? Appearance.inir.colPrimary
+                        : bg.angelEverywhere ? Appearance.angel.colPrimary
+                        : Appearance.colors.colPrimary
+
+                    // Merged upcoming events (next 14 days)
+                    property int _eventsTrigger: 0
+                    Connections {
+                        target: Events
+                        function onEventAdded(event) { upcomingArea._eventsTrigger++ }
+                        function onEventRemoved(id) { upcomingArea._eventsTrigger++ }
+                        function onEventUpdated(event) { upcomingArea._eventsTrigger++ }
+                    }
+                    property int _externalTrigger: 0
+                    Connections {
+                        target: CalendarSync
+                        function onEventsUpdated() { upcomingArea._externalTrigger++ }
+                    }
+                    readonly property var upcomingEvents: {
+                        const _t = _eventsTrigger
+                        const _t2 = _externalTrigger
+                        const now = new Date()
+                        const local = Events.getUpcomingEvents(14).map(e => Object.assign({}, e, { _source: "local" }))
+                        const startDay = new Date(now); startDay.setHours(0,0,0,0)
+                        const ext = []
+                        for (let i = 0; i < 14; i++) {
+                            const d = new Date(startDay); d.setDate(d.getDate() + i)
+                            const dayEvts = CalendarSync.getEventsForDate(d) || []
+                            for (const e of dayEvts) {
+                                const evtTime = new Date(e.startDate || e.dateTime)
+                                if (evtTime >= now || (e.allDay && evtTime >= startDay))
+                                    ext.push(Object.assign({}, e, { _source: "external", dateTime: e.startDate || e.dateTime, category: "general", priority: "normal" }))
+                            }
+                        }
+                        const all = local.concat(ext)
+                        all.sort((a,b) => new Date(a.dateTime || a.startDate) - new Date(b.dateTime || b.startDate))
+                        return all
+                    }
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        spacing: 0
+
+                        // "Upcoming" header
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.bottomMargin: Appearance.sizes.spacingSmall
+                            spacing: root.compactGridSpacing
+
+                            MaterialSymbol {
+                                text: "event_upcoming"
+                                iconSize: 16
+                                fill: 1
+                                color: upcomingArea._colPrimary
+                            }
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr("Upcoming")
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                font.weight: Font.Medium
+                                color: upcomingArea._colText
+                            }
+                        }
+
+                        // Event list or empty hint
+                        Flickable {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            contentHeight: upcomingCol.implicitHeight
+                            clip: true
+                            boundsBehavior: Flickable.StopAtBounds
+                            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+                            ColumnLayout {
+                                id: upcomingCol
+                                width: parent.width
+                                spacing: root.compactNavSpacing
+
+                                Repeater {
+                                    model: upcomingArea.upcomingEvents.slice(0, 8)
+                                    delegate: EventCard {
+                                        required property var modelData
+                                        Layout.fillWidth: true
+                                        event: modelData
+                                        isExternal: (modelData?._source ?? "local") === "external"
+                                        onEditClicked: (evt) => {
+                                            if (!isExternal) {
+                                                root.eventsDialogEditEvent = evt
+                                                root.showEventsDialog = true
+                                            }
+                                        }
+                                        onRemoveClicked: {
+                                            if (!isExternal) Events.removeEvent(modelData.id)
+                                        }
+                                    }
+                                }
+
+                                // Empty state
+                                Item {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 60
+                                    visible: upcomingArea.upcomingEvents.length === 0
+
+                                    StyledText {
+                                        anchors.centerIn: parent
+                                        text: Translation.tr("No upcoming events")
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        color: upcomingArea._colSub
+                                        opacity: 0.7
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -171,30 +377,17 @@ Item {
 
             StyledRectangularShadow {
                 target: eventsSurface
-                visible: !bg.inirEverywhere && !bg.auroraEverywhere && !bg.angelEverywhere
+                visible: false
                 blur: 0.35 * Appearance.sizes.elevationMargin
             }
 
-            Rectangle {
+            CompactContentSurface {
                 id: eventsSurface
                 anchors.fill: parent
-                anchors.margins: 8
-                radius: bg.angelEverywhere ? Appearance.angel.roundingNormal
-                    : bg.inirEverywhere ? Appearance.inir.roundingNormal
-                    : Appearance.rounding.normal
-                color: bg.angelEverywhere ? Appearance.angel.colGlassCard
-                    : bg.inirEverywhere ? Appearance.inir.colLayer1
-                    : bg.colDarkSurface
-                border.width: bg.angelEverywhere ? Appearance.angel.cardBorderWidth : 1
-                border.color: bg.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colCardBorder, 0.22)
-                    : bg.inirEverywhere ? Appearance.inir.colBorder
-                    : bg.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.78)
-                    : ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.72)
-                clip: true
 
                 EventsWidget { 
                     anchors.fill: parent
-                    anchors.margins: 6
+                    anchors.margins: root.compactGridSpacing
                     onOpenEventsDialog: (editEvent) => {
                         root.eventsDialogEditEvent = editEvent
                         root.showEventsDialog = true
@@ -210,30 +403,17 @@ Item {
 
             StyledRectangularShadow {
                 target: todoSurface
-                visible: !bg.inirEverywhere && !bg.auroraEverywhere && !bg.angelEverywhere
+                visible: false
                 blur: 0.35 * Appearance.sizes.elevationMargin
             }
 
-            Rectangle {
+            CompactContentSurface {
                 id: todoSurface
                 anchors.fill: parent
-                anchors.margins: 8
-                radius: bg.angelEverywhere ? Appearance.angel.roundingNormal
-                    : bg.inirEverywhere ? Appearance.inir.roundingNormal
-                    : Appearance.rounding.normal
-                color: bg.angelEverywhere ? Appearance.angel.colGlassCard
-                    : bg.inirEverywhere ? Appearance.inir.colLayer1
-                    : bg.colDarkSurface
-                border.width: bg.angelEverywhere ? Appearance.angel.cardBorderWidth : 1
-                border.color: bg.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colCardBorder, 0.22)
-                    : bg.inirEverywhere ? Appearance.inir.colBorder
-                    : bg.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.78)
-                    : ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.72)
-                clip: true
 
                 TodoWidget {
                     anchors.fill: parent
-                    anchors.margins: 6
+                    anchors.margins: root.compactGridSpacing
                 }
             }
         }
@@ -245,30 +425,17 @@ Item {
 
             StyledRectangularShadow {
                 target: notepadSurface
-                visible: !bg.inirEverywhere && !bg.auroraEverywhere && !bg.angelEverywhere
+                visible: false
                 blur: 0.35 * Appearance.sizes.elevationMargin
             }
 
-            Rectangle {
+            CompactContentSurface {
                 id: notepadSurface
                 anchors.fill: parent
-                anchors.margins: 8
-                radius: bg.angelEverywhere ? Appearance.angel.roundingNormal
-                    : bg.inirEverywhere ? Appearance.inir.roundingNormal
-                    : Appearance.rounding.normal
-                color: bg.angelEverywhere ? Appearance.angel.colGlassCard
-                    : bg.inirEverywhere ? Appearance.inir.colLayer1
-                    : bg.colDarkSurface
-                border.width: bg.angelEverywhere ? Appearance.angel.cardBorderWidth : 1
-                border.color: bg.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colCardBorder, 0.22)
-                    : bg.inirEverywhere ? Appearance.inir.colBorder
-                    : bg.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.78)
-                    : ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.72)
-                clip: true
 
                 NotepadWidget {
                     anchors.fill: parent
-                    anchors.margins: 6
+                    anchors.margins: root.compactGridSpacing
                 }
             }
         }
@@ -280,32 +447,19 @@ Item {
 
             StyledRectangularShadow {
                 target: calculatorSurface
-                visible: !bg.inirEverywhere && !bg.auroraEverywhere && !bg.angelEverywhere
+                visible: false
                 blur: 0.35 * Appearance.sizes.elevationMargin
             }
 
-            Rectangle {
+            CompactContentSurface {
                 id: calculatorSurface
                 anchors.fill: parent
-                anchors.margins: 8
-                radius: bg.angelEverywhere ? Appearance.angel.roundingNormal
-                    : bg.inirEverywhere ? Appearance.inir.roundingNormal
-                    : Appearance.rounding.normal
-                color: bg.angelEverywhere ? Appearance.angel.colGlassCard
-                    : bg.inirEverywhere ? Appearance.inir.colLayer1
-                    : bg.colDarkSurface
-                border.width: bg.angelEverywhere ? Appearance.angel.cardBorderWidth : 1
-                border.color: bg.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colCardBorder, 0.22)
-                    : bg.inirEverywhere ? Appearance.inir.colBorder
-                    : bg.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.78)
-                    : ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.72)
-                clip: true
 
                 CalculatorWidget {
                     compactMode: true
                     centerContentVertically: true
                     anchors.fill: parent
-                    anchors.margins: 6
+                    anchors.margins: root.compactGridSpacing
                 }
             }
         }
@@ -317,30 +471,17 @@ Item {
 
             StyledRectangularShadow {
                 target: sysmonSurface
-                visible: !bg.inirEverywhere && !bg.auroraEverywhere && !bg.angelEverywhere
+                visible: false
                 blur: 0.35 * Appearance.sizes.elevationMargin
             }
 
-            Rectangle {
+            CompactContentSurface {
                 id: sysmonSurface
                 anchors.fill: parent
-                anchors.margins: 8
-                radius: bg.angelEverywhere ? Appearance.angel.roundingNormal
-                    : bg.inirEverywhere ? Appearance.inir.roundingNormal
-                    : Appearance.rounding.normal
-                color: bg.angelEverywhere ? Appearance.angel.colGlassCard
-                    : bg.inirEverywhere ? Appearance.inir.colLayer1
-                    : bg.colDarkSurface
-                border.width: bg.angelEverywhere ? Appearance.angel.cardBorderWidth : 1
-                border.color: bg.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colCardBorder, 0.22)
-                    : bg.inirEverywhere ? Appearance.inir.colBorder
-                    : bg.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.78)
-                    : ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.72)
-                clip: true
 
                 SysMonWidget {
                     anchors.fill: parent
-                    anchors.margins: 6
+                    anchors.margins: root.compactGridSpacing
                 }
             }
         }
@@ -352,31 +493,70 @@ Item {
 
             StyledRectangularShadow {
                 target: timerSurface
-                visible: !bg.inirEverywhere && !bg.auroraEverywhere && !bg.angelEverywhere
+                visible: false
                 blur: 0.35 * Appearance.sizes.elevationMargin
             }
 
-            Rectangle {
+            CompactContentSurface {
                 id: timerSurface
                 anchors.fill: parent
-                anchors.margins: 8
-                radius: bg.angelEverywhere ? Appearance.angel.roundingNormal
-                    : bg.inirEverywhere ? Appearance.inir.roundingNormal
-                    : Appearance.rounding.normal
-                color: bg.angelEverywhere ? Appearance.angel.colGlassCard
-                    : bg.inirEverywhere ? Appearance.inir.colLayer1
-                    : bg.colDarkSurface
-                border.width: bg.angelEverywhere ? Appearance.angel.cardBorderWidth : 1
-                border.color: bg.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colCardBorder, 0.22)
-                    : bg.inirEverywhere ? Appearance.inir.colBorder
-                    : bg.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.78)
-                    : ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.72)
-                clip: true
 
                 PomodoroWidget {
                     anchors.fill: parent
-                    anchors.margins: 6
+                    anchors.margins: root.compactGridSpacing
                     compactMode: true
+                }
+            }
+        }
+    }
+    Component {
+        id: screenTimeComponent
+        Item {
+            anchors.fill: parent
+
+            StyledRectangularShadow {
+                target: screenTimeSurface
+                visible: false
+                blur: 0.35 * Appearance.sizes.elevationMargin
+            }
+
+            CompactContentSurface {
+                id: screenTimeSurface
+                anchors.fill: parent
+
+                ScreenTimeWidget {
+                    anchors.fill: parent
+                    anchors.margins: root.compactGridSpacing
+                }
+            }
+        }
+    }
+    Component {
+        id: weatherDetailComponent
+        Item {
+            anchors.fill: parent
+
+            StyledRectangularShadow {
+                target: weatherSurface
+                visible: false
+                blur: 0.35 * Appearance.sizes.elevationMargin
+            }
+
+            CompactContentSurface {
+                id: weatherSurface
+                anchors.fill: parent
+
+                StyledFlickable {
+                    anchors.fill: parent
+                    anchors.margins: root.compactGridSpacing
+                    contentHeight: weatherDetailItem.implicitHeight
+                    clip: true
+
+                    WeatherDetailWidget {
+                        id: weatherDetailItem
+                        width: parent.width
+                        margin: root.compactGridSpacing
+                    }
                 }
             }
         }
@@ -461,13 +641,16 @@ Item {
                         elide: Text.ElideRight
                     }
 
-                    StyledText {
+                    Revealer {
+                        vertical: true
+                        reveal: chip.value !== ""
                         Layout.fillWidth: true
-                        visible: chip.value !== ""
-                        text: chip.value
-                        font.pixelSize: Appearance.font.pixelSize.smallest
-                        color: chip._colSub
-                        elide: Text.ElideRight
+                        StyledText {
+                            text: chip.value
+                            font.pixelSize: Appearance.font.pixelSize.smallest
+                            color: chip._colSub
+                            elide: Text.ElideRight
+                        }
                     }
                 }
 
@@ -479,7 +662,7 @@ Item {
                     opacity: chipMA.containsMouse ? 0.9 : 0.5
                     Behavior on opacity {
                         enabled: Appearance.animationsEnabled
-                        NumberAnimation { duration: 120 }
+                        NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                     }
                 }
             }
@@ -502,7 +685,7 @@ Item {
 
     readonly property var widgetSections: {
         root.configVersion // Force dependency
-        const enabled = Config.options?.sidebar?.right?.enabledWidgets ?? ["calendar", "todo", "notepad", "calculator", "sysmon", "timer"]
+        const enabled = Config.options?.sidebar?.right?.enabledWidgets ?? ["calendar", "todo", "notepad", "calculator", "sysmon", "weather", "timer"]
         const all = [
             {id: "calendar",   icon: "calendar_month", label: Translation.tr("Calendar"),   component: calendarComponent},
             {id: "events",     icon: "event_upcoming", label: Translation.tr("Events"),     component: eventsComponent},
@@ -510,9 +693,15 @@ Item {
             {id: "notepad",    icon: "edit_note",     label: Translation.tr("Notepad"),    component: notepadComponent},
             {id: "calculator", icon: "calculate",     label: Translation.tr("Calc"),       component: calculatorComponent},
             {id: "sysmon",     icon: "monitor_heart", label: Translation.tr("System"),     component: sysmonComponent},
+            {id: "weather",    icon: "light_mode", label: Translation.tr("Weather"), component: weatherDetailComponent},
             {id: "timer",      icon: "schedule",      label: Translation.tr("Timer"),      component: timerComponent},
+            {id: "screentime", icon: "av_timer",      label: Translation.tr("Screen Time"), component: screenTimeComponent},
         ]
-        return all.filter(w => enabled.includes(w.id))
+        return all.filter(w => {
+            if (w.id === "screentime" && !(Config.options?.sidebar?.screenTime?.enable ?? false))
+                return false
+            return enabled.includes(w.id)
+        })
     }
 
     readonly property var sections: baseSections.concat(widgetSections)
@@ -535,14 +724,16 @@ Item {
         function onRequestWifiDialogChanged() {
             if (GlobalStates.requestWifiDialog) {
                 GlobalStates.requestWifiDialog = false
-                if (!GlobalStates.sidebarRightOpen) GlobalStates.sidebarRightOpen = true
+                if (!GlobalStates.sidebarRightOpen)
+                    GlobalStates.openSidebarRight(GlobalStates.sidebarLeftTargetOutput)
                 root.showWifiDialog = true
             }
         }
         function onRequestBluetoothDialogChanged() {
             if (GlobalStates.requestBluetoothDialog) {
                 GlobalStates.requestBluetoothDialog = false
-                if (!GlobalStates.sidebarRightOpen) GlobalStates.sidebarRightOpen = true
+                if (!GlobalStates.sidebarRightOpen)
+                    GlobalStates.openSidebarRight(GlobalStates.sidebarLeftTargetOutput)
                 root.showBluetoothDialog = true
             }
         }
@@ -553,7 +744,16 @@ Item {
     // ─────────────────────────────────────────────────────────────
     StyledRectangularShadow {
         target: bg
-        visible: !Appearance.inirEverywhere && !Appearance.gameModeMinimal
+        visible: bg.angelEverywhere && !Appearance.gameModeMinimal
+    }
+
+    ZzzPlate {
+        anchors.fill: bg
+        visible: bg.zzzEverywhere && !Appearance.gameModeMinimal
+        fillColor: Appearance.zzz.chrome
+        strokeColor: Appearance.zzz.hairline
+        strokeWidth: Appearance.zzz.hairlineThick
+        chamfer: Appearance.zzz.cutCorner
     }
 
     Rectangle {
@@ -561,10 +761,16 @@ Item {
         anchors.fill: parent
 
         property bool cardStyle: Config.options?.sidebar?.cardStyle ?? false
-        readonly property bool angelEverywhere:  Appearance.angelEverywhere
-        readonly property bool auroraEverywhere: Appearance.auroraEverywhere
-        readonly property bool inirEverywhere:   Appearance.inirEverywhere
-        readonly property bool gameModeMinimal:  Appearance.gameModeMinimal
+        // Resolve one owner for the complete surface. Explicit Ricelin islands
+        // override the global worldview; otherwise the selected global style owns it.
+        readonly property string surfaceDialect: Appearance.surfaceDialectFor(
+            (Config.options?.sidebar?.style ?? "panel") === "island" ? "island" : "")
+        readonly property bool islandStyle: surfaceDialect === "island"
+        readonly property bool zzzEverywhere: surfaceDialect === "zzz"
+        readonly property bool angelEverywhere: surfaceDialect === "angel"
+        readonly property bool auroraEverywhere: surfaceDialect === "aurora" || angelEverywhere
+        readonly property bool inirEverywhere: surfaceDialect === "inir"
+        readonly property bool gameModeMinimal: Appearance.gameModeMinimal
 
         readonly property string wallpaperUrl: {
             const _d1 = WallpaperListener.multiMonitorEnabled
@@ -572,20 +778,26 @@ Item {
             const _d3 = Wallpapers.effectiveWallpaperUrl
             return WallpaperListener.wallpaperUrlForScreen(root.panelScreen)
         }
+        readonly property bool useWallpaperBackdrop: root.panelVisible
+            && auroraEverywhere
+            && !inirEverywhere
+            && !gameModeMinimal
+            && wallpaperUrl.length > 0
 
         ColorQuantizer {
             id: bgQuant
-            source: (Appearance.auroraEverywhere || Appearance.angelEverywhere) ? bg.wallpaperUrl : ""
+            source: bg.auroraEverywhere ? bg.wallpaperUrl : ""
             depth: 0
             rescaleSize: 10
         }
         readonly property color wallpaperDominantColor: bgQuant?.colors?.[0] ?? Appearance.colors.colPrimary
         readonly property QtObject blendedColors: AdaptedMaterialScheme {
             color: ColorUtils.mix(bg.wallpaperDominantColor, Appearance.colors.colPrimaryContainer, 0.8)
-                   || Appearance.m3colors.m3secondaryContainer
+                   || Appearance.colors.colSecondaryContainer
         }
         readonly property color colDarkSurface: angelEverywhere
             ? ColorUtils.transparentize(Appearance.angel.colGlassCard, 0.76)
+            : zzzEverywhere ? Appearance.zzz.tile
             : inirEverywhere ? ColorUtils.transparentize(Appearance.inir.colLayer1, 0.22)
             : auroraEverywhere ? ColorUtils.transparentize(
                 (blendedColors?.colLayer0 ?? Appearance.colors.colLayer0Base),
@@ -594,6 +806,7 @@ Item {
             : ColorUtils.transparentize(Appearance.colors.colLayer1, 0.22)
         readonly property color colDarkSurfaceHover: angelEverywhere
             ? Appearance.angel.colGlassCardHover
+            : zzzEverywhere ? Appearance.zzz.paperAlt
             : inirEverywhere ? Appearance.inir.colLayer2Hover
             : auroraEverywhere ? ColorUtils.transparentize(
                 (blendedColors?.colLayer1 ?? Appearance.colors.colLayer1),
@@ -602,6 +815,7 @@ Item {
             : ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 0.20)
         readonly property color colDarkSurfaceActive: angelEverywhere
             ? Appearance.angel.colGlassCardActive
+            : zzzEverywhere ? Appearance.zzz.bg3
             : inirEverywhere ? Appearance.inir.colLayer2Active
             : auroraEverywhere ? ColorUtils.transparentize(
                 (blendedColors?.colLayer1 ?? Appearance.colors.colLayer1),
@@ -609,27 +823,55 @@ Item {
             )
             : ColorUtils.transparentize(Appearance.colors.colLayer1Active, 0.18)
 
-        color: gameModeMinimal  ? "transparent"
+        color: (gameModeMinimal || islandStyle) ? "transparent"
+             : zzzEverywhere ? "transparent"
              : inirEverywhere   ? (cardStyle ? Appearance.inir.colLayer1 : Appearance.inir.colLayer0)
              : auroraEverywhere ? ColorUtils.applyAlpha((blendedColors?.colLayer0 ?? Appearance.colors.colLayer0), 1)
              : (cardStyle ? Appearance.colors.colLayer1 : Appearance.colors.colLayer0)
 
-        border.width: gameModeMinimal ? 0 : (angelEverywhere ? Appearance.angel.panelBorderWidth : 1)
-        border.color: angelEverywhere  ? Appearance.angel.colPanelBorder
+        border.width: (gameModeMinimal || islandStyle) ? 0 : (zzzEverywhere ? 0 : (angelEverywhere ? Appearance.angel.panelBorderWidth : 1))
+        Behavior on border.width {
+            enabled: Appearance.animationsEnabled
+            NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+        }
+        border.color: zzzEverywhere ? Appearance.zzz.hairline
+                    : angelEverywhere  ? Appearance.angel.colPanelBorder
                     : inirEverywhere   ? Appearance.inir.colBorder
                     : Appearance.colors.colLayer0Border
+        Behavior on border.color {
+            enabled: Appearance.animationsEnabled
+            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+        }
 
-        radius: angelEverywhere  ? Appearance.angel.roundingNormal
+        radius: zzzEverywhere ? Appearance.zzz.panelRadius
+              : angelEverywhere  ? Appearance.angel.roundingNormal
               : inirEverywhere   ? (cardStyle ? Appearance.inir.roundingLarge : Appearance.inir.roundingNormal)
               : cardStyle        ? Appearance.rounding.normal
               : (Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1)
+        Behavior on radius {
+            enabled: Appearance.animationsEnabled
+            NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+        }
         clip: true
 
-        layer.enabled: !gameModeMinimal
+        layer.enabled: root.panelVisible && !gameModeMinimal
         layer.effect: GE.OpacityMask {
             maskSource: Rectangle {
                 width: bg.width; height: bg.height; radius: bg.radius
             }
+        }
+
+        // Ricelin island face. Angel alone keeps the outer stepped shadow.
+        IslandPanel {
+            anchors.fill: parent
+            visible: bg.islandStyle && !bg.gameModeMinimal
+            radius: bg.radius
+            shadow: false
+            glassEnabled: true
+            glassScreenX: root.screenWidth - bg.width - Appearance.sizes.hyprlandGapsOut
+            glassScreenY: Appearance.sizes.hyprlandGapsOut
+            glassScreenWidth: root.screenWidth ?? 1920
+            glassScreenHeight: root.screenHeight ?? 1080
         }
 
         // Aurora blurred wallpaper
@@ -639,13 +881,14 @@ Item {
             y: -Appearance.sizes.hyprlandGapsOut
             width:  root.screenWidth  ?? 1920
             height: root.screenHeight ?? 1080
-            visible: bg.auroraEverywhere && !bg.inirEverywhere && !bg.gameModeMinimal
-            source: bg.wallpaperUrl
+            visible: bg.useWallpaperBackdrop
+            source: bg.useWallpaperBackdrop ? bg.wallpaperUrl : ""
             fillMode: Image.PreserveAspectCrop
             cache: true; asynchronous: true
             sourceSize.width: root.screenWidth ?? 1920
             sourceSize.height: root.screenHeight ?? 1080
-            layer.enabled: Appearance.effectsEnabled && bg.auroraEverywhere && !bg.inirEverywhere
+            // OPTIMIZATION: Release FBO when sidebar is hidden (saves ~16 MiB VRAM)
+            layer.enabled: Appearance.effectsEnabled && bg.useWallpaperBackdrop && root.panelVisible
             layer.effect: MultiEffect {
                 source: bgBlurWallpaper
                 anchors.fill: source
@@ -653,7 +896,7 @@ Item {
                     ? (Appearance.angel.blurSaturation * Appearance.angel.colorStrength)
                     : (Appearance.effectsEnabled ? 0.2 : 0)
                 blurEnabled: Appearance.effectsEnabled
-                blurMax: 100
+                blurMax: 64
                 blur: Appearance.effectsEnabled
                     ? (bg.angelEverywhere ? Appearance.angel.blurIntensity : 1) : 0
             }
@@ -676,24 +919,85 @@ Item {
             z: 10
         }
 
-        AngelPartialBorder { targetRadius: bg.radius; z: 10 }
+        AngelPartialBorder { visible: bg.angelEverywhere; targetRadius: bg.radius; z: 10 }
+
+        ZzzPanelBackdrop {
+            anchors.fill: parent
+            visible: bg.zzzEverywhere && opacity > 0
+            label: "SYSTEM"
+            index: "RC"
+            ghostText: "RIGHT"
+            accentColor: Appearance.zzz.accent
+            showTicks: false
+            showBurst: false
+            showGrid: true
+            horizontalBias: 0.10
+            verticalBias: 0.16
+            ghostWidthFactor: 0.6
+            ghostStrength: 0.55
+            z: 0
+        }
 
         // ─────────────────────────────────────────────────────────
         // Two-column layout
         // ─────────────────────────────────────────────────────────
-        RowLayout {
+        ColumnLayout {
             anchors.fill: parent
-            spacing: 0
+            anchors.margins: root.compactPanelPadding
+            anchors.topMargin: bg.angelEverywhere ? root.compactPanelPadding + 4
+                : bg.inirEverywhere ? root.compactPanelPadding + 6 : root.compactPanelPadding
+            spacing: bg.angelEverywhere ? root.compactPanelPadding + 2
+                : bg.inirEverywhere ? root.compactPanelPadding + 4 : root.compactPanelPadding
+
+            Rectangle {
+                id: compactSurface
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                radius: bg.zzzEverywhere ? Appearance.zzz.controlRadius
+                    : bg.angelEverywhere ? Appearance.angel.roundingNormal
+                    : bg.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
+                Behavior on radius {
+                    enabled: Appearance.animationsEnabled
+                    NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                }
+                // Compact mode sits directly on the panel background (no wrapper card),
+                // matching the normal SidebarRightContent layout.
+                color: "transparent"
+                Behavior on color {
+                    enabled: Appearance.animationsEnabled
+                    ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                }
+                border.width: 0
+                Behavior on border.width {
+                    enabled: Appearance.animationsEnabled
+                    NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                }
+                border.color: "transparent"
+                Behavior on border.color {
+                    enabled: Appearance.animationsEnabled
+                    ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                }
+                clip: true
+
+                layer.enabled: root.panelVisible && !bg.gameModeMinimal
+                layer.effect: GE.OpacityMask {
+                    maskSource: Rectangle {
+                        width: compactSurface.width
+                        height: compactSurface.height
+                        radius: compactSurface.radius
+                    }
+                }
+
+                RowLayout {
+                    anchors.fill: parent
+                    spacing: 0
 
             // ── LEFT RAIL ─────────────────────────────────────────
             Rectangle {
                 id: leftRail
                 Layout.fillHeight: true
-                Layout.preferredWidth: 56
-                color: bg.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colGlassCard, 0.82)
-                    : bg.inirEverywhere ? ColorUtils.transparentize(Appearance.inir.colLayer1, 0.40)
-                    : bg.auroraEverywhere ? ColorUtils.transparentize((bg.blendedColors?.colLayer0 ?? Appearance.colors.colLayer0Base), 0.60)
-                    : ColorUtils.transparentize(Appearance.colors.colLayer1, 0.72)
+                Layout.preferredWidth: root.compactRailWidth
+                color: "transparent"
 
                 // Thin separator on right edge
                 Rectangle {
@@ -701,7 +1005,8 @@ Item {
                         top: parent.top; bottom: parent.bottom; right: parent.right
                         topMargin: bg.radius; bottomMargin: bg.radius
                     }
-                    width: 1
+                    width: 0
+                    visible: false
                     color: bg.angelEverywhere  ? ColorUtils.transparentize(Appearance.angel.colCardBorder,  0.62)
                          : bg.inirEverywhere   ? ColorUtils.transparentize(Appearance.inir.colBorder, 0.45)
                          : bg.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.78)
@@ -712,13 +1017,13 @@ Item {
                 Rectangle {
                     id: navIndicator
                     // Layout constants — must match ColumnLayout margins and nav item dimensions
-                    readonly property int colTop: 12
-                    readonly property int colLeft: 4
-                    readonly property int colRight: 5
-                    readonly property int navBgLeft: 7
-                    readonly property int navItemH: 46
-                    readonly property int navBgH: 38
-                    readonly property int navSpacing: 4
+                    readonly property int colTop: root.compactContentPadding
+                    readonly property int colLeft: root.compactRailMargin
+                    readonly property int colRight: root.compactRailMargin
+                    readonly property int navBgLeft: 0
+                    readonly property int navItemH: root.compactNavItemHeight
+                    readonly property int navBgH: root.compactNavBgHeight
+                    readonly property int navSpacing: root.compactNavSpacing
                     readonly property int clampedIdx: Math.max(0, Math.min(root.activeSection, root.sections.length - 1))
 
                     x: colLeft + navBgLeft
@@ -728,24 +1033,20 @@ Item {
                     radius: bg.angelEverywhere ? Appearance.angel.roundingSmall
                           : bg.inirEverywhere  ? Appearance.inir.roundingSmall
                           : Appearance.rounding.small
-                    color: bg.inirEverywhere  ? Appearance.inir.colSecondaryContainer
-                         : bg.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colPrimary, 0.60)
-                         : bg.auroraEverywhere ? bg.colDarkSurfaceHover
-                         : ColorUtils.transparentize(Appearance.colors.colSecondaryContainer, 0.20)
-                    border.width: 1
-                    border.color: bg.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colCardBorder, 0.38)
-                        : bg.inirEverywhere ? ColorUtils.transparentize(Appearance.inir.colBorder, 0.36)
-                        : bg.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.72)
-                        : ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.66)
+                    // Bgless doctrine: the selected category is signalled by the colored
+                    // material symbol + left accent pill (navPill), not a tenuous plate.
+                    color: "transparent"
+                    border.width: 0
                     visible: root.activeSection >= 0 && root.activeSection < root.sections.length
 
                     Behavior on y {
+                        enabled: Appearance.animationsEnabled
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration * 1.5
                             easing.type: Easing.OutCubic
                         }
                     }
-                    Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+                    Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
                 }
 
                 // ── Sliding active pill on left edge ──
@@ -755,13 +1056,17 @@ Item {
                     y: navIndicator.colTop + navIndicator.clampedIdx * (navIndicator.navItemH + navIndicator.navSpacing) + (navIndicator.navItemH - height) / 2
                     width: 3
                     height: 26
-                    radius: 2
-                    color: bg.inirEverywhere  ? Appearance.inir.colPrimary
+                    color: bg.zzzEverywhere   ? Appearance.zzz.accent
+                         : bg.inirEverywhere  ? Appearance.inir.colPrimary
                          : bg.angelEverywhere ? Appearance.angel.colPrimary
                          : Appearance.colors.colPrimary
-                    visible: navIndicator.visible
+                    radius: bg.zzzEverywhere ? 0 : 2
+                    visible: root.activeSection >= 0 && root.activeSection < root.sections.length
+                    Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+                    Behavior on radius { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve } }
 
                     Behavior on y {
+                        enabled: Appearance.animationsEnabled
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration * 1.5
                             easing.type: Easing.OutCubic
@@ -783,10 +1088,10 @@ Item {
                 ColumnLayout {
                     anchors {
                         fill: parent
-                        topMargin: 12; bottomMargin: 12
-                        leftMargin: 4; rightMargin: 5
+                        topMargin: root.compactContentPadding; bottomMargin: root.compactContentPadding
+                        leftMargin: root.compactRailMargin; rightMargin: root.compactRailMargin
                     }
-                    spacing: 4
+                    spacing: root.compactNavSpacing
 
                     // ── Section navigation buttons ──────────────
                     Repeater {
@@ -797,7 +1102,7 @@ Item {
                             required property var modelData
 
                             Layout.fillWidth: true
-                            implicitHeight: 46
+                            implicitHeight: root.compactNavItemHeight
 
                             readonly property bool isActive: root.activeSection === navItem.index
                             readonly property bool isNotifications: navItem.modelData.id === "notifications"
@@ -808,51 +1113,51 @@ Item {
                                 anchors {
                                     left: parent.left; right: parent.right
                                     verticalCenter: parent.verticalCenter
-                                    leftMargin: 7
                                 }
-                                height: 38
+                                height: root.compactNavBgHeight
                                 radius: bg.angelEverywhere ? Appearance.angel.roundingSmall
                                       : bg.inirEverywhere  ? Appearance.inir.roundingSmall
                                       : Appearance.rounding.small
 
-                                color: {
-                                    if (navMA.containsPress)
-                                        return bg.inirEverywhere  ? Appearance.inir.colLayer2Active
-                                             : bg.angelEverywhere ? Appearance.angel.colGlassCardActive
-                                             : Appearance.colors.colLayer1Active
-                                    if (navMA.containsMouse)
-                                        return bg.inirEverywhere  ? Appearance.inir.colLayer2Hover
-                                             : bg.angelEverywhere ? Appearance.angel.colGlassCardHover
-                                             : Appearance.colors.colLayer1Hover
-                                    return "transparent"
-                                }
-                                border.width: (navMA.containsMouse || navItem.isActive) ? 1 : 0
-                                border.color: bg.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colCardBorder, 0.42)
-                                    : bg.inirEverywhere ? ColorUtils.transparentize(Appearance.inir.colBorder, 0.34)
-                                    : bg.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.74)
-                                    : ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.68)
-                                Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+                                // Bgless doctrine: no plate at rest, hover or press.
+                                // Feedback lives in the icon colour/weight + accent pill.
+                                color: "transparent"
+                                border.width: 0
 
                                 MaterialSymbol {
                                     anchors.centerIn: parent
                                     iconSize: 24
                                     fill: navItem.isActive ? 1 : 0
+                                    animateFill: true
                                     font.weight: (navItem.isActive || navMA.containsMouse) ? Font.DemiBold : Font.Normal
                                     text: navItem.modelData.icon
+                                    // Bgless: active icon carries the accent itself (no plate behind)
                                     color: navItem.isActive
-                                        ? (bg.inirEverywhere  ? Appearance.inir.colOnSecondaryContainer
-                                         : bg.angelEverywhere ? Appearance.angel.colOnPrimary
-                                         : Appearance.m3colors.m3onSecondaryContainer)
-                                        : (bg.inirEverywhere  ? Appearance.inir.colTextSecondary
-                                         : bg.angelEverywhere ? Appearance.angel.colTextSecondary
-                                         : Appearance.colors.colOnLayer1)
-                                    Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+                                        ? (bg.zzzEverywhere   ? Appearance.zzz.accent
+                                         : bg.inirEverywhere  ? Appearance.inir.colPrimary
+                                         : bg.angelEverywhere ? Appearance.angel.colPrimary
+                                         : Appearance.colors.colPrimary)
+                                        : (navMA.containsMouse
+                                         ? (bg.zzzEverywhere  ? Appearance.zzz.ink
+                                          : bg.inirEverywhere ? Appearance.inir.colText
+                                          : bg.angelEverywhere ? Appearance.angel.colText
+                                          : Appearance.colors.colOnLayer1)
+                                         : (bg.zzzEverywhere  ? Appearance.zzz.inkMuted
+                                          : bg.inirEverywhere ? Appearance.inir.colTextSecondary
+                                          : bg.angelEverywhere ? Appearance.angel.colTextSecondary
+                                          : Appearance.colors.colOnLayer1))
+                                    Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
                                 }
 
                                 // ── Notification badge ──────────
                                 Rectangle {
                                     id: notifBadge
-                                    visible: navItem.isNotifications && root.notificationCount > 0 && !navItem.isActive
+                                    visible: opacity > 0
+                                    opacity: (navItem.isNotifications && root.notificationCount > 0 && !navItem.isActive) ? 1 : 0
+                                    Behavior on opacity {
+                                        enabled: Appearance.animationsEnabled
+                                        NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                                    }
                                     anchors {
                                         top: parent.top
                                         right: parent.right
@@ -881,6 +1186,7 @@ Item {
                                     // Subtle entrance animation
                                     scale: visible ? 1.0 : 0.0
                                     Behavior on scale {
+                                        enabled: Appearance.animationsEnabled
                                         NumberAnimation {
                                             duration: Appearance.animation.elementMoveFast.duration
                                             easing.type: Easing.OutBack
@@ -915,6 +1221,7 @@ Item {
                         Layout.leftMargin: 10
                         Layout.rightMargin: 4
                         height: 1
+                        visible: false
                         color: bg.angelEverywhere  ? ColorUtils.transparentize(Appearance.angel.colCardBorder, 0.68)
                              : bg.inirEverywhere   ? ColorUtils.transparentize(Appearance.inir.colBorder, 0.5)
                              : bg.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.80)
@@ -936,36 +1243,31 @@ Item {
                             required property int index
                             required property var modelData
                             Layout.fillWidth: true
-                            implicitHeight: 40
+                            implicitHeight: root.compactActionItemHeight
 
                             Rectangle {
                                 id: sysActBg
                                 anchors {
                                     left: parent.left; right: parent.right
                                     verticalCenter: parent.verticalCenter
-                                    leftMargin: 7
                                 }
-                                height: 34
+                                height: root.compactActionBgHeight
                                 radius: bg.angelEverywhere ? Appearance.angel.roundingSmall
                                       : bg.inirEverywhere  ? Appearance.inir.roundingSmall
                                       : Appearance.rounding.small
                                 color: {
                                     if (sysMA.containsPress)
-                                        return bg.inirEverywhere  ? Appearance.inir.colLayer2Active
-                                             : bg.angelEverywhere ? Appearance.angel.colGlassCardActive
-                                             : Appearance.colors.colLayer1Active
+                                        return bg.colDarkSurfaceActive
                                     if (sysMA.containsMouse)
-                                        return bg.inirEverywhere  ? Appearance.inir.colLayer2Hover
-                                             : bg.angelEverywhere ? Appearance.angel.colGlassCardHover
-                                             : Appearance.colors.colLayer1Hover
+                                        return bg.colDarkSurfaceHover
                                     return "transparent"
                                 }
-                                border.width: sysMA.containsMouse ? 1 : 0
+                                border.width: 0
                                 border.color: bg.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colCardBorder, 0.46)
                                     : bg.inirEverywhere ? ColorUtils.transparentize(Appearance.inir.colBorder, 0.36)
                                     : bg.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.75)
                                     : ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.70)
-                                Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+                                Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
 
                                 MaterialSymbol {
                                     anchors.centerIn: parent
@@ -994,34 +1296,29 @@ Item {
                     // ── Layout toggle ────────────────────────────
                     Item {
                         Layout.fillWidth: true
-                        implicitHeight: 40
+                        implicitHeight: root.compactActionItemHeight
                         Rectangle {
                             anchors {
                                 left: parent.left; right: parent.right
                                 verticalCenter: parent.verticalCenter
-                                leftMargin: 7
                             }
-                            height: 34
+                            height: root.compactActionBgHeight
                             radius: bg.angelEverywhere ? Appearance.angel.roundingSmall
                                   : bg.inirEverywhere  ? Appearance.inir.roundingSmall
                                   : Appearance.rounding.small
                             color: {
                                 if (layoutMA.containsPress)
-                                    return bg.inirEverywhere  ? Appearance.inir.colLayer2Active
-                                         : bg.angelEverywhere ? Appearance.angel.colGlassCardActive
-                                         : Appearance.colors.colLayer1Active
+                                    return bg.colDarkSurfaceActive
                                 if (layoutMA.containsMouse)
-                                    return bg.inirEverywhere  ? Appearance.inir.colLayer2Hover
-                                         : bg.angelEverywhere ? Appearance.angel.colGlassCardHover
-                                         : Appearance.colors.colLayer1Hover
+                                    return bg.colDarkSurfaceHover
                                 return "transparent"
                             }
-                            border.width: layoutMA.containsMouse ? 1 : 0
+                            border.width: 0
                             border.color: bg.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colCardBorder, 0.46)
                                 : bg.inirEverywhere ? ColorUtils.transparentize(Appearance.inir.colBorder, 0.36)
                                 : bg.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.75)
                                 : ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.70)
-                            Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+                            Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
 
                             MaterialSymbol {
                                 anchors.centerIn: parent
@@ -1073,6 +1370,7 @@ Item {
                         opacity: isCurrent ? 1 : 0
                         visible: opacity > 0
                         Behavior on opacity {
+                            enabled: Appearance.animationsEnabled
                             NumberAnimation {
                                 duration: Appearance.animation.elementMoveFast.duration
                                 easing.type: Easing.OutCubic
@@ -1112,7 +1410,9 @@ Item {
                     }
                 }
             } // contentArea
-        } // RowLayout (two columns)
+                } // RowLayout (two columns)
+            }
+        }
     } // bg Rectangle
 
     // ── Section content components ────────────────────────────────
@@ -1120,14 +1420,20 @@ Item {
     Component {
         id: controlsSectionComponent
         Item {
+            id: controlsRoot
+            readonly property int controlsAreaPadding: Math.max(root.compactGridSpacing, Math.min(root.compactContentPadding, Math.round(Math.min(width || root.width, height || root.height) * 0.018)))
+            readonly property int controlsGap: Math.max(root.compactNavSpacing, Math.min(root.compactSectionSpacing, Math.round((height || root.height) * (root.compactTightHeight ? 0.006 : 0.009))))
+            readonly property int controlsInnerPadding: Math.max(3, Math.round(controlsAreaPadding / 2))
+            readonly property int controlsInlineGap: Math.max(root.compactGridSpacing, Math.round(controlsGap * 0.8))
+
             // Scrollable content for Controls section
             Flickable {
                 id: controlsFlickable
                 anchors.fill: parent
-                anchors.topMargin: 8
-                anchors.bottomMargin: 8
-                anchors.leftMargin: 8
-                anchors.rightMargin: 10
+                anchors.topMargin: controlsRoot.controlsAreaPadding
+                anchors.bottomMargin: controlsRoot.controlsAreaPadding
+                anchors.leftMargin: controlsRoot.controlsAreaPadding
+                anchors.rightMargin: controlsRoot.controlsAreaPadding
                 contentWidth: controlsColumn.width
                 contentHeight: controlsColumn.implicitHeight
                 clip: true
@@ -1141,8 +1447,8 @@ Item {
 
                 ColumnLayout {
                     id: controlsColumn
-                    width: controlsFlickable.width - ((controlsVScroll.visible ? controlsVScroll.width : 0) + 6)
-                    spacing: Appearance.sizes.spacingSmall
+                    width: controlsFlickable.width - (controlsVScroll.visible ? controlsVScroll.width + controlsRoot.controlsInlineGap : 0)
+                    spacing: controlsRoot.controlsGap
 
                     // Section header
                     SectionHeader {
@@ -1173,13 +1479,18 @@ Item {
                             required property int index
                             
                             Layout.fillWidth: true
-                            spacing: 4
+                            Layout.topMargin: sectionDelegate.index > 0 ? controlsRoot.controlsInlineGap : 0
+                            spacing: controlsRoot.controlsInlineGap
                             
                             // Move buttons (visible in edit mode)
-                            RowLayout {
+                            Revealer {
+                                vertical: true
+                                reveal: root.layoutEditMode
                                 Layout.fillWidth: true
-                                visible: root.layoutEditMode
-                                spacing: 4
+                            RowLayout {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                spacing: controlsRoot.controlsInlineGap
                                 
                                 StyledText {
                                     Layout.fillWidth: true
@@ -1228,13 +1539,19 @@ Item {
                                     StyledToolTip { text: Translation.tr("Move down") }
                                 }
                             }
+                            }
                             
                             // Section content based on modelData
                             Loader {
                                 Layout.fillWidth: true
                                 active: sectionDelegate.modelData === "sliders"
                                 visible: active && (Config.options?.sidebar?.quickSliders?.enable && (Config.options?.sidebar?.quickSliders?.showMic || Config.options?.sidebar?.quickSliders?.showVolume || Config.options?.sidebar?.quickSliders?.showBrightness))
-                                sourceComponent: QuickSliders {}
+                                sourceComponent: QuickSliders {
+                                    verticalPadding: controlsRoot.controlsInnerPadding
+                                    horizontalPadding: controlsRoot.controlsAreaPadding
+                                    sliderSpacing: controlsRoot.controlsGap
+                                    compactSurface: true
+                                }
                             }
                             
                             Loader {
@@ -1242,7 +1559,7 @@ Item {
                                 active: sectionDelegate.modelData === "toggles"
                                 visible: active
                                 sourceComponent: ColumnLayout {
-                                    spacing: 4
+                                    spacing: controlsRoot.controlsInlineGap
                                     
                                     // ControlsCard
                                     Item {
@@ -1252,18 +1569,17 @@ Item {
                                         Rectangle {
                                             id: ccSurface
                                             anchors.fill: parent
-                                            implicitHeight: ccCard.implicitHeight + 10
-                                            radius: bg.angelEverywhere ? Appearance.angel.roundingNormal : bg.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
-                                            color: bg.angelEverywhere ? Appearance.angel.colGlassCard
-                                                : bg.inirEverywhere ? Appearance.inir.colLayer1
-                                                : "transparent"
-                                            border.width: bg.angelEverywhere ? Appearance.angel.cardBorderWidth
-                                                : bg.inirEverywhere ? 1 : 0
-                                            border.color: bg.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colCardBorder, 0.22)
-                                                : bg.inirEverywhere ? Appearance.inir.colBorder
-                                                : "transparent"
-                                            ControlsCard { id: ccCard; anchors.fill: parent; anchors.margins: 4 }
-                                            AngelPartialBorder { targetRadius: ccSurface.radius }
+                                            implicitHeight: ccCard.implicitHeight + controlsRoot.controlsAreaPadding
+                                            radius: 0
+                                            color: "transparent"
+                                            border.width: 0
+                                            Behavior on border.width {
+                                                enabled: Appearance.animationsEnabled
+                                                NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                                            }
+                                            border.color: "transparent"
+                                            ControlsCard { id: ccCard; anchors.fill: parent; anchors.margins: controlsRoot.controlsInnerPadding }
+                                            AngelPartialBorder { targetRadius: ccSurface.radius; visible: false }
                                         }
                                     }
                                     
@@ -1271,9 +1587,13 @@ Item {
                                     Loader {
                                         id: compactClassicQuickPanelLoader
                                         Layout.fillWidth: true
-                                        Layout.leftMargin: 2; Layout.rightMargin: 8
+                                        Layout.leftMargin: 0; Layout.rightMargin: 0
                                         active: (Config.options?.sidebar?.quickToggles?.style ?? "classic") === "classic"
-                                        sourceComponent: ClassicQuickPanel { compactMode: true }
+                                        sourceComponent: ClassicQuickPanel {
+                                            compactMode: true
+                                            compactItemSlotWidth: Math.max(44, Math.min(50, Math.round(controlsFlickable.width / 7)))
+                                            compactSpacing: controlsRoot.controlsInlineGap
+                                        }
                                         Connections {
                                             target: compactClassicQuickPanelLoader.item
                                             ignoreUnknownSignals: true
@@ -1288,7 +1608,7 @@ Item {
                                     Loader {
                                         id: compactAndroidQuickPanelLoader
                                         Layout.fillWidth: true
-                                        Layout.leftMargin: 2; Layout.rightMargin: 2
+                                        Layout.leftMargin: 0; Layout.rightMargin: 0
                                         active: (Config.options?.sidebar?.quickToggles?.style ?? "classic") === "android"
                                         sourceComponent: AndroidQuickPanel { editMode: root.editMode }
                                         Connections {
@@ -1310,14 +1630,14 @@ Item {
                                 active: sectionDelegate.modelData === "devices"
                                 visible: active
                                 sourceComponent: ColumnLayout {
-                                    spacing: 6
-                                    SectionDivider { text: Translation.tr("Devices"); visible: !root.layoutEditMode }
+                                    spacing: controlsRoot.controlsInlineGap
+                                    SectionDivider { text: Translation.tr("Devices"); visible: false }
 
                                     GridLayout {
                                         Layout.fillWidth: true
                                         columns: 2
-                                        columnSpacing: 5
-                                        rowSpacing: 5
+                                        columnSpacing: controlsRoot.controlsInlineGap
+                                        rowSpacing: controlsRoot.controlsInlineGap
 
                                         ControlChipButton { Layout.fillWidth: true; chipIcon: "media_output"; chipLabel: Translation.tr("Output"); value: Audio.sink?.description ?? ""; onClicked: root.showAudioOutputDialog = true }
                                         ControlChipButton { Layout.fillWidth: true; chipIcon: "mic_external_on"; chipLabel: Translation.tr("Input"); value: Audio.source?.description ?? ""; onClicked: root.showAudioInputDialog = true }
@@ -1332,8 +1652,8 @@ Item {
                                 active: sectionDelegate.modelData === "media"
                                 visible: active
                                 sourceComponent: ColumnLayout {
-                                    spacing: 8
-                                    SectionDivider { text: Translation.tr("Media"); visible: !root.layoutEditMode }
+                                    spacing: controlsRoot.controlsInlineGap
+                                    SectionDivider { text: Translation.tr("Media"); visible: false }
 
                                     CompactMediaPlayer {
                                         Layout.fillWidth: true
@@ -1360,9 +1680,9 @@ Item {
             ColumnLayout {
                 anchors {
                     fill: parent
-                    margins: 8
+                    margins: root.compactContentPadding
                 }
-                spacing: 8
+                spacing: root.compactContentPadding
 
                 // Section header with notification count + actions
                 SectionHeader {
@@ -1390,13 +1710,17 @@ Item {
                     // Notification list
                     CenterWidgetGroup {
                         anchors.fill: parent
-                        visible: root.notificationCount > 0
+                        opacity: root.notificationCount > 0 ? 1 : 0
+                        visible: opacity > 0
+                        Behavior on opacity { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Easing.OutCubic } }
                     }
 
                     // Enhanced empty state placeholder
                     EmptyNotificationsPlaceholder {
                         anchors.fill: parent
-                        visible: root.notificationCount === 0
+                        opacity: root.notificationCount === 0 ? 1 : 0
+                        visible: opacity > 0
+                        Behavior on opacity { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Easing.OutCubic } }
                     }
                 }
             }
@@ -1566,31 +1890,34 @@ Item {
             }
 
             // Badge (notification count)
-            Rectangle {
-                visible: sectionHeader.badgeText !== ""
-                implicitWidth: Math.max(18, badgeLabelInHeader.implicitWidth + 8)
-                implicitHeight: 18
-                radius: 9
-                color: bg.inirEverywhere  ? Appearance.inir.colSecondaryContainer
-                     : bg.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colPrimary, 0.70)
-                     : Appearance.colors.colSecondaryContainer
+            Revealer {
+                reveal: sectionHeader.badgeText !== ""
+                Rectangle {
+                    implicitWidth: Math.max(18, badgeLabelInHeader.implicitWidth + 8)
+                    implicitHeight: 18
+                    radius: 9
+                    color: bg.inirEverywhere  ? Appearance.inir.colSecondaryContainer
+                         : bg.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colPrimary, 0.70)
+                         : Appearance.colors.colSecondaryContainer
 
-                StyledText {
-                    id: badgeLabelInHeader
-                    anchors.centerIn: parent
-                    text: sectionHeader.badgeText
-                    font.pixelSize: Appearance.font.pixelSize.smallest
-                    font.weight: Font.Bold
-                    font.family: Appearance.font.family.numbers
-                    color: bg.inirEverywhere  ? Appearance.inir.colOnSecondaryContainer
-                         : bg.angelEverywhere ? Appearance.angel.colOnPrimary
-                         : Appearance.m3colors.m3onSecondaryContainer
+                    StyledText {
+                        id: badgeLabelInHeader
+                        anchors.centerIn: parent
+                        text: sectionHeader.badgeText
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        font.weight: Font.Bold
+                        font.family: Appearance.font.family.numbers
+                        color: bg.inirEverywhere  ? Appearance.inir.colOnSecondaryContainer
+                             : bg.angelEverywhere ? Appearance.angel.colOnPrimary
+                             : Appearance.colors.colOnSecondaryContainer
+                    }
                 }
             }
 
             // Secondary action button
+            Revealer {
+                reveal: sectionHeader.showSecondaryAction
             RippleButton {
-                visible: sectionHeader.showSecondaryAction
                 implicitWidth: 28; implicitHeight: 28
                 buttonRadius: bg.angelEverywhere ? Appearance.angel.roundingSmall
                     : bg.inirEverywhere ? Appearance.inir.roundingSmall : 14
@@ -1613,10 +1940,12 @@ Item {
                     text: sectionHeader.secondaryActionTooltip
                 }
             }
+            }
 
             // Primary action button
+            Revealer {
+                reveal: sectionHeader.showAction
             RippleButton {
-                visible: sectionHeader.showAction
                 implicitWidth: 28; implicitHeight: 28
                 buttonRadius: bg.angelEverywhere ? Appearance.angel.roundingSmall
                     : bg.inirEverywhere ? Appearance.inir.roundingSmall : 14
@@ -1634,11 +1963,11 @@ Item {
                 onClicked: sectionHeader.actionClicked()
                 contentItem: MaterialSymbol {
                     anchors.centerIn: parent; text: sectionHeader.actionIcon; iconSize: 16
-                    fill: sectionHeader.actionToggled ? 1 : 0
+                    fill: sectionHeader.actionToggled ? 1 : 0; animateFill: true
                     color: sectionHeader.actionToggled
                         ? (bg.inirEverywhere  ? Appearance.inir.colOnSecondaryContainer
                          : bg.angelEverywhere ? Appearance.angel.colOnPrimary
-                         : Appearance.m3colors.m3onSecondaryContainer)
+                         : Appearance.colors.colOnSecondaryContainer)
                         : (bg.inirEverywhere  ? Appearance.inir.colTextSecondary
                          : bg.angelEverywhere ? Appearance.angel.colTextSecondary
                          : Appearance.colors.colSubtext)
@@ -1647,6 +1976,7 @@ Item {
                     position: "left"
                     text: sectionHeader.actionTooltip
                 }
+            }
             }
         }
     }
@@ -1667,7 +1997,7 @@ Item {
                 compact: true
                 shown: emptyPlaceholder.visible
                 icon: Notifications.silent ? "notifications_off" : "notifications_active"
-                text: Notifications.silent ? Translation.tr("Muted") : Translation.tr("Clear")
+                text: Notifications.silent ? Translation.tr("Muted") : Translation.tr("All caught up")
                 shape: MaterialShape.Shape.Ghostish
             }
 
@@ -1676,26 +2006,31 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 implicitHeight: 32
                 implicitWidth: dndChipContent.implicitWidth + 20
-                buttonRadius: Appearance.rounding.full
+                buttonRadius: bg.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.full
                 colBackground: Notifications.silent
-                    ? (bg.inirEverywhere ? Appearance.inir.colSecondaryContainer
+                    ? (bg.zzzEverywhere ? Appearance.zzz.sticker
+                        : bg.inirEverywhere ? Appearance.inir.colSecondaryContainer
                         : bg.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colPrimary, 0.60)
                         : Appearance.colors.colSecondaryContainer)
                     : (bg.inirEverywhere ? Appearance.inir.colLayer1
                         : bg.angelEverywhere ? Appearance.angel.colGlassCard
                         : bg.colDarkSurface)
                 colBackgroundHover: Notifications.silent
-                    ? (bg.inirEverywhere ? Appearance.inir.colSecondaryContainerHover
+                    ? (bg.zzzEverywhere ? Appearance.colors.colPrimaryHover
+                        : bg.inirEverywhere ? Appearance.inir.colSecondaryContainerHover
                         : bg.angelEverywhere ? Appearance.angel.colPrimaryHover
                         : Appearance.colors.colSecondaryContainerHover)
-                    : (bg.inirEverywhere ? Appearance.inir.colLayer1Hover
+                    : (bg.zzzEverywhere ? Appearance.colors.colLayer1Hover
+                        : bg.inirEverywhere ? Appearance.inir.colLayer1Hover
                         : bg.angelEverywhere ? Appearance.angel.colGlassCardHover
                         : bg.colDarkSurfaceHover)
                 colRipple: Notifications.silent
-                    ? (bg.inirEverywhere ? Appearance.inir.colSecondaryContainerActive
+                    ? (bg.zzzEverywhere ? Appearance.colors.colPrimaryActive
+                        : bg.inirEverywhere ? Appearance.inir.colSecondaryContainerActive
                         : bg.angelEverywhere ? Appearance.angel.colPrimaryActive
                         : Appearance.colors.colSecondaryContainerActive)
-                    : (bg.inirEverywhere ? Appearance.inir.colLayer1Active
+                    : (bg.zzzEverywhere ? Appearance.colors.colLayer1Active
+                        : bg.inirEverywhere ? Appearance.inir.colLayer1Active
                         : bg.angelEverywhere ? Appearance.angel.colGlassCardActive
                         : bg.colDarkSurfaceActive)
                 onClicked: Notifications.silent = !Notifications.silent
@@ -1709,10 +2044,12 @@ Item {
                         text: Notifications.silent ? "notifications_active" : "notifications_off"
                         iconSize: 16
                         color: Notifications.silent
-                            ? (bg.inirEverywhere ? Appearance.inir.colOnSecondaryContainer
+                            ? (bg.zzzEverywhere ? Appearance.zzz.onSticker
+                                : bg.inirEverywhere ? Appearance.inir.colOnSecondaryContainer
                                 : bg.angelEverywhere ? Appearance.angel.colOnPrimary
-                                : Appearance.m3colors.m3onSecondaryContainer)
-                            : (bg.inirEverywhere ? Appearance.inir.colTextSecondary
+                                : Appearance.colors.colOnSecondaryContainer)
+                            : (bg.zzzEverywhere ? Appearance.colors.colSubtext
+                                : bg.inirEverywhere ? Appearance.inir.colTextSecondary
                                 : bg.angelEverywhere ? Appearance.angel.colTextSecondary
                                 : Appearance.colors.colSubtext)
                     }
@@ -1723,10 +2060,12 @@ Item {
                             : Translation.tr("Enable DND")
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         color: Notifications.silent
-                            ? (bg.inirEverywhere ? Appearance.inir.colOnSecondaryContainer
+                            ? (bg.zzzEverywhere ? Appearance.zzz.onSticker
+                                : bg.inirEverywhere ? Appearance.inir.colOnSecondaryContainer
                                 : bg.angelEverywhere ? Appearance.angel.colOnPrimary
-                                : Appearance.m3colors.m3onSecondaryContainer)
-                            : (bg.inirEverywhere ? Appearance.inir.colText
+                                : Appearance.colors.colOnSecondaryContainer)
+                            : (bg.zzzEverywhere ? Appearance.colors.colOnLayer1
+                                : bg.inirEverywhere ? Appearance.inir.colText
                                 : bg.angelEverywhere ? Appearance.angel.colText
                                 : Appearance.colors.colOnLayer1)
                     }
@@ -1738,18 +2077,19 @@ Item {
     // ── Quick Actions Section ─────────────────────────────────────
     component QuickActionsSection: ColumnLayout {
         id: quickActions
-        spacing: Appearance.sizes.spacingSmall
+        spacing: root.compactNavSpacing
 
         SectionDivider {
             text: Translation.tr("Quick Actions")
+            visible: false
         }
 
         // Action buttons — compact 3-column grid
         GridLayout {
             Layout.fillWidth: true
             columns: 3
-            columnSpacing: 5
-            rowSpacing: 5
+            columnSpacing: root.compactGridSpacing
+            rowSpacing: root.compactGridSpacing
 
             QuickActionButton {
                 Layout.fillWidth: true
@@ -1793,11 +2133,11 @@ Item {
 
             QuickActionButton {
                 Layout.fillWidth: true
-                icon: "color_lens"
+                icon: "palette"
                 label: Translation.tr("Color Picker")
                 onClicked: {
                     GlobalStates.sidebarRightOpen = false
-                    Qt.callLater(() => Quickshell.execDetached(["/usr/bin/hyprpicker", "-a"]))
+                    Qt.callLater(() => ShellExec.execDetachedArgs(["/usr/bin/hyprpicker", "-a"], "Pick color"))
                 }
             }
 
@@ -1805,7 +2145,7 @@ Item {
                 Layout.fillWidth: true
                 icon: "folder_open"
                 label: Translation.tr("Files")
-                onClicked: Quickshell.execDetached(["xdg-open", Quickshell.env("HOME")])
+                onClicked: ShellExec.execDetachedArgs(["xdg-open", Quickshell.env("HOME")], "Open home folder")
             }
         }
     }
@@ -1884,7 +2224,7 @@ Item {
             : Appearance.colors.colOnLayer1
         readonly property color _colOnToggle: bg.inirEverywhere ? Appearance.inir.colOnSecondaryContainer
             : bg.angelEverywhere ? Appearance.angel.colOnPrimary
-            : Appearance.m3colors.m3onSecondaryContainer
+            : Appearance.colors.colOnSecondaryContainer
         readonly property color _colToggleBg: bg.inirEverywhere ? Appearance.inir.colSecondaryContainer
             : bg.angelEverywhere ? ColorUtils.transparentize(Appearance.angel.colPrimary, 0.6)
             : Appearance.colors.colSecondaryContainer
@@ -1913,7 +2253,7 @@ Item {
             scale: qaBtnMA.containsPress ? 0.94 : 1.0
             Behavior on scale {
                 enabled: Appearance.animationsEnabled
-                NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
             }
             Behavior on color {
                 enabled: Appearance.animationsEnabled
@@ -1936,7 +2276,7 @@ Item {
 
                     Behavior on color {
                         enabled: Appearance.animationsEnabled
-                        ColorAnimation { duration: 180 }
+                        ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                     }
 
                     MaterialSymbol {
@@ -1944,6 +2284,7 @@ Item {
                         text: qaBtn.icon
                         iconSize: 17
                         fill: qaBtn.toggled ? 1 : 0
+                        animateFill: true
                         color: qaBtn.toggled ? qaBtn._colOnToggle : qaBtn._colPrimary
                     }
                 }

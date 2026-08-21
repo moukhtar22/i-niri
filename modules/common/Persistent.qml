@@ -20,11 +20,28 @@ Singleton {
         root.states.hyprlandInstanceSignature = Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || ""
     }
 
+    // writeAdapter() is async; suppress reloads triggered by our own write
+    // so reload() doesn't drop the in-flight write operation.
+    property bool _writeInFlight: false
+    property bool _pendingReload: false
+
+    function _completeWrite(): void {
+        root._writeInFlight = false;
+        if (root._pendingReload) {
+            root._pendingReload = false;
+            fileReloadTimer.restart();
+        }
+    }
+
     Timer {
         id: fileReloadTimer
         interval: 100
         repeat: false
         onTriggered: {
+            if (root._writeInFlight) {
+                root._pendingReload = true;
+                return;
+            }
             persistentStatesFileView.reload()
         }
     }
@@ -34,6 +51,8 @@ Singleton {
         interval: 100
         repeat: false
         onTriggered: {
+            root._writeInFlight = true;
+            fileReloadTimer.stop();
             persistentStatesFileView.writeAdapter()
         }
     }
@@ -45,6 +64,11 @@ Singleton {
         watchChanges: true
         onFileChanged: fileReloadTimer.restart()
         onAdapterUpdated: fileWriteTimer.restart()
+        onSaved: root._completeWrite()
+        onSaveFailed: error => {
+            console.warn("[Persistent] Save failed:", error);
+            root._completeWrite();
+        }
         onLoaded: root.ready = true
         onLoadFailed: error => {
             console.log("Failed to load persistent states file:", error);
@@ -52,7 +76,7 @@ Singleton {
                 console.log("[Persistent] File not found, creating new file.")
                 // Ensure parent directory exists
                 const parentDir = root.filePath.substring(0, root.filePath.lastIndexOf('/'))
-                Process.exec(["/usr/bin/mkdir", "-p", parentDir])
+                Quickshell.execDetached(["/usr/bin/mkdir", "-p", parentDir])
                 fileWriteTimer.restart();
             }
         }
@@ -65,6 +89,7 @@ Singleton {
             property JsonObject ai: JsonObject {
                 property string model: "gemini-2.5-flash"
                 property real temperature: 0.5
+                property string promptName: ""
             }
 
             property JsonObject cheatsheet: JsonObject {
@@ -83,6 +108,7 @@ Singleton {
 
             property JsonObject booru: JsonObject {
                 property bool allowNsfw: false
+                property bool showTagsOnHover: true
                 property string provider: "yandere"
             }
 
@@ -194,6 +220,31 @@ Singleton {
                     property int start: 0
                     property int duration: 60
                 }
+            }
+
+            // Settings workspace state is not user configuration. Keeping it
+            // here lets page delegates unload while navigation and active editor
+            // context survive page switches and standalone-window recreation.
+            property JsonObject settings: JsonObject {
+                property int iiPage: 0
+                property int wafflePage: 0
+                property int themeTab: 0
+                property string themeTag: ""
+                property string gowallFormat: "png"
+                property string gowallTheme: ""
+                property string gowallEffect: "grayscale"
+            }
+
+            // Desktop-widget editor workspace state. This is transient UI
+            // continuity, not user widget configuration: reopening the manager
+            // should restore the tool where the user left it without adding
+            // editor geometry to config.json.
+            property JsonObject desktopWidgets: JsonObject {
+                property real managerXRatio: 0.76
+                property real managerYRatio: 0.42
+                property int managerWidth: 420
+                property int managerHeight: 520
+                property string managerFilter: "all"
             }
 
             property JsonObject screenCast: JsonObject {

@@ -1,11 +1,11 @@
 pragma ComponentBehavior: Bound
 import qs
 import qs.services
+import qs.services.deferred
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.lock
 import qs.modules.waffle.lock
-import qs.modules.waffle.looks
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -176,7 +176,8 @@ Scope {
 
         WlSessionLockSurface {
             id: lockSurface
-            color: root._cachedUseWaffleLock ? Looks.colors.bg0 : Appearance.colors.colLayer0
+            // Use colLayer0 as transitional background - actual lock surface has its own bg
+            color: Appearance.colors.colLayer0
             
             // Fallback timer - if lock surface doesn't load properly, use swaylock
             Timer {
@@ -184,7 +185,10 @@ Scope {
                 interval: 2000
                 running: GlobalStates.screenLocked && !lockSurfaceLoader.item
                 onTriggered: {
-                    console.warn("[Lock] Lock surface failed to load, using swaylock fallback")
+                    console.warn("[Lock] Lock surface failed to load after 2s — status:",
+                                 lockSurfaceLoader.status, "active:", lockSurfaceLoader.active,
+                                 "Config.ready:", Config.ready, "waffle:", root._cachedUseWaffleLock,
+                                 "isNiri:", CompositorService.isNiri)
                     root.useFallbackLock()
                 }
             }
@@ -202,8 +206,12 @@ Scope {
                 // Detect load errors
                 onStatusChanged: {
                     if (status === Loader.Error) {
-                        console.error("[Lock] Lock surface failed to load: " + sourceComponent.errorString())
+                        console.error("[Lock] Lock surface failed to load:", sourceComponent.errorString())
                         root.useFallbackLock()
+                    } else if (status === Loader.Loading) {
+                        console.info("[Lock] Lock surface loading...")
+                    } else if (status === Loader.Ready) {
+                        console.info("[Lock] Lock surface loaded successfully")
                     }
                 }
                 
@@ -249,10 +257,11 @@ Scope {
         delegate: Scope {
             required property ShellScreen modelData
             property bool shouldPush: GlobalStates.screenLocked && CompositorService.isHyprland
-            property string targetMonitorName: modelData.name
-            property int verticalMovementDistance: modelData.height
-            property int horizontalSqueeze: modelData.width * 0.2
+            property string targetMonitorName: modelData ? modelData.name : ""
+            property int verticalMovementDistance: modelData ? modelData.height : 0
+            property int horizontalSqueeze: modelData ? modelData.width * 0.2 : 0
             onShouldPushChanged: {
+                if (!modelData) return;
                 if (shouldPush) {
                     root.saveWindowPositionAndTile();
                     Quickshell.execDetached(["hyprctl", "keyword", "monitor", `${targetMonitorName}, addreserved, ${verticalMovementDistance}, ${-verticalMovementDistance}, ${horizontalSqueeze}, ${horizontalSqueeze}`])
@@ -264,10 +273,36 @@ Scope {
         }
     }
 
+    // Heartbeat re-focus while locked. Niri sometimes drops keyboard focus on the
+    // ext-session-lock surface after suspend/resume — the surface stays visible but
+    // input goes nowhere until something forces a re-grab. We just nudge it back.
+    // 2s cadence is cheap and only runs while locked.
+    Timer {
+        id: lockFocusHeartbeat
+        interval: 2000
+        repeat: true
+        running: GlobalStates.screenLocked
+        onTriggered: lockContext.shouldReFocus()
+    }
+
+    // Re-focus immediately when monitor topology changes (a common signal of wake-up).
+    Connections {
+        target: Quickshell
+        function onScreensChanged() {
+            if (GlobalStates.screenLocked) {
+                Qt.callLater(() => lockContext.shouldReFocus())
+            }
+        }
+    }
+
     IpcHandler {
         target: "lock"
 
         function activate(): void {
+            if (Config.options?.lock?.useHyprlock ?? false) {
+                Quickshell.execDetached(["/usr/bin/bash", "-lc", "/usr/bin/pidof hyprlock || /usr/bin/hyprlock"]);
+                return;
+            }
             if (GlobalStates.screenLocked || root._lockActivating)
                 return;
             lockActivateDelay.restart();
@@ -287,6 +322,10 @@ Scope {
         }
 
         function focus(): void {
+            // swayidle calls this after logind resumes. Besides restoring lock
+            // focus, broadcast the lifecycle event so persistent layer-shell
+            // hosts can renegotiate native focus/input state.
+            Idle.notifyResumed();
             lockContext.shouldReFocus();
         }
     }

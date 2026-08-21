@@ -45,6 +45,10 @@ Item {
         anchors.centerIn: parent
         text: root.text
         shown: false
+        position: root.anchorEdges === Edges.Top ? "top"
+                : root.anchorEdges === Edges.Left ? "left"
+                : root.anchorEdges === Edges.Right ? "right"
+                : "bottom"
         horizontalPadding: root.horizontalPadding
         verticalPadding: root.verticalPadding
     }
@@ -74,9 +78,14 @@ Item {
         }
         sourceComponent: PopupWindow {
             visible: true
+            readonly property real _gap: 4
             anchor {
                 window: root.QsWindow.window
                 item: root.parent
+                rect.x: (root.anchorEdges === Edges.Left) ? -_gap : 0
+                rect.y: (root.anchorEdges === Edges.Top) ? -_gap : 0
+                rect.width: (root.parent?.width ?? 0) + ((root.anchorEdges === Edges.Left || root.anchorEdges === Edges.Right) ? _gap : 0)
+                rect.height: (root.parent?.height ?? 0) + ((root.anchorEdges === Edges.Top || root.anchorEdges === Edges.Bottom) ? _gap : 0)
                 edges: root.anchorEdges
                 gravity: root.anchorGravity
             }

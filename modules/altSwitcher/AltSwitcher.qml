@@ -140,7 +140,7 @@ Scope {
 
     Timer {
         id: skewFocusTimer
-        interval: 30
+        interval: 100
         running: root.skewStyle && GlobalStates.altSwitcherOpen
         repeat: true
         onTriggered: {
@@ -206,8 +206,11 @@ Scope {
 
         for (let i = 0; i < windows.length; i++) {
             const w = windows[i]
-            const appId = w.app_id || ""
+            const appId = AppSearch.resolveWindowIdentity(w)
             let appName = appId
+            const resolvedEntry = AppSearch.lookupDesktopEntry(appId)
+            if (resolvedEntry?.name)
+                appName = resolvedEntry.name
             if (appName && appName.indexOf(".") !== -1) {
                 const parts = appName.split(".")
                 appName = parts[parts.length - 1]
@@ -387,6 +390,8 @@ Scope {
                 right: true
             }
 
+
+
             Rectangle {
                 anchors.fill: parent
                 z: -1
@@ -531,10 +536,14 @@ Scope {
                 visible: !root.compactStyle && !root.listStyle && !root.skewStyle
                 z: 0
                 anchors.fill: parent
-                radius: Appearance.angelEverywhere ? Appearance.angel.roundingLarge
+                radius: Appearance.zzzEverywhere ? Appearance.zzz.panelRadius
+                    : Appearance.angelEverywhere ? Appearance.angel.roundingLarge
                     : Appearance.inirEverywhere ? Appearance.inir.roundingLarge
                     : (Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1)
+                Behavior on radius { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve } }
                 color: {
+                    if (Appearance.zzzEverywhere)
+                        return "transparent"
                     if (Appearance.angelEverywhere)
                         return Appearance.angel.colGlassPopup
                     if (Appearance.inirEverywhere)
@@ -546,42 +555,73 @@ Scope {
                     const base = ColorUtils.mix(Appearance.colors.colLayer0, Qt.rgba(0, 0, 0, 1), 0.35)
                     return ColorUtils.applyAlpha(base, root.altBackgroundOpacity)
                 }
-                border.width: Appearance.angelEverywhere ? Appearance.angel.panelBorderWidth
+                border.width: Appearance.zzzEverywhere ? 0
+                    : Appearance.angelEverywhere ? Appearance.angel.panelBorderWidth
                     : Appearance.inirEverywhere || Appearance.auroraEverywhere ? 1 : (root.altUseM3Layout ? 1 : 0)
-                border.color: Appearance.angelEverywhere ? Appearance.angel.colPanelBorder
+                border.color: Appearance.zzzEverywhere ? Appearance.zzz.borderColor
+                    : Appearance.angelEverywhere ? Appearance.angel.colPanelBorder
                     : Appearance.inirEverywhere ? Appearance.inir.colBorder 
                     : Appearance.auroraEverywhere ? Appearance.colors.colLayer0Border 
                     : Appearance.colors.colLayer0Border
+                Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+                Behavior on border.width { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+                Behavior on border.color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+            }
+
+            ZzzPlate {
+                anchors.fill: panelBackground
+                visible: Appearance.zzzEverywhere && panelBackground.visible
+                fillColor: Appearance.colors.colLayer0
+                strokeColor: Appearance.zzz.borderColor
+                strokeWidth: Appearance.zzz.hairlineThick
+                chamfer: Appearance.zzz.cutCorner
+            }
+
+            ZzzPlate {
+                anchors.fill: compactBackground
+                visible: Appearance.zzzEverywhere && compactBackground.visible
+                fillColor: Appearance.colors.colLayer2
+                strokeColor: Appearance.zzz.hairlineStrong
+                strokeWidth: Appearance.zzz.hairlineThick
+                chamfer: Appearance.zzz.cutCorner
             }
 
             Rectangle {
                 id: compactBackground
                 visible: root.compactStyle
                 anchors.fill: parent
-                radius: Appearance.angelEverywhere ? Appearance.angel.roundingLarge
+                radius: Appearance.zzzEverywhere ? Appearance.zzz.cardRadius
+                    : Appearance.angelEverywhere ? Appearance.angel.roundingLarge
                     : Appearance.inirEverywhere ? Appearance.inir.roundingLarge : Appearance.rounding.large
-                color: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
+                color: Appearance.zzzEverywhere ? "transparent"
+                    : Appearance.angelEverywhere ? Appearance.angel.colGlassCard
                     : Appearance.inirEverywhere ? Appearance.inir.colLayer2 
                     : Appearance.auroraEverywhere ? Appearance.colors.colLayer1Base 
-                    : Appearance.m3colors.m3surfaceContainerHigh
-                border.width: Appearance.angelEverywhere ? Appearance.angel.cardBorderWidth
+                    : Appearance.colors.colSurfaceContainerHigh
+                Behavior on radius { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve } }
+                Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+                border.width: Appearance.zzzEverywhere ? 0
+                    : Appearance.angelEverywhere ? Appearance.angel.cardBorderWidth
                     : Appearance.inirEverywhere || Appearance.auroraEverywhere ? 1 : 0
-                border.color: Appearance.angelEverywhere ? Appearance.angel.colCardBorder
+                border.color: Appearance.zzzEverywhere ? Appearance.zzz.hairlineStrong
+                    : Appearance.angelEverywhere ? Appearance.angel.colCardBorder
                     : Appearance.inirEverywhere ? Appearance.inir.colBorder 
                     : Appearance.auroraEverywhere ? Appearance.colors.colLayer0Border 
                     : "transparent"
+                Behavior on border.width { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+                Behavior on border.color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
             }
 
             StyledRectangularShadow {
                 target: root.compactStyle ? compactBackground : panelBackground
-                visible: !root.listStyle && !root.skewStyle && (Appearance.angelEverywhere || (!Appearance.inirEverywhere && !Appearance.auroraEverywhere))
+                visible: !root.listStyle && !root.skewStyle && !Appearance.zzzEverywhere && (Appearance.angelEverywhere || (!Appearance.inirEverywhere && !Appearance.auroraEverywhere))
             }
 
             MultiEffect {
                 z: 0.5
                 anchors.fill: panelBackground
                 source: panelBackground
-                visible: !root.compactStyle && !root.listStyle && !root.skewStyle && !root.altUseM3Layout && Appearance.effectsEnabled && root.effectiveEnableBlurGlass && root.altBlurAmount > 0 && !root.isHighLoad
+                visible: !root.compactStyle && !root.listStyle && !root.skewStyle && !root.altUseM3Layout && !Appearance.zzzEverywhere && Appearance.effectsEnabled && root.effectiveEnableBlurGlass && root.altBlurAmount > 0 && !root.isHighLoad
                 blurEnabled: true
                 blur: root.altBlurAmount
                 blurMax: 64
@@ -661,7 +701,8 @@ Scope {
                 Text {
                     anchors.centerIn: parent
                     visible: root.windowCount === 0
-                    text: "NO WINDOWS"
+                    text: Translation.tr("No windows")
+                    font.capitalization: Font.AllUppercase
                     font.family: Appearance.font.family.main
                     font.weight: Font.Bold
                     font.pixelSize: 18
@@ -937,7 +978,8 @@ Scope {
                             Text {
                                 id: focusedLabel
                                 anchors.centerIn: parent
-                                text: "FOCUSED"
+                                text: Translation.tr("Focused")
+                                font.capitalization: Font.AllUppercase
                                 font.family: Appearance.font.family.main
                                 font.pixelSize: 9
                                 font.weight: Font.Bold
@@ -953,7 +995,7 @@ Scope {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: nameLabelCol.width + 24
                             height: nameLabelCol.height + 16
-                            radius: 6
+                            radius: Appearance.rounding.unsharpenmore
                             color: Qt.rgba(0, 0, 0, 0.75)
                             border.width: 1
                             border.color: Qt.rgba(Appearance.colors.colPrimary.r, Appearance.colors.colPrimary.g, Appearance.colors.colPrimary.b, 0.5)
@@ -1004,7 +1046,7 @@ Scope {
                             anchors.rightMargin: root.skewOffset + 8
                             width: wsBadgeText.width + 8
                             height: 16
-                            radius: 4
+                            radius: Appearance.rounding.unsharpen
                             color: Qt.rgba(0, 0, 0, 0.75)
                             border.width: 1
                             border.color: Qt.rgba(Appearance.colors.colPrimary.r, Appearance.colors.colPrimary.g, Appearance.colors.colPrimary.b, 0.4)
@@ -1030,7 +1072,7 @@ Scope {
                             anchors.leftMargin: root.skewOffset + 8
                             width: floatLabel.width + 8
                             height: 16
-                            radius: 4
+                            radius: Appearance.rounding.unsharpen
                             color: Qt.rgba(0, 0, 0, 0.75)
                             border.width: 1
                             border.color: Qt.rgba(Appearance.colors.colPrimary.r, Appearance.colors.colPrimary.g, Appearance.colors.colPrimary.b, 0.4)
@@ -1040,7 +1082,8 @@ Scope {
                             Text {
                                 id: floatLabel
                                 anchors.centerIn: parent
-                                text: "FLOAT"
+                                text: Translation.tr("Float")
+                                font.capitalization: Font.AllUppercase
                                 font.family: Appearance.font.family.main
                                 font.pixelSize: 9
                                 font.weight: Font.Bold
@@ -1092,25 +1135,27 @@ Scope {
                                    ? (Appearance.angelEverywhere ? Appearance.angel.colGlassCardActive
                                        : Appearance.inirEverywhere ? Appearance.inir.colPrimary 
                                        : Appearance.auroraEverywhere ? Appearance.colors.colPrimaryContainer 
-                                       : Appearance.m3colors.m3primaryContainer)
+                                       : Appearance.colors.colPrimaryContainer)
                                    : (Appearance.angelEverywhere ? Appearance.angel.colGlassCard
                                        : Appearance.inirEverywhere ? Appearance.inir.colLayer3 
                                        : Appearance.auroraEverywhere ? Appearance.colors.colLayer2Base 
-                                       : Appearance.m3colors.m3surfaceContainerHighest)
+                                       : Appearance.colors.colSurfaceContainerHighest)
                             scale: compactMouseArea.pressed ? 0.92 : (compactMouseArea.containsMouse && !root.isHighLoad ? 1.05 : 1.0)
                             
                             Behavior on color { 
                                 enabled: !root.isHighLoad
                                 ColorAnimation { 
-                                    duration: 200
-                                    easing.type: Easing.OutCubic
+                                    duration: Appearance.animation.elementMoveFast.duration
+                                    easing.type: Appearance.animation.elementMoveFast.type
+                                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
                                 } 
                             }
                             Behavior on scale { 
                                 enabled: !root.isHighLoad
                                 NumberAnimation { 
-                                    duration: 200
-                                    easing.type: Easing.OutCubic
+                                    duration: Appearance.animation.elementMoveFast.duration
+                                    easing.type: Appearance.animation.elementMoveFast.type
+                                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
                                 } 
                             }
                             
@@ -1142,14 +1187,19 @@ Scope {
                             }
                             
                             Rectangle {
-                                visible: listView.currentIndex === index
                                 anchors.bottom: parent.bottom
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.bottomMargin: 6
-                                width: 24
-                                height: 3
+                                implicitWidth: listView.currentIndex === index ? 24 : 0
+                                implicitHeight: 3
                                 radius: height / 2
-                                color: Appearance.inirEverywhere ? Appearance.inir.colPrimary : Appearance.m3colors.m3primary
+                                visible: implicitWidth > 0
+                                clip: true
+                                color: Appearance.inirEverywhere ? Appearance.inir.colPrimary : Appearance.colors.colPrimary
+                                Behavior on implicitWidth {
+                                    enabled: Appearance.animationsEnabled
+                                    NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve }
+                                }
                             }
                         }
                         
@@ -1169,6 +1219,16 @@ Scope {
             }
 
             // List mode content
+            ZzzPlate {
+                anchors.fill: listContent
+                visible: Appearance.zzzEverywhere && listContent.visible
+                fillColor: Appearance.colors.colLayer1
+                strokeColor: Appearance.zzz.hairlineStrong
+                strokeWidth: Appearance.zzz.hairlineThick
+                chamfer: Appearance.zzz.cutCorner
+                z: 1
+            }
+
             Rectangle {
                 id: listContent
                 visible: root.listStyle
@@ -1176,22 +1236,38 @@ Scope {
                 anchors.centerIn: parent
                 width: 400
                 implicitHeight: listHeader.height + listSeparator.height + listColumn.height
-                radius: Appearance.angelEverywhere ? Appearance.angel.roundingLarge
+                radius: Appearance.zzzEverywhere ? Appearance.zzz.panelRadius
+                    : Appearance.angelEverywhere ? Appearance.angel.roundingLarge
                     : Appearance.inirEverywhere ? Appearance.inir.roundingLarge : Appearance.rounding.large
-                color: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
+                color: Appearance.zzzEverywhere ? "transparent"
+                    : Appearance.angelEverywhere ? Appearance.angel.colGlassCard
                     : Appearance.inirEverywhere ? Appearance.inir.colLayer1 
                     : Appearance.auroraEverywhere ? Appearance.colors.colLayer1Base 
                     : Appearance.colors.colSurfaceContainer
-                border.width: Appearance.angelEverywhere ? Appearance.angel.cardBorderWidth
+                Behavior on radius { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve } }
+                Behavior on color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+                border.width: Appearance.zzzEverywhere ? 0
+                    : Appearance.angelEverywhere ? Appearance.angel.cardBorderWidth
                     : Appearance.auroraEverywhere ? 1 : 0
-                border.color: Appearance.angelEverywhere ? Appearance.angel.colCardBorder
+                border.color: Appearance.zzzEverywhere ? Appearance.zzz.hairlineStrong
+                    : Appearance.angelEverywhere ? Appearance.angel.colCardBorder
                     : Appearance.auroraEverywhere ? Appearance.colors.colLayer0Border : "transparent"
+                Behavior on border.width { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+                Behavior on border.color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+
+                // ZZZ poster registration backdrop + accent bar.
+                ZzzPanelBackdrop {
+                    anchors.fill: parent
+                    visible: Appearance.zzzEverywhere
+                    z: 0
+                    accentColor: Appearance.zzz.accent
+                }
 
                 StyledRectangularShadow {
                     target: listContent
                     blur: 0.5 * Appearance.sizes.elevationMargin
                     spread: 0
-                    visible: Appearance.angelEverywhere || (!Appearance.inirEverywhere && !Appearance.auroraEverywhere)
+                    visible: !Appearance.zzzEverywhere && (Appearance.angelEverywhere || (!Appearance.inirEverywhere && !Appearance.auroraEverywhere))
                 }
 
                 Column {
@@ -1205,12 +1281,18 @@ Scope {
 
                         Item { width: 16 }
                         StyledText {
-                            text: Translation.tr("Switch windows")
+                            text: Appearance.zzzEverywhere ? Translation.tr("Switch windows").toUpperCase() : Translation.tr("Switch windows")
                             font.pixelSize: Appearance.font.pixelSize.larger
-                            font.weight: Font.DemiBold
-                            color: Appearance.inirEverywhere ? Appearance.inir.colText 
+                            font.weight: Appearance.zzzEverywhere ? Font.Black : Font.DemiBold
+                            font.italic: Appearance.zzzEverywhere
+                            color: Appearance.zzzEverywhere ? Appearance.zzz.ink
+                                : Appearance.inirEverywhere ? Appearance.inir.colText 
                                 : Appearance.auroraEverywhere ? Appearance.colors.colOnLayer1 
                                 : Appearance.colors.colOnLayer1
+                            Behavior on color {
+                                enabled: Appearance.animationsEnabled
+                                ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                            }
                         }
                         Item { Layout.fillWidth: true }
                         StyledText {
@@ -1433,7 +1515,7 @@ Scope {
                             radius: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut
                             visible: selected
                             color: root.altUseM3Layout
-                                   ? Appearance.m3colors.m3primaryContainer
+                                   ? Appearance.colors.colPrimaryContainer
                                    : Appearance.colors.colLayer1
                         }
 
@@ -1467,7 +1549,12 @@ Scope {
                                     height: 8
                                     radius: width / 2
                                     color: Appearance.colors.colOnLayer1
-                                    visible: selected
+                                    opacity: selected ? 1 : 0
+                                    visible: opacity > 0
+                                    Behavior on opacity {
+                                        enabled: Appearance.animationsEnabled
+                                        NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                                    }
                                 }
                             }
 
@@ -1480,9 +1567,9 @@ Scope {
                                         const selected = row.selected
                                         const useM3 = root.altUseM3Layout
                                         if (useM3 && selected)
-                                            return Appearance.m3colors.m3onPrimaryContainer
+                                            return Appearance.colors.colOnPrimaryContainer
                                         if (useM3)
-                                            return Appearance.m3colors.m3onSurface
+                                            return Appearance.colors.colOnSurface
                                         return Appearance.colors.colOnLayer1
                                     }
                                     font.pixelSize: Appearance.font.pixelSize.large
@@ -1509,7 +1596,7 @@ Scope {
                                             const selected = row.selected
                                             const useM3 = root.altUseM3Layout
                                             if (useM3 && selected)
-                                                return Appearance.m3colors.m3onPrimaryContainer
+                                                return Appearance.colors.colOnPrimaryContainer
                                             if (useM3)
                                                 return Appearance.colors.colSubtext
                                             return ColorUtils.transparentize(Appearance.colors.colOnLayer1, 0.6)
@@ -1822,9 +1909,9 @@ Scope {
             const wins = NiriService.windows || []
             for (let i = 0; i < wins.length; i++) {
                 const w = wins[i]
-                const key = w.app_id || ""
+                const key = AppSearch.resolveWindowIdentity(w)
                 if (key && root.iconCache[key] === undefined) {
-                    root.getCachedIcon(w.app_id, "", w.title)
+                    root.getCachedIcon(key, "", w.title)
                 }
             }
         }
@@ -1849,141 +1936,85 @@ Scope {
         }
     }
 
-    readonly property bool waffleFamilyActive: (Config.options?.panelFamily ?? "ii") === "waffle"
-
-    function routeToWaffle(functionName: string): void {
-        Quickshell.execDetached([Quickshell.shellPath("scripts/inir"), "waffleAltSwitcher", functionName])
+    function handleOpen(): void {
+        if (root.skewStyle) {
+            root.openSkewSwitcher()
+            return
+        }
+        ensureOpen()
+        autoHideTimer.restart()
     }
 
-    IpcHandler {
-        target: "altSwitcher"
+    function handleClose(): void {
+        GlobalStates.altSwitcherOpen = false
+    }
 
-        function open(): void {
-            if (root.waffleFamilyActive) {
-                root.routeToWaffle("open")
-                return
-            }
-            if (root.skewStyle) {
+    function handleToggle(): void {
+        if (root.skewStyle) {
+            if (GlobalStates.altSwitcherOpen)
+                GlobalStates.altSwitcherOpen = false
+            else
+                root.openSkewSwitcher()
+            return
+        }
+        GlobalStates.altSwitcherOpen = !GlobalStates.altSwitcherOpen
+        if (GlobalStates.altSwitcherOpen)
+            autoHideTimer.restart()
+    }
+
+    function handleNext(): void {
+        if (root.skewStyle) {
+            if (!GlobalStates.altSwitcherOpen) {
                 root.openSkewSwitcher()
                 return
             }
-            ensureOpen()
-            autoHideTimer.restart()
-        }
-
-        function close(): void {
-            if (root.waffleFamilyActive) {
-                root.routeToWaffle("close")
-                return
-            }
-            GlobalStates.altSwitcherOpen = false
-        }
-
-        function toggle(): void {
-            if (root.waffleFamilyActive) {
-                root.routeToWaffle("toggle")
-                return
-            }
-            if (root.skewStyle) {
-                if (GlobalStates.altSwitcherOpen)
-                    GlobalStates.altSwitcherOpen = false
-                else
-                    root.openSkewSwitcher()
-                return
-            }
-            GlobalStates.altSwitcherOpen = !GlobalStates.altSwitcherOpen
-            if (GlobalStates.altSwitcherOpen)
-                autoHideTimer.restart()
-        }
-
-        function next(): void {
-            if (root.waffleFamilyActive) {
-                root.routeToWaffle("next")
-                return
-            }
-            if (root.effectiveNoVisualUi) {
-                autoHideTimer.stop()
-                GlobalStates.altSwitcherOpen = false
-
-                const len = root.noUiSnapshot?.length ?? 0
-                if (!root.quickSwitchDone || len === 0) {
-                    root.rebuildNoUiSnapshotSync()  // Use sync version for immediate response
-                }
-
-                const newLen = root.noUiSnapshot?.length ?? 0
-                if (newLen === 0)
-                    return
-
-                if (!root.quickSwitchDone) {
-                    root.quickSwitchDone = true
-                    root.noUiIndex = newLen > 1 ? 1 : 0
-                } else {
-                    root.noUiIndex = (root.noUiIndex + 1) % newLen
-                }
-
-                root.focusNoUiIndex()
-                quickSwitchResetTimer.restart()
-                return
-            }
-
-            if (root.skewStyle) {
-                if (!GlobalStates.altSwitcherOpen) {
-                    root.openSkewSwitcher()
-                    return
-                }
-                nextItem()
-                return
-            }
-
-            ensureOpen()
             nextItem()
-            activateCurrent()
-            autoHideTimer.restart()
+            return
         }
 
-        function previous(): void {
-            if (root.waffleFamilyActive) {
-                root.routeToWaffle("previous")
+        ensureOpen()
+        nextItem()
+        activateCurrent()
+        autoHideTimer.restart()
+    }
+
+    function handlePrevious(): void {
+        if (root.skewStyle) {
+            if (!GlobalStates.altSwitcherOpen) {
+                root.openSkewSwitcher()
                 return
             }
-            if (root.effectiveNoVisualUi) {
-                autoHideTimer.stop()
-                GlobalStates.altSwitcherOpen = false
-
-                const len = root.noUiSnapshot?.length ?? 0
-                if (!root.quickSwitchDone || len === 0) {
-                    root.rebuildNoUiSnapshotSync()  // Use sync version for immediate response
-                }
-
-                const newLen = root.noUiSnapshot?.length ?? 0
-                if (newLen === 0)
-                    return
-
-                if (!root.quickSwitchDone) {
-                    root.quickSwitchDone = true
-                    root.noUiIndex = newLen > 1 ? (newLen - 1) : 0
-                } else {
-                    root.noUiIndex = (root.noUiIndex - 1 + newLen) % newLen
-                }
-
-                root.focusNoUiIndex()
-                quickSwitchResetTimer.restart()
-                return
-            }
-
-            if (root.skewStyle) {
-                if (!GlobalStates.altSwitcherOpen) {
-                    root.openSkewSwitcher()
-                    return
-                }
-                previousItem()
-                return
-            }
-
-            ensureOpen()
             previousItem()
-            activateCurrent()
-            autoHideTimer.restart()
+            return
+        }
+
+        ensureOpen()
+        previousItem()
+        activateCurrent()
+        autoHideTimer.restart()
+    }
+
+    Connections {
+        target: GlobalStates
+
+        function onAltSwitcherCommand(command: string): void {
+            switch (command) {
+            case "open":
+                root.handleOpen()
+                break
+            case "close":
+                root.handleClose()
+                break
+            case "toggle":
+                root.handleToggle()
+                break
+            case "next":
+                root.handleNext()
+                break
+            case "previous":
+                root.handlePrevious()
+                break
+            }
         }
     }
 }

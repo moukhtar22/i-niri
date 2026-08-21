@@ -83,6 +83,14 @@ Item {
                 Persistent.states.booru.allowNsfw = true;
             }
         },
+        {
+            name: "toggle-tags",
+            description: Translation.tr("Toggle tags on hover"),
+            execute: () => {
+                Persistent.states.booru.showTagsOnHover = !Persistent.states.booru.showTagsOnHover
+                Booru.addSystemMessage(Persistent.states.booru.showTagsOnHover ? Translation.tr("Tags on hover enabled") : Translation.tr("Tags on hover disabled"))
+            }
+        },
     ]
 
     function handleInput(inputText) {
@@ -193,15 +201,23 @@ Item {
                 Connections {
                     target: root
                     function onResponsesChanged() {
-                        if (root.responses.length > booruResponseListView.lastResponseLength) {
-                            // Only auto-scroll if user is not actively scrolling
-                            if (!booruResponseListView.userIsScrolling && 
-                                booruResponseListView.lastResponseLength > 0 && 
-                                root.responses[booruResponseListView.lastResponseLength].provider != "system") {
-                                booruResponseListView.contentY = booruResponseListView.contentY + root.scrollOnNewResponse
-                            }
-                            booruResponseListView.lastResponseLength = root.responses.length
+                        const nextLength = root.responses.length
+                        if (nextLength === 0) {
+                            booruResponseListView.lastResponseLength = 0
+                            return
                         }
+
+                        // A bounded response list rotates its oldest item once full,
+                        // so a new page can arrive without increasing the length.
+                        if (nextLength >= booruResponseListView.lastResponseLength) {
+                            const newestResponse = root.responses[nextLength - 1]
+                            if (!booruResponseListView.userIsScrolling
+                                    && booruResponseListView.lastResponseLength > 0
+                                    && newestResponse?.provider !== "system") {
+                                booruResponseListView.contentY += root.scrollOnNewResponse
+                            }
+                        }
+                        booruResponseListView.lastResponseLength = nextLength
                     }
                 }
 
@@ -249,10 +265,11 @@ Item {
                     bottom: parent.bottom
                     bottomMargin: 20 + (root.pullLoading ? 0 : Math.max(0, (root.normalizedPullDistance - 0.5) * 50))
                     Behavior on bottomMargin {
+                        enabled: Appearance.animationsEnabled
                         NumberAnimation {
-                            duration: 200
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.expressiveFastSpatial
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
                         }
                     }
                 }
@@ -284,8 +301,10 @@ Item {
                     id: tagButton
                     colBackground: Appearance.angelEverywhere
                         ? (tagSuggestions.selectedIndex === index ? Appearance.angel.colGlassCardHover : Appearance.angel.colGlassCard)
-                        : Appearance.auroraEverywhere 
+                        : Appearance.auroraEverywhere
                         ? (tagSuggestions.selectedIndex === index ? Appearance.aurora.colSubSurface : "transparent")
+                        : Appearance.zzzEverywhere
+                        ? (tagSuggestions.selectedIndex === index ? Appearance.zzz.sticker : "transparent")
                         : (tagSuggestions.selectedIndex === index ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer)
                     bounce: false
                     contentItem: RowLayout {
@@ -294,7 +313,8 @@ Item {
                         StyledText {
                             Layout.fillWidth: false
                             font.pixelSize: Appearance.font.pixelSize.small
-                            color: Appearance.colors.colOnSecondaryContainer
+                            color: Appearance.zzzEverywhere && tagSuggestions.selectedIndex === index
+                                ? Appearance.zzz.onSticker : Appearance.colors.colOnSecondaryContainer
                             horizontalAlignment: Text.AlignRight
                             text: modelData.displayName ?? modelData.name
                         }
@@ -302,7 +322,8 @@ Item {
                             Layout.fillWidth: false
                             visible: modelData.count !== undefined
                             font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: Appearance.colors.colOnSecondaryContainer
+                            color: Appearance.zzzEverywhere && tagSuggestions.selectedIndex === index
+                                ? Appearance.zzz.onSticker : Appearance.colors.colOnSecondaryContainer
                             horizontalAlignment: Text.AlignLeft
                             text: modelData.count ?? ""
                         }
@@ -344,7 +365,11 @@ Item {
             id: tagInputContainer
             property real columnSpacing: 5
             Layout.fillWidth: true
-            radius: Appearance.rounding.normal - root.padding
+            radius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.normal - root.padding
+            Behavior on radius {
+                enabled: Appearance.animationsEnabled
+                NumberAnimation { duration: Appearance.animation.elementMoveFast.duration }
+            }
             color: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
                 : Appearance.inirEverywhere ? Appearance.inir.colLayer2 : Appearance.auroraEverywhere ? Appearance.aurora.colElevatedSurface : Appearance.colors.colLayer2
             implicitWidth: tagInputField.implicitWidth
@@ -353,6 +378,7 @@ Item {
             clip: true
 
             Behavior on implicitHeight {
+                enabled: Appearance.animationsEnabled
                 animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
             }
 
@@ -369,7 +395,7 @@ Item {
                     wrapMode: TextArea.Wrap
                     Layout.fillWidth: true
                     padding: 10
-                    color: activeFocus ? Appearance.m3colors.m3onSurface : Appearance.m3colors.m3onSurfaceVariant
+                    color: activeFocus ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant
                     renderType: Text.NativeRendering
                     placeholderText: Translation.tr('Enter tags, or "%1" for commands').arg(root.commandPrefix)
 
@@ -465,7 +491,7 @@ Item {
                     Layout.rightMargin: 5
                     implicitWidth: 40
                     implicitHeight: 40
-                    buttonRadius: Appearance.rounding.small
+                    buttonRadius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.small
                     enabled: tagInputField.text.length > 0
                     toggled: enabled
 
@@ -483,7 +509,9 @@ Item {
                         anchors.centerIn: parent
                         horizontalAlignment: Text.AlignHCenter
                         iconSize: 22
-                        color: sendButton.enabled ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2Disabled
+                        color: sendButton.enabled
+                            ? (Appearance.zzzEverywhere ? Appearance.zzz.onSticker : Appearance.colors.colOnPrimary)
+                            : Appearance.colors.colOnLayer2Disabled
                         text: "arrow_upward"
                     }
                 }
@@ -545,7 +573,7 @@ Item {
                             Layout.leftMargin: 10
                             Layout.alignment: Qt.AlignVCenter
                             font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: nsfwSwitch.enabled ? Appearance.colors.colOnLayer1 : Appearance.m3colors.m3outline
+                            color: nsfwSwitch.enabled ? Appearance.colors.colOnLayer1 : Appearance.colors.colOutline
                             text: Translation.tr("Allow NSFW")
                         }
                         StyledSwitch {

@@ -77,24 +77,30 @@ Item { // Window
     }
 
     Behavior on x {
+        enabled: Appearance.animationsEnabled
         animation: NumberAnimation { duration: Appearance.animation.elementMoveEnter.duration; easing.type: Appearance.animation.elementMoveEnter.type; easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve }
     }
     Behavior on y {
+        enabled: Appearance.animationsEnabled
         animation: NumberAnimation { duration: Appearance.animation.elementMoveEnter.duration; easing.type: Appearance.animation.elementMoveEnter.type; easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve }
     }
     Behavior on width {
+        enabled: Appearance.animationsEnabled
         animation: NumberAnimation { duration: Appearance.animation.elementMoveEnter.duration; easing.type: Appearance.animation.elementMoveEnter.type; easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve }
     }
     Behavior on height {
+        enabled: Appearance.animationsEnabled
         animation: NumberAnimation { duration: Appearance.animation.elementMoveEnter.duration; easing.type: Appearance.animation.elementMoveEnter.type; easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve }
     }
 
     ScreencopyView {
         id: windowPreview
         anchors.fill: parent
-        captureSource: GlobalStates.overviewOpen ? root.toplevel : null
+        // Fullscreen GameMode must not retain a live screencopy source.
+        captureSource: (GlobalStates.overviewOpen && !GameMode.active)
+            ? root.toplevel : null
         // Pause during recording to avoid lag
-        live: !RecorderStatus.isRecording
+        live: !RecorderStatus.isRecording && !GameMode.active
 
         // Color overlay for interactions
         Rectangle {
@@ -136,9 +142,11 @@ Item { // Window
             sourceSize: Qt.size(iconSize, iconSize)
 
             Behavior on width {
+                enabled: Appearance.animationsEnabled
                 animation: NumberAnimation { duration: Appearance.animation.elementMoveEnter.duration; easing.type: Appearance.animation.elementMoveEnter.type; easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve }
             }
             Behavior on height {
+                enabled: Appearance.animationsEnabled
                 animation: NumberAnimation { duration: Appearance.animation.elementMoveEnter.duration; easing.type: Appearance.animation.elementMoveEnter.type; easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve }
             }
         }

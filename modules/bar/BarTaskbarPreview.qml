@@ -32,6 +32,20 @@ PopupWindow {
         root.visible = false
     }
 
+    onAnchorItemChanged: {
+        if (root.visible && !root.anchorItem)
+            root.close()
+    }
+
+    Connections {
+        target: root.anchorItem
+        enabled: root.visible
+        function onToplevelsChanged() {
+            if ((root.anchorItem?.toplevels?.length ?? 0) === 0)
+                root.close()
+        }
+    }
+
     function open(): void {
         marginBehavior.enabled = true
         root.visible = true
@@ -63,7 +77,10 @@ PopupWindow {
             const allToplevels = CompositorService.sortedToplevels && CompositorService.sortedToplevels.length
                     ? CompositorService.sortedToplevels
                     : ToplevelManager.toplevels.values;
-            const current = allToplevels.filter(t => t.appId && t.appId.toLowerCase() === appId)
+            const current = allToplevels.filter(t => {
+                const id = AppSearch.resolveWindowIdentity(t)
+                return id && id.toLowerCase() === appId
+            })
             if (current.length === 0) {
                 root.close()
             } else {
@@ -108,8 +125,9 @@ PopupWindow {
                 : (root.isVertical ? -root.implicitWidth : -root.implicitHeight)
 
             Behavior on sourceEdgeMargin {
+                enabled: Appearance.animationsEnabled
                 id: marginBehavior
-                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
             }
 
             anchors {

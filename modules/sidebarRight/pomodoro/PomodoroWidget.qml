@@ -140,20 +140,20 @@ Item {
                 radius: height / 2
 
                 Behavior on x {
-                    enabled: tabIndicator.enableIndicatorAnimation
+                    enabled: tabIndicator.enableIndicatorAnimation && Appearance.animationsEnabled
                     animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
                 }
                 Behavior on implicitWidth {
-                    enabled: tabIndicator.enableIndicatorAnimation
+                    enabled: tabIndicator.enableIndicatorAnimation && Appearance.animationsEnabled
                     animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
                 }
             }
         }
 
-        Rectangle {
+        Rectangle { // No full-width grey track — only the colored active indicator reads.
             Layout.fillWidth: true
             height: 1
-            color: root.colBorder
+            color: "transparent"
         }
 
         SwipeView {

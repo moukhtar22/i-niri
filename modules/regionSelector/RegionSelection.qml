@@ -1,4 +1,5 @@
 pragma ComponentBehavior: Bound
+import qs
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
@@ -34,45 +35,51 @@ PanelWindow {
     readonly property bool useNiri: CompositorService.isNiri
 
     property string screenshotDir: Directories.screenshotTemp
-    property string imageSearchEngineBaseUrl: Config.options?.search?.imageSearch?.imageSearchEngineBaseUrl ?? "https://yandex.com/images/search?rpt=imageview&url="
-    property string fileUploadApiEndpoint: Config.options?.search?.imageSearch?.fileUploadApiEndpoint ?? "https://0x0.st"
-    property string fileUploadApiFallback: Config.options?.search?.imageSearch?.fileUploadApiFallback ?? "https://litterbox.catbox.moe/resources/internals/api.php"
-    property string fileUploadApiFallback2: Config.options?.search?.imageSearch?.fileUploadApiFallback2 ?? "https://catbox.moe/user/api.php"
+    readonly property string screenshotNameFormat: Config.options?.regionSelector?.screenshotNameFormat || "ss-%Y%m%d-%H%M%S"
+    property string imageSearchEngineBaseUrl: Config.options?.search?.imageSearch?.imageSearchEngineBaseUrl ?? "https://www.bing.com/images/search?view=detailv2&iss=sbi&form=SBIVSP&sbisrc=UrlPaste&q=imgurl:"
+    property string fileUploadApiEndpoint: Config.options?.search?.imageSearch?.fileUploadApiFallback ?? "https://litterbox.catbox.moe/resources/internals/api.php"
+    property string fileUploadApiFallback: Config.options?.search?.imageSearch?.fileUploadApiFallback2 ?? "https://catbox.moe/user/api.php"
+    property string fileUploadApiFallback2: Config.options?.search?.imageSearch?.fileUploadApiEndpoint ?? "https://0x0.st"
     readonly property string effectiveImageSearchEngineBaseUrl: {
         const configured = imageSearchEngineBaseUrl ?? ""
+        // Google and Yandex endpoints no longer work well, fallback to Bing
         if (configured === ""
                 || configured === "https://lens.google.com/uploadbyurl?url="
-                || configured === "https://www.google.com/searchbyimage?image_url=") {
-            return "https://yandex.com/images/search?rpt=imageview&url="
+                || configured === "https://www.google.com/searchbyimage?image_url="
+                || configured === "https://yandex.com/images/search?rpt=imageview&url=") {
+            return "https://www.bing.com/images/search?view=detailv2&iss=sbi&form=SBIVSP&sbisrc=UrlPaste&q=imgurl:"
         }
         return configured
     }
 
     // Tri-style color support
-    property color overlayColor: Appearance.angelEverywhere ? "#55000000"
-        : Appearance.inirEverywhere ? "#88000000"
-        : Appearance.auroraEverywhere ? "#66000000" : "#88111111"
+    property color overlayColor: Appearance.angelEverywhere ? ColorUtils.applyAlpha(Appearance.colors.colScrim, 0.33)
+        : Appearance.inirEverywhere ? ColorUtils.applyAlpha(Appearance.colors.colScrim, 0.53)
+        : Appearance.auroraEverywhere ? ColorUtils.applyAlpha(Appearance.colors.colScrim, 0.4) : ColorUtils.applyAlpha(Appearance.colors.colScrim, 0.53)
     property color brightText: Appearance.inirEverywhere ? Appearance.inir.colText
         : Appearance.auroraEverywhere ? Appearance.colors.colOnLayer0
         : (Appearance.m3colors.darkmode ? Appearance.colors.colOnLayer0 : Appearance.colors.colLayer0)
     property color brightSecondary: Appearance.inirEverywhere ? Appearance.inir.colTextSecondary
         : Appearance.auroraEverywhere ? Appearance.aurora.colTextSecondary
         : (Appearance.m3colors.darkmode ? Appearance.colors.colSecondary : Appearance.colors.colOnSecondary)
-    property color brightTertiary: Appearance.inirEverywhere ? Appearance.inir.colPrimary
+    property color brightTertiary: Appearance.zzzEverywhere ? Appearance.zzz.accent
+        : Appearance.inirEverywhere ? Appearance.inir.colPrimary
         : Appearance.auroraEverywhere ? Appearance.colors.colPrimary
         : (Appearance.m3colors.darkmode ? Appearance.colors.colTertiary : Qt.lighter(Appearance.colors.colPrimary))
-    property color selectionBorderColor: Appearance.inirEverywhere ? Appearance.inir.colBorder
+    property color selectionBorderColor: Appearance.zzzEverywhere ? Appearance.zzz.accent
+        : Appearance.inirEverywhere ? Appearance.inir.colBorder
         : Appearance.auroraEverywhere ? Appearance.aurora.colPopupBorder
         : ColorUtils.mix(brightText, brightSecondary, 0.5)
-    property color selectionFillColor: Appearance.inirEverywhere ? ColorUtils.transparentize(Appearance.inir.colPrimary, 0.8)
+    property color selectionFillColor: Appearance.zzzEverywhere ? ColorUtils.transparentize(Appearance.zzz.accent, 0.86)
+        : Appearance.inirEverywhere ? ColorUtils.transparentize(Appearance.inir.colPrimary, 0.8)
         : Appearance.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colPrimary, 0.8)
-        : "#33ffffff"
+        : ColorUtils.applyAlpha(Appearance.colors.colOnLayer0, 0.2)
     property color windowBorderColor: brightSecondary
     property color windowFillColor: ColorUtils.transparentize(windowBorderColor, 0.85)
     property color imageBorderColor: brightTertiary
     property color imageFillColor: ColorUtils.transparentize(imageBorderColor, 0.85)
     property color onBorderColor: Appearance.inirEverywhere ? Appearance.inir.colText
-        : Appearance.auroraEverywhere ? Appearance.colors.colOnLayer0 : "#ff000000"
+        : Appearance.auroraEverywhere ? Appearance.colors.colOnLayer0 : Appearance.colors.colScrim
     readonly property var windows: useNiri
         ? (NiriService.windows || [])
         : [...HyprlandData.windowList].sort((a, b) => {
@@ -292,7 +299,7 @@ PanelWindow {
     onPreparationDoneChanged: {
         if (!preparationDone) return;
         if (root.isRecording && root.recordingShouldStop) {
-            Quickshell.execDetached([Directories.recordScriptPath]);
+            Quickshell.execDetached([Directories.recordScriptPath, "--stop"]);
             root.dismiss();
             return;
         }
@@ -334,8 +341,10 @@ PanelWindow {
         root.regionWidth = Math.max(0, Math.min(root.regionWidth, root.screen.width - root.regionX));
         root.regionHeight = Math.max(0, Math.min(root.regionHeight, root.screen.height - root.regionY));
 
-        if (root.action === RegionSelection.SnipAction.Copy || root.action === RegionSelection.SnipAction.Edit) {
-            root.action = root.mouseButton === Qt.RightButton ? RegionSelection.SnipAction.Edit : RegionSelection.SnipAction.Copy;
+        // Honor the toolbar's explicit action. Right-click while in plain
+        // screenshot (Copy) mode stays a shortcut to annotate instead.
+        if (root.action === RegionSelection.SnipAction.Copy && root.mouseButton === Qt.RightButton) {
+            root.action = RegionSelection.SnipAction.Edit;
         }
 
         const rx = Math.round(root.regionX * root.monitorScale);
@@ -351,18 +360,24 @@ PanelWindow {
         const screenshotSaveDir = StringUtils.shellSingleQuoteEscape(Directories.screenshotsPath)
         const uploadAndGetUrl = (filePath) => {
             const escaped = StringUtils.shellSingleQuoteEscape(filePath)
-            const primary = `/usr/bin/curl -sf --max-time 10 -F file=@'${escaped}' ${root.fileUploadApiEndpoint}`
-            const fallback1 = `/usr/bin/curl -s --max-time 15 -F reqtype=fileupload -F time=1h -F "fileToUpload=@'${escaped}'" ${root.fileUploadApiFallback}`
-            const fallback2 = `/usr/bin/curl -s --max-time 15 -F reqtype=fileupload -F "fileToUpload=@'${escaped}'" ${root.fileUploadApiFallback2}`
+            const primary = `/usr/bin/curl -s --max-time 15 -F reqtype=fileupload -F time=1h -F fileToUpload=@'${escaped}' '${root.fileUploadApiEndpoint}'`
+            const fallback1 = `/usr/bin/curl -s --max-time 15 -F reqtype=fileupload -F fileToUpload=@'${escaped}' '${root.fileUploadApiFallback}'`
+            const fallback2 = `/usr/bin/curl -sf --max-time 10 -F file=@'${escaped}' '${root.fileUploadApiFallback2}'`
             // Try primary, then fallback1, then fallback2 if all fail or return empty/non-URL response
             return `url=$(${primary} 2>/dev/null); if [[ -z "$url" || "$url" != http* ]]; then url=$(${fallback1}); fi; if [[ -z "$url" || "$url" != http* ]]; then url=$(${fallback2}); fi; echo "$url"`
         }
         const annotationCommand = `${(Config.options?.regionSelector?.annotation?.useSatty ?? false) ? "satty" : "swappy"} -f -`;
         switch (root.action) {
             case RegionSelection.SnipAction.Copy:
-                snipProc.command = ["/usr/bin/bash", "-c", `_dir='${screenshotSaveDir}' && mkdir -p "$_dir" && _ss="$_dir/ss-$(date +%Y%m%d-%H%M%S).png" && ${cropToStdout} | tee "$_ss" | /usr/bin/wl-copy && echo -n "$_ss" | /usr/bin/wl-copy --primary && ${cleanup} && /usr/bin/notify-send "Screenshot copied" "${rw}x${rh} saved to $_ss" -a "Screenshot" -i camera-photo -t 3000`]
+                snipProc.command = ["/usr/bin/bash", "-c", `_dir='${screenshotSaveDir}' && mkdir -p "$_dir" && _ss="$_dir/$(date +'${StringUtils.shellSingleQuoteEscape(root.screenshotNameFormat)}').png" && ${cropToStdout} | tee "$_ss" | /usr/bin/wl-copy && echo -n "$_ss" | /usr/bin/wl-copy --primary && ${cleanup} && /usr/bin/notify-send "Screenshot copied" "${rw}x${rh} saved to $_ss" -a "Screenshot" -i camera-photo -t 3000`]
                 break;
             case RegionSelection.SnipAction.Edit:
+                if (Config.options?.regionSelector?.annotation?.useNativeEditor ?? true) {
+                    editCropProc.editFile = `${root.screenshotDir}/edit-${root.screen.name}.png`;
+                    editCropProc.command = ["/usr/bin/bash", "-c", `${cropBase} '${StringUtils.shellSingleQuoteEscape(editCropProc.editFile)}' && ${cleanup}`];
+                    editCropProc.running = true;
+                    return; // editCropProc.onExited opens the native editor and dismisses
+                }
                 snipProc.command = ["/usr/bin/bash", "-c", `${cropToStdout} | ${annotationCommand} && ${cleanup}`]
                 break;
             case RegionSelection.SnipAction.Search:
@@ -387,8 +402,33 @@ PanelWindow {
         root.dismiss();
     }
 
+    // Capture the whole screen with the current action (no region drawing).
+    function snipFullscreen() {
+        root.dragStartX = 0;
+        root.dragStartY = 0;
+        root.draggingX = root.screen.width;
+        root.draggingY = root.screen.height;
+        root.snip();
+    }
+
     Process {
         id: snipProc
+    }
+
+    // Crops the selected region to a temp file for the native annotation editor,
+    // then opens it. Lives until exit (we dismiss only after it fires).
+    Process {
+        id: editCropProc
+        property string editFile: ""
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode === 0) {
+                GlobalStates.annotationEditorPath = editCropProc.editFile;
+                GlobalStates.annotationEditorOpen = true;
+            } else {
+                Quickshell.execDetached(["/usr/bin/notify-send", "Edit failed", "Could not prepare the region for editing", "-a", "Screenshot", "-t", "3000"]);
+            }
+            root.dismiss();
+        }
     }
 
     Rectangle {
@@ -599,6 +639,12 @@ PanelWindow {
                             onActionChanged: root.action = action
                             onSelectionModeChanged: root.selectionMode = selectionMode
                             onDismiss: root.dismiss();
+                            onFullscreenRequested: root.snipFullscreen()
+                            onColorPickerRequested: {
+                                // Dismiss first so hyprpicker grabs the live desktop, not this overlay.
+                                root.dismiss();
+                                ShellExec.execDetachedArgs(["/usr/bin/bash", "-c", "sleep 0.3; /usr/bin/hyprpicker -a"], "Pick color");
+                            }
                         }
                         Item {
                             anchors.verticalCenter: parent.verticalCenter
@@ -634,6 +680,11 @@ PanelWindow {
                         onActionChanged: root.action = action
                         onSelectionModeChanged: root.selectionMode = selectionMode
                         onDismiss: root.dismiss()
+                        onFullscreenRequested: root.snipFullscreen()
+                        onColorPickerRequested: {
+                            root.dismiss();
+                            ShellExec.execDetachedArgs(["/usr/bin/bash", "-c", "sleep 0.3; /usr/bin/hyprpicker -a"], "Pick color");
+                        }
                     }
                 }
             }

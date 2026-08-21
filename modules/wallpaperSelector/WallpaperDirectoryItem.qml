@@ -4,7 +4,8 @@ import qs.modules.common.widgets
 import qs.modules.common.functions
 import QtQuick
 import QtQuick.Layouts
-import Qt5Compat.GraphicalEffects
+import Qt5Compat.GraphicalEffects as GE
+
 
 MouseArea {
     id: root
@@ -19,6 +20,8 @@ MouseArea {
     property alias radius: background.radius
     property alias margins: background.anchors.margins
     property alias padding: wallpaperItemColumnLayout.anchors.margins
+    property real thumbnailResolutionScale: 1
+    property bool thumbnailMipmap: false
     margins: Appearance.sizes.wallpaperSelectorItemMargins
     padding: Appearance.sizes.wallpaperSelectorItemPadding
 
@@ -30,7 +33,12 @@ MouseArea {
     Rectangle {
         id: background
         anchors.fill: parent
-        radius: Appearance.rounding.normal
+        radius: Appearance.zzzEverywhere ? Appearance.zzz.controlRadius : Appearance.rounding.normal
+        border.width: Appearance.zzzEverywhere ? 1 : 0
+        border.color: Appearance.zzzEverywhere ? Appearance.zzz.hairlineStrong : "transparent"
+        Behavior on radius { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementResize.duration; easing.type: Appearance.animation.elementResize.type; easing.bezierCurve: Appearance.animation.elementResize.bezierCurve } }
+        Behavior on border.width { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+        Behavior on border.color { enabled: Appearance.animationsEnabled; ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
         Behavior on color {
             enabled: Appearance.animationsEnabled
             animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
@@ -46,14 +54,33 @@ MouseArea {
                 Layout.fillHeight: true
                 Layout.fillWidth: true
 
+                // Single layer+mask for the entire image area (shadow + thumbnail).
+                // One FBO per card instead of separate layers for shadow and image.
+                layer.enabled: root.useThumbnail && Appearance.effectsEnabled
+                layer.effect: GE.OpacityMask {
+                    maskSource: Rectangle {
+                        width: wallpaperItemImageContainer.width
+                        height: wallpaperItemImageContainer.height
+                        radius: Appearance.zzzEverywhere ? Appearance.zzz.cornerRadius : Appearance.rounding.small
+                        Behavior on radius {
+                            enabled: Appearance.animationsEnabled
+                            NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                        }
+                    }
+                }
+
                 Loader {
                     id: thumbnailShadowLoader
-                    active: thumbnailImageLoader.active && thumbnailImageLoader.item.status === Image.Ready
+                    active: thumbnailImageLoader.active && thumbnailImageLoader.item?.status === Image.Ready
                     anchors.fill: thumbnailImageLoader
                     sourceComponent: StyledRectangularShadow {
                         target: thumbnailImageLoader
                         anchors.fill: undefined
-                        radius: Appearance.rounding.small
+                        radius: Appearance.zzzEverywhere ? Appearance.zzz.cornerRadius : Appearance.rounding.small
+                        Behavior on radius {
+                            enabled: Appearance.animationsEnabled
+                            NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                        }
                     }
                 }
 
@@ -65,54 +92,27 @@ MouseArea {
                         id: thumbnailImage
                         generateThumbnail: true
                         sourcePath: fileModelData.filePath
-                        // Force x-large (512px) minimum for crisp grid thumbnails.
-                        // The default auto-detect can pick "large" (256px) for small cells,
-                        // producing visible blur on 300-400px wide grid items.
+                        // Use auto-detected size — "large" (256px) is enough for
+                        // ~250-300px grid cells. Avoids decoding 512px PNGs per item.
                         thumbnailSizeName: {
                             const auto = Images.thumbnailSizeNameForDimensions(
-                                Math.round(wallpaperItemImageContainer.width * root._dpr),
-                                Math.round(wallpaperItemImageContainer.height * root._dpr)
+                                Math.round(wallpaperItemImageContainer.width * root._dpr
+                                    * root.thumbnailResolutionScale),
+                                Math.round(wallpaperItemImageContainer.height * root._dpr
+                                    * root.thumbnailResolutionScale)
                             )
-                            return (auto === "normal" || auto === "large") ? "x-large" : auto
+                            return auto === "normal" ? "large" : auto
                         }
 
                         cache: true
                         fillMode: Image.PreserveAspectCrop
                         clip: true
                         smooth: true
-                        sourceSize.width: Math.max(
-                            Math.round(wallpaperItemImageContainer.width * root._dpr),
-                            Images.thumbnailSizes[thumbnailSizeName] ?? 512
-                        )
-                        sourceSize.height: Math.max(
-                            Math.round(wallpaperItemImageContainer.height * root._dpr),
-                            Images.thumbnailSizes[thumbnailSizeName] ?? 512
-                        )
-
-                        Connections {
-                            target: Wallpapers
-                            function onThumbnailGenerated(directory) {
-                                if (thumbnailImage.status !== Image.Error) return;
-                                if (FileUtils.parentDirectory(thumbnailImage.sourcePath) !== directory) return;
-                                thumbnailImage.source = "";
-                                thumbnailImage.source = thumbnailImage.thumbnailPath;
-                            }
-                            function onThumbnailGeneratedFile(filePath) {
-                                if (thumbnailImage.status !== Image.Error) return;
-                                if (Qt.resolvedUrl(thumbnailImage.sourcePath) !== Qt.resolvedUrl(filePath)) return;
-                                thumbnailImage.source = "";
-                                thumbnailImage.source = thumbnailImage.thumbnailPath;
-                            }
-                        }
-
-                        layer.enabled: Appearance.effectsEnabled
-                        layer.effect: OpacityMask {
-                            maskSource: Rectangle {
-                                width: wallpaperItemImageContainer.width
-                                height: wallpaperItemImageContainer.height
-                                radius: Appearance.rounding.small
-                            }
-                        }
+                        mipmap: root.thumbnailMipmap
+                        sourceSize.width: Math.round(wallpaperItemImageContainer.width * root._dpr
+                            * root.thumbnailResolutionScale)
+                        sourceSize.height: Math.round(wallpaperItemImageContainer.height * root._dpr
+                            * root.thumbnailResolutionScale)
                     }
                 }
 

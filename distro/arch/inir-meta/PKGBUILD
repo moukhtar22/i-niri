@@ -1,17 +1,17 @@
 # Maintainer: snowarch
 
 pkgname=inir-meta
-pkgver=2.21.1
+pkgver=2.29.1
 pkgrel=1
 pkgdesc='Full iNiR desktop experience meta-package'
 arch=(any)
 url='https://github.com/snowarch/iNiR'
-license=('MIT')
+license=('GPL-3.0-only')
 source=("LICENSE::https://raw.githubusercontent.com/snowarch/iNiR/main/LICENSE")
 sha256sums=('SKIP')
 depends=(
   adw-gtk-theme
-  awww-bin
+  awww
   blueman
   breeze-icons
   capitaine-cursors
@@ -39,7 +39,9 @@ depends=(
   otf-space-grotesk
   pacman-contrib
   pavucontrol
+  plasma-browser-integration
   plasma-integration
+  python-ytmusicapi
   qt6ct
   socat
   songrec
@@ -59,6 +61,9 @@ depends=(
   wtype
   ydotool
   yt-dlp
+)
+optdepends=(
+  'millennium-bin: Steam theming via Millennium (requires steam)'
 )
 
 package() {

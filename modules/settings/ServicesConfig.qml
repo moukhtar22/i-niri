@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import qs.services
+import qs.services.deferred
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
@@ -66,6 +67,54 @@ ContentPage {
                 }
             }
 
+            // Battery profile is meaningless without a battery.
+            SettingsSwitch {
+                visible: Battery.available
+                buttonIcon: "battery_saver"
+                text: Translation.tr("Separate timeouts on battery")
+                checked: Config.options?.idle?.onBattery?.enable ?? false
+                onCheckedChanged: Config.setNestedValue("idle.onBattery.enable", checked)
+                StyledToolTip {
+                    text: Translation.tr("Use shorter idle timeouts while the laptop runs unplugged")
+                }
+            }
+
+            ConfigSpinBox {
+                visible: Battery.available
+                enabled: Config.options?.idle?.onBattery?.enable ?? false
+                icon: "lock_clock"
+                text: Translation.tr("Battery: screen off") + ` (${value > 0 ? Math.floor(value/60) + "m" : Translation.tr("disabled")})`
+                value: Config.options?.idle?.onBattery?.screenOffTimeout ?? 120
+                from: 0
+                to: 3600
+                stepSize: 30
+                onValueChanged: Config.setNestedValue("idle.onBattery.screenOffTimeout", value)
+            }
+
+            ConfigSpinBox {
+                visible: Battery.available
+                enabled: Config.options?.idle?.onBattery?.enable ?? false
+                icon: "lock"
+                text: Translation.tr("Battery: lock") + ` (${value > 0 ? Math.floor(value/60) + "m" : Translation.tr("disabled")})`
+                value: Config.options?.idle?.onBattery?.lockTimeout ?? 300
+                from: 0
+                to: 7200
+                stepSize: 30
+                onValueChanged: Config.setNestedValue("idle.onBattery.lockTimeout", value)
+            }
+
+            ConfigSpinBox {
+                visible: Battery.available
+                enabled: Config.options?.idle?.onBattery?.enable ?? false
+                icon: "dark_mode"
+                text: Translation.tr("Battery: suspend") + ` (${value > 0 ? Math.floor(value/60) + "m" : Translation.tr("disabled")})`
+                value: Config.options?.idle?.onBattery?.suspendTimeout ?? 600
+                from: 0
+                to: 7200
+                stepSize: 60
+                onValueChanged: Config.setNestedValue("idle.onBattery.suspendTimeout", value)
+            }
+
             SettingsSwitch {
                 buttonIcon: "coffee"
                 text: Translation.tr("Keep awake (caffeine)")
@@ -75,26 +124,6 @@ ContentPage {
                 }
                 StyledToolTip {
                     text: Translation.tr("Temporarily prevent screen from turning off and system from sleeping")
-                }
-            }
-        }
-    }
-
-    SettingsCardSection {
-        expanded: false
-        icon: "neurology"
-        title: Translation.tr("AI")
-
-        SettingsGroup {
-            MaterialTextArea {
-                Layout.fillWidth: true
-                placeholderText: Translation.tr("System prompt")
-                text: Config.options?.ai?.systemPrompt ?? ""
-                wrapMode: TextEdit.Wrap
-                onTextChanged: {
-                    Qt.callLater(() => {
-                        Config.setNestedValue("ai.systemPrompt", text)
-                    });
                 }
             }
         }
@@ -223,6 +252,29 @@ ContentPage {
         title: Translation.tr("Search")
 
         SettingsGroup {
+            ContentSubsection {
+                title: Translation.tr("Surface style")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options?.search?.style ?? "default"
+                    onSelected: newValue => {
+                        Config.setNestedValue("search.style", newValue);
+                    }
+                    options: [
+                        { displayName: Translation.tr("Default"), icon: "search", value: "default" },
+                        { displayName: Translation.tr("Island"), icon: "blur_on", value: "island" }
+                    ]
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("Island wraps the search in the gradient card look used by the island bar, dock and sidebars.")
+                    color: Appearance.colors.colSubtext
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    wrapMode: Text.WordWrap
+                }
+            }
+
             SettingsSwitch {
                 text: Translation.tr("Use Levenshtein distance-based algorithm instead of fuzzy")
                 checked: Config.options?.search?.sloppy ?? false
@@ -315,7 +367,7 @@ ContentPage {
 
     SettingsCardSection {
         expanded: false
-        icon: "system_update"
+        icon: "system_update_alt"
         title: Translation.tr("Updates")
 
         SettingsGroup {
@@ -403,6 +455,17 @@ ContentPage {
                 }
             }
 
+            SettingsSwitch {
+                buttonIcon: "terminal"
+                text: Translation.tr("Open terminal during update")
+                checked: Config.options?.shellUpdates?.openTerminalOnUpdate ?? true
+                enabled: Config.options?.shellUpdates?.enabled ?? true
+                onCheckedChanged: Config.setNestedValue("shellUpdates.openTerminalOnUpdate", checked)
+                StyledToolTip {
+                    text: Translation.tr("Run setup in your configured terminal so the full TUI output is visible. Off = silent background update with only the bar pill indicator.")
+                }
+            }
+
             // Status card with visual states
             Rectangle {
                 Layout.fillWidth: true
@@ -411,14 +474,14 @@ ContentPage {
                 visible: Config.options?.shellUpdates?.enabled ?? true
 
                 color: {
-                    if (ShellUpdates.hasUpdate) return ColorUtils.transparentize(Appearance.m3colors.m3primary, 0.92)
-                    if (ShellUpdates.lastError.length > 0) return ColorUtils.transparentize(Appearance.m3colors.m3error, 0.92)
+                    if (ShellUpdates.hasUpdate) return ColorUtils.transparentize(Appearance.colors.colPrimary, 0.92)
+                    if (ShellUpdates.lastError.length > 0) return ColorUtils.transparentize(Appearance.colors.colError, 0.92)
                     return Appearance.colors.colSurfaceContainerLow
                 }
                 border.width: 1
                 border.color: {
-                    if (ShellUpdates.hasUpdate) return ColorUtils.transparentize(Appearance.m3colors.m3primary, 0.7)
-                    if (ShellUpdates.lastError.length > 0) return ColorUtils.transparentize(Appearance.m3colors.m3error, 0.7)
+                    if (ShellUpdates.hasUpdate) return ColorUtils.transparentize(Appearance.colors.colPrimary, 0.7)
+                    if (ShellUpdates.lastError.length > 0) return ColorUtils.transparentize(Appearance.colors.colError, 0.7)
                     return Appearance.colors.colLayer0Border
                 }
 
@@ -443,10 +506,10 @@ ContentPage {
                             height: 40
                             radius: Appearance.rounding.small
                             color: {
-                                if (ShellUpdates.hasUpdate) return ColorUtils.transparentize(Appearance.m3colors.m3primary, 0.8)
+                                if (ShellUpdates.hasUpdate) return ColorUtils.transparentize(Appearance.colors.colPrimary, 0.8)
                                 if (ShellUpdates.isChecking || ShellUpdates.isUpdating) return ColorUtils.transparentize(Appearance.colors.colSubtext, 0.85)
-                                if (ShellUpdates.lastError.length > 0) return ColorUtils.transparentize(Appearance.m3colors.m3error, 0.8)
-                                return ColorUtils.transparentize(Appearance.m3colors.m3tertiary, 0.85)
+                                if (ShellUpdates.lastError.length > 0) return ColorUtils.transparentize(Appearance.colors.colError, 0.8)
+                                return ColorUtils.transparentize(Appearance.colors.colTertiary, 0.85)
                             }
 
                             MaterialSymbol {
@@ -461,9 +524,9 @@ ContentPage {
                                 }
                                 iconSize: Appearance.font.pixelSize.huge
                                 color: {
-                                    if (ShellUpdates.hasUpdate) return Appearance.m3colors.m3primary
-                                    if (ShellUpdates.lastError.length > 0) return Appearance.m3colors.m3error
-                                    if (ShellUpdates.available) return Appearance.m3colors.m3tertiary
+                                    if (ShellUpdates.hasUpdate) return Appearance.colors.colPrimary
+                                    if (ShellUpdates.lastError.length > 0) return Appearance.colors.colError
+                                    if (ShellUpdates.available) return Appearance.colors.colTertiary
                                     return Appearance.colors.colSubtext
                                 }
                             }
@@ -493,8 +556,8 @@ ContentPage {
                                     weight: Font.DemiBold
                                 }
                                 color: {
-                                    if (ShellUpdates.hasUpdate) return Appearance.m3colors.m3primary
-                                    if (ShellUpdates.lastError.length > 0) return Appearance.m3colors.m3error
+                                    if (ShellUpdates.hasUpdate) return Appearance.colors.colPrimary
+                                    if (ShellUpdates.lastError.length > 0) return Appearance.colors.colError
                                     return Appearance.colors.colOnSurface
                                 }
                             }
@@ -512,7 +575,17 @@ ContentPage {
                                     ? Translation.tr("Branch: %1").arg(ShellUpdates.currentBranch)
                                     : ""
                                 font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.colors.colSubtext
+                                color: ShellUpdates.isNonMainBranch
+                                    ? Appearance.colors.colTertiary
+                                    : Appearance.colors.colSubtext
+                            }
+
+                            StyledText {
+                                visible: ShellUpdates.isNonMainBranch && !ShellUpdates.isChecking && !ShellUpdates.isUpdating
+                                text: Translation.tr("Non-release branch — updates track %1").arg(ShellUpdates.currentBranch)
+                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                color: Appearance.colors.colTertiary
+                                wrapMode: Text.WordWrap
                             }
 
                             StyledText {
@@ -568,7 +641,7 @@ ContentPage {
                             visible: ShellUpdates.hasUpdate && ShellUpdates.remoteCommit.length > 0
                             text: "arrow_forward"
                             iconSize: Appearance.font.pixelSize.normal
-                            color: Appearance.m3colors.m3primary
+                            color: Appearance.colors.colPrimary
                         }
 
                         Rectangle {
@@ -576,9 +649,9 @@ ContentPage {
                             Layout.fillWidth: true
                             implicitHeight: remoteCommitCol.implicitHeight + 12
                             radius: Appearance.rounding.small
-                            color: ColorUtils.transparentize(Appearance.m3colors.m3primary, 0.88)
+                            color: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.88)
                             border.width: 1
-                            border.color: ColorUtils.transparentize(Appearance.m3colors.m3primary, 0.7)
+                            border.color: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.7)
 
                             ColumnLayout {
                                 id: remoteCommitCol
@@ -591,7 +664,7 @@ ContentPage {
                                 StyledText {
                                     text: Translation.tr("Available")
                                     font.pixelSize: Appearance.font.pixelSize.smallest
-                                    color: Appearance.m3colors.m3primary
+                                    color: Appearance.colors.colPrimary
                                     opacity: 0.8
                                 }
                                 StyledText {
@@ -601,7 +674,7 @@ ContentPage {
                                         family: Appearance.font.family.monospace
                                         weight: Font.DemiBold
                                     }
-                                    color: Appearance.m3colors.m3primary
+                                    color: Appearance.colors.colPrimary
                                 }
                             }
                         }
@@ -642,14 +715,14 @@ ContentPage {
                         MaterialSymbol {
                             text: "warning"
                             iconSize: Appearance.font.pixelSize.smaller
-                            color: Appearance.m3colors.m3error
+                            color: Appearance.colors.colError
                             Layout.alignment: Qt.AlignTop
                         }
                         StyledText {
                             Layout.fillWidth: true
                             text: ShellUpdates.lastError
                             font.pixelSize: Appearance.font.pixelSize.smallest
-                            color: Appearance.m3colors.m3error
+                            color: Appearance.colors.colError
                             wrapMode: Text.WordWrap
                         }
                     }
@@ -729,7 +802,7 @@ ContentPage {
                     implicitHeight: 36
                     visible: ShellUpdates.hasUpdate && ShellUpdates.selfUpdateSupported
                     buttonRadius: Appearance.rounding.small
-                    colBackground: Appearance.m3colors.m3primary
+                    colBackground: Appearance.colors.colPrimary
                     colBackgroundHover: Appearance.colors.colPrimaryHover
                     colRipple: Appearance.colors.colPrimaryActive
                     enabled: !ShellUpdates.isUpdating
@@ -742,7 +815,7 @@ ContentPage {
                         MaterialSymbol {
                             text: ShellUpdates.isUpdating ? "hourglass_top" : "upgrade"
                             iconSize: Appearance.font.pixelSize.normal
-                            color: Appearance.m3colors.m3onPrimary
+                            color: Appearance.colors.colOnPrimary
                         }
                         StyledText {
                             text: ShellUpdates.isUpdating
@@ -754,7 +827,7 @@ ContentPage {
                                 pixelSize: Appearance.font.pixelSize.smaller
                                 weight: Font.DemiBold
                             }
-                            color: Appearance.m3colors.m3onPrimary
+                            color: Appearance.colors.colOnPrimary
                         }
                     }
                 }
@@ -795,7 +868,7 @@ ContentPage {
                         anchors.centerIn: parent
                         text: "notifications_active"
                         iconSize: Appearance.font.pixelSize.normal
-                        color: Appearance.m3colors.m3primary
+                        color: Appearance.colors.colPrimary
                     }
 
                     StyledToolTip {
@@ -814,7 +887,7 @@ ContentPage {
         SettingsGroup {
             StyledText {
                 Layout.fillWidth: true
-                text: Translation.tr("Set a city name or coordinates for precise location. Leave empty to auto-detect from IP. Data provided by wttr.in.")
+                text: Translation.tr("Set a city name or coordinates for precise location. Leave empty to auto-detect from IP. Weather from wttr.in with Open-Meteo fallback; air quality from Open-Meteo.")
                 color: Appearance.colors.colOnSurfaceVariant
                 font.pixelSize: Appearance.font.pixelSize.small
                 wrapMode: Text.WordWrap
@@ -860,14 +933,14 @@ ContentPage {
                     Layout.fillWidth: true
                     placeholderText: Translation.tr("e.g. Buenos Aires, London, Tokyo")
                     font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.m3colors.m3onSurface
+                    color: Appearance.colors.colOnSurface
                     placeholderTextColor: Appearance.colors.colSubtext
                     text: Config.options?.bar?.weather?.city ?? ""
                     background: Rectangle {
                         color: Appearance.colors.colLayer1
                         radius: Appearance.rounding.small
                         border.width: weatherCityInput.activeFocus ? 2 : 1
-                        border.color: weatherCityInput.activeFocus ? Appearance.m3colors.m3primary : Appearance.colors.colLayer0Border
+                        border.color: weatherCityInput.activeFocus ? Appearance.colors.colPrimary : Appearance.colors.colLayer0Border
                     }
                     onTextEdited: Config.setNestedValue("bar.weather.city", text)
                 }
@@ -893,7 +966,7 @@ ContentPage {
                         Layout.fillWidth: true
                         placeholderText: Translation.tr("Latitude (e.g. -34.6037)")
                         font.pixelSize: Appearance.font.pixelSize.small
-                        color: Appearance.m3colors.m3onSurface
+                        color: Appearance.colors.colOnSurface
                         placeholderTextColor: Appearance.colors.colSubtext
                         text: {
                             const v = Config.options?.bar?.weather?.manualLat ?? 0;
@@ -903,7 +976,7 @@ ContentPage {
                             color: Appearance.colors.colLayer1
                             radius: Appearance.rounding.small
                             border.width: weatherLatInput.activeFocus ? 2 : 1
-                            border.color: weatherLatInput.activeFocus ? Appearance.m3colors.m3primary : Appearance.colors.colLayer0Border
+                            border.color: weatherLatInput.activeFocus ? Appearance.colors.colPrimary : Appearance.colors.colLayer0Border
                         }
                         onTextEdited: {
                             const num = parseFloat(text);
@@ -916,7 +989,7 @@ ContentPage {
                         Layout.fillWidth: true
                         placeholderText: Translation.tr("Longitude (e.g. -58.3816)")
                         font.pixelSize: Appearance.font.pixelSize.small
-                        color: Appearance.m3colors.m3onSurface
+                        color: Appearance.colors.colOnSurface
                         placeholderTextColor: Appearance.colors.colSubtext
                         text: {
                             const v = Config.options?.bar?.weather?.manualLon ?? 0;
@@ -926,7 +999,7 @@ ContentPage {
                             color: Appearance.colors.colLayer1
                             radius: Appearance.rounding.small
                             border.width: weatherLonInput.activeFocus ? 2 : 1
-                            border.color: weatherLonInput.activeFocus ? Appearance.m3colors.m3primary : Appearance.colors.colLayer0Border
+                            border.color: weatherLonInput.activeFocus ? Appearance.colors.colPrimary : Appearance.colors.colLayer0Border
                         }
                         onTextEdited: {
                             const num = parseFloat(text);
@@ -975,6 +1048,421 @@ ContentPage {
                 stepSize: 5
                 onValueChanged: Config.setNestedValue("bar.weather.fetchInterval", value)
                 enabled: Config.options?.bar?.weather?.enable ?? false
+            }
+        }
+    }
+
+    SettingsCardSection {
+        icon: "calendar_month"
+        title: Translation.tr("Calendar Sync")
+
+        SettingsGroup {
+            SettingsSwitch {
+                buttonIcon: "sync"
+                text: Translation.tr("Enable external calendar sync")
+                checked: Config.options?.calendar?.externalSync?.enable ?? false
+                onCheckedChanged: Config.setNestedValue("calendar.externalSync.enable", checked)
+            }
+
+            ConfigSpinBox {
+                icon: "update"
+                text: Translation.tr("Refresh interval (minutes)")
+                value: Config.options?.calendar?.externalSync?.refreshMinutes ?? 15
+                from: 5
+                to: 120
+                stepSize: 5
+                onValueChanged: Config.setNestedValue("calendar.externalSync.refreshMinutes", value)
+                enabled: Config.options?.calendar?.externalSync?.enable ?? false
+            }
+
+            SettingsSwitch {
+                buttonIcon: "event"
+                text: Translation.tr("Show upcoming events below calendar")
+                checked: Config.options?.calendar?.showUpcoming ?? true
+                onCheckedChanged: Config.setNestedValue("calendar.showUpcoming", checked)
+            }
+
+            ConfigSpinBox {
+                icon: "date_range"
+                text: Translation.tr("Upcoming days to show")
+                value: Config.options?.calendar?.upcomingDays ?? 3
+                from: 1
+                to: 14
+                stepSize: 1
+                onValueChanged: Config.setNestedValue("calendar.upcomingDays", value)
+            }
+        }
+
+        // Calendar source list
+        SettingsGroup {
+            visible: Config.options?.calendar?.externalSync?.enable ?? false
+
+            // Section header for sources
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 4
+                Layout.rightMargin: 4
+                Layout.bottomMargin: 4
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("Calendar Sources")
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.weight: Font.Medium
+                    color: Appearance.colors.colOnLayer1
+                }
+
+                RippleButton {
+                    implicitWidth: addRow.implicitWidth + 16
+                    implicitHeight: 32
+                    buttonRadius: Appearance.rounding.small
+                    colBackground: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.88)
+                    colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.80)
+                    onClicked: addSourceForm.expanded = true
+
+                    contentItem: RowLayout {
+                        id: addRow
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        MaterialSymbol {
+                            text: "add"
+                            iconSize: 16
+                            color: Appearance.colors.colPrimary
+                        }
+                        StyledText {
+                            text: Translation.tr("Add")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.weight: Font.Medium
+                            color: Appearance.colors.colPrimary
+                        }
+                    }
+                }
+            }
+
+            // Source list
+            Repeater {
+                model: Config.options?.calendar?.externalSync?.sources ?? []
+
+                delegate: Item {
+                    id: sourceItem
+                    required property var modelData
+                    required property int index
+                    Layout.fillWidth: true
+                    implicitHeight: sourceRow.implicitHeight + 12
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: Appearance.rounding.small
+                        color: sourceMA.containsMouse ? Appearance.colors.colLayer1Hover : "transparent"
+                        Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+
+                        RowLayout {
+                            id: sourceRow
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 10
+
+                            // Color dot
+                            Rectangle {
+                                Layout.preferredWidth: 12
+                                Layout.preferredHeight: 12
+                                radius: 6
+                                color: sourceItem.modelData?.color ?? Appearance.colors.colPrimary
+                            }
+
+                            // Name and URL
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 1
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: sourceItem.modelData?.name ?? Translation.tr("Unnamed")
+                                    font.pixelSize: Appearance.font.pixelSize.normal
+                                    color: Appearance.colors.colOnLayer1
+                                    elide: Text.ElideRight
+                                }
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: sourceItem.modelData?.url ?? ""
+                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                    color: Appearance.colors.colSubtext
+                                    elide: Text.ElideMiddle
+                                }
+                            }
+
+                            // Status indicator
+                            MaterialSymbol {
+                                visible: {
+                                    const st = CalendarSync.sourceStatuses?.[sourceItem.modelData?.id]
+                                    return st?.error && st.error !== ""
+                                }
+                                text: "error"
+                                iconSize: 16
+                                color: Appearance.colors.colError
+
+                                StyledToolTip {
+                                    text: CalendarSync.sourceStatuses?.[sourceItem.modelData?.id]?.error ?? ""
+                                }
+                            }
+
+                            // Toggle enabled
+                            Switch {
+                                checked: sourceItem.modelData?.enabled ?? true
+                                onCheckedChanged: {
+                                    if (checked !== (sourceItem.modelData?.enabled ?? true)) {
+                                        CalendarSync.toggleSource(sourceItem.modelData.id, checked)
+                                    }
+                                }
+                            }
+
+                            // Remove button
+                            RippleButton {
+                                implicitWidth: 28
+                                implicitHeight: 28
+                                buttonRadius: 14
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colLayer1Hover
+                                onClicked: CalendarSync.removeSource(sourceItem.modelData.id)
+
+                                contentItem: MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: "close"
+                                    iconSize: 14
+                                    color: Appearance.colors.colSubtext
+                                }
+
+                                StyledToolTip {
+                                    text: Translation.tr("Remove")
+                                }
+                            }
+                        }
+
+                        MouseArea {
+                            id: sourceMA
+                            anchors.fill: parent
+                            z: -1
+                            hoverEnabled: true
+                        }
+                    }
+                }
+            }
+
+            // Empty state
+            StyledText {
+                visible: (Config.options?.calendar?.externalSync?.sources ?? []).length === 0
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 8
+                Layout.bottomMargin: 8
+                text: Translation.tr("No calendar sources added yet")
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colSubtext
+                font.italic: true
+            }
+
+            // Help text for getting ICS URLs
+            StyledText {
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                Layout.leftMargin: 4
+                Layout.rightMargin: 4
+                text: Translation.tr("Paste an ICS/iCal URL from Google Calendar, Outlook, or any CalDAV provider. No account login needed — just the calendar URL.")
+                font.pixelSize: Appearance.font.pixelSize.smallest
+                color: Appearance.colors.colSubtext
+                wrapMode: Text.WordWrap
+                opacity: 0.7
+            }
+
+            // Inline add-source form (expands in place)
+            Rectangle {
+                id: addSourceForm
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+
+                property bool expanded: false
+
+                implicitHeight: expanded ? addFormCol.implicitHeight + 24 : 0
+                visible: expanded
+                clip: true
+                radius: Appearance.rounding.small
+                color: Appearance.colors.colSurfaceContainerLow
+                border.width: 1
+                border.color: Appearance.colors.colLayer0Border
+
+                Behavior on implicitHeight {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Appearance.animation.elementMoveFast.type
+                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    }
+                }
+
+                ColumnLayout {
+                    id: addFormCol
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    spacing: 12
+
+                    StyledText {
+                        text: Translation.tr("Add Calendar Source")
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        font.weight: Font.DemiBold
+                        color: Appearance.colors.colOnLayer1
+                    }
+
+                    ColumnLayout {
+                        spacing: 4
+                        Layout.fillWidth: true
+
+                        StyledText {
+                            text: Translation.tr("Name")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colSubtext
+                        }
+
+                        MaterialTextField {
+                            id: sourceNameInput
+                            Layout.fillWidth: true
+                            placeholderText: Translation.tr("Work Calendar")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colOnSurface
+                            placeholderTextColor: Appearance.colors.colSubtext
+                            background: Rectangle {
+                                color: Appearance.colors.colLayer1
+                                radius: Appearance.rounding.small
+                                border.width: sourceNameInput.activeFocus ? 2 : 1
+                                border.color: sourceNameInput.activeFocus ? Appearance.colors.colPrimary : Appearance.colors.colLayer0Border
+                            }
+                        }
+                    }
+
+                    ColumnLayout {
+                        spacing: 4
+                        Layout.fillWidth: true
+
+                        StyledText {
+                            text: Translation.tr("ICS URL")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colSubtext
+                        }
+
+                        MaterialTextField {
+                            id: sourceUrlInput
+                            Layout.fillWidth: true
+                            placeholderText: "https://calendar.google.com/calendar/ical/..."
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colOnSurface
+                            placeholderTextColor: Appearance.colors.colSubtext
+                            background: Rectangle {
+                                color: Appearance.colors.colLayer1
+                                radius: Appearance.rounding.small
+                                border.width: sourceUrlInput.activeFocus ? 2 : 1
+                                border.color: sourceUrlInput.activeFocus ? Appearance.colors.colPrimary : Appearance.colors.colLayer0Border
+                            }
+                        }
+                    }
+
+                    // Color picker
+                    ColumnLayout {
+                        spacing: 4
+
+                        StyledText {
+                            text: Translation.tr("Color")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colSubtext
+                        }
+
+                        Row {
+                            id: colorPickerRow
+                            spacing: 6
+                            property string selectedColor: CalendarSync.presetColors[0]
+
+                            Repeater {
+                                model: CalendarSync.presetColors
+
+                                delegate: Rectangle {
+                                    required property string modelData
+                                    required property int index
+                                    width: 24
+                                    height: 24
+                                    radius: 12
+                                    color: modelData
+                                    border.width: colorPickerRow.selectedColor === modelData ? 2 : 0
+                                    border.color: Appearance.colors.colOnLayer1
+                                    opacity: colorPickMA.containsMouse ? 0.8 : 1
+
+                                    MouseArea {
+                                        id: colorPickMA
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: colorPickerRow.selectedColor = modelData
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Action buttons
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Item { Layout.fillWidth: true }
+
+                        RippleButton {
+                            implicitWidth: cancelLabel.implicitWidth + 24
+                            implicitHeight: 32
+                            buttonRadius: Appearance.rounding.small
+                            colBackground: "transparent"
+                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                            onClicked: {
+                                addSourceForm.expanded = false
+                                sourceNameInput.text = ""
+                                sourceUrlInput.text = ""
+                            }
+
+                            contentItem: StyledText {
+                                id: cancelLabel
+                                anchors.centerIn: parent
+                                text: Translation.tr("Cancel")
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colOnLayer1
+                            }
+                        }
+
+                        RippleButton {
+                            implicitWidth: addLabel.implicitWidth + 24
+                            implicitHeight: 32
+                            buttonRadius: Appearance.rounding.small
+                            colBackground: Appearance.colors.colPrimary
+                            colBackgroundHover: Appearance.colors.colPrimaryHover
+                            enabled: sourceNameInput.text.trim() !== "" && sourceUrlInput.text.trim() !== ""
+                            opacity: enabled ? 1 : 0.5
+                            onClicked: {
+                                CalendarSync.addSource(
+                                    sourceNameInput.text.trim(),
+                                    sourceUrlInput.text.trim(),
+                                    colorPickerRow.selectedColor
+                                )
+                                sourceNameInput.text = ""
+                                sourceUrlInput.text = ""
+                                addSourceForm.expanded = false
+                            }
+
+                            contentItem: StyledText {
+                                id: addLabel
+                                anchors.centerIn: parent
+                                text: Translation.tr("Add")
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                font.weight: Font.Medium
+                                color: Appearance.colors.colOnPrimary
+                            }
+                        }
+                    }
+                }
             }
         }
     }

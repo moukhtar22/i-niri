@@ -5,6 +5,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Pipewire
+import qs.services.deferred
 
 /**
  * A nice wrapper for default Pipewire audio sink and source.
@@ -31,14 +32,26 @@ Singleton {
         !link.source.isStream && !link.source.isSink && link.target.isStream
     ).length > 0
 
-    property bool _wpctlMicStateKnown: false
-    property bool _wpctlMicMuted: false
-    property bool _wpctlMicVolumeKnown: false
-    property real _wpctlMicVolume: 0
-    property bool _pendingSourceVolumeApply: false
-    property real _pendingSourceVolume: 0
-    readonly property bool micMuted: _wpctlMicStateKnown ? _wpctlMicMuted : (source?.audio?.muted ?? false)
-    readonly property real micVolume: _wpctlMicVolumeKnown ? _wpctlMicVolume : (source?.audio?.volume ?? 0)
+    property bool _micMuted: false
+    // Tracked explicitly rather than bound to source.audio.volume: setSourceVolume()
+    // assigns to this imperatively, which would destroy a declarative binding for
+    // good — after the first mic adjustment the shell would stop seeing volume
+    // changes made anywhere else (pavucontrol, another app).
+    property real _micVolume: 0
+    readonly property bool micMuted: _micMuted
+    readonly property real micVolume: _micVolume
+
+    Connections {
+        target: root.source?.audio ?? null
+        function onVolumeChanged(): void {
+            root._micVolume = root.source?.audio?.volume ?? 0
+        }
+    }
+
+    onSourceChanged: {
+        root._micVolume = root.source?.audio?.volume ?? 0
+        _refreshMicState()
+    }
 
     function friendlyDeviceName(node) {
         return node ? (node.nickname || node.description || Translation.tr("Unknown")) : Translation.tr("Unknown");
@@ -108,101 +121,126 @@ Singleton {
 
     function setSourceVolume(target: real): void {
         const clamped = Math.max(0, Math.min(root.hardMaxValue, target))
-        if (root.source?.audio) {
+        root._micVolume = clamped
+        if (root.source?.audio)
             root.source.audio.volume = clamped
-        }
-        if (wpctlSetSourceVolume.running) {
-            root._pendingSourceVolumeApply = true
-            root._pendingSourceVolume = clamped
-            return
-        }
-        wpctlSetSourceVolume.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", String(clamped)]
-        wpctlSetSourceVolume.running = true
+        wpctlSetSourceVolume.exec(["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", String(clamped)])
     }
 
     function toggleMicMute() {
-        const shouldMute = !root.micMuted
-        if (root.source?.audio) {
-            root.source.audio.muted = shouldMute
+        const shouldMute = !root._micMuted
+        root._micMuted = shouldMute
+        const muteVal = shouldMute ? "1" : "0"
+        // Mute every source device (hardware + virtual like EasyEffects)
+        // so apps reading directly from hardware are also silenced.
+        for (const dev of root.inputDevices) {
+            const nodeId = Number(dev.id ?? 0)
+            if (Number.isFinite(nodeId) && nodeId > 0)
+                Quickshell.execDetached(["wpctl", "set-mute", String(nodeId), muteVal])
         }
-        if (wpctlSetMicMute.running) return
-        wpctlSetMicMute.command = ["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", shouldMute ? "1" : "0"]
-        wpctlSetMicMute.running = true
+        wpctlSetMicMute.exec(["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", muteVal])
     }
 
-    function refreshMicState(): void {
-        if (wpctlGetMicState.running) return
-        wpctlGetMicState.running = true
+    function _hardwareSourceId(): int {
+        for (const dev of root.inputDevices) {
+            const props = dev.properties ?? {}
+            const nodeName = String(props["node.name"] ?? dev.name ?? "")
+            const appId = String(props["application.id"] ?? "")
+            const isVirtual = String(props["node.virtual"] ?? "false") === "true"
+            if (nodeName === "easyeffects_source" || appId === "com.github.wwmm.easyeffects" || isVirtual)
+                continue
+            const id = Number(dev.id ?? 0)
+            if (id > 0) return id
+        }
+        return 0
     }
 
-    Process {
-        id: wpctlSetMicMute
-        command: ["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"]
-        onExited: refreshMicState()
-    }
-
-    Process {
-        id: wpctlSetSourceVolume
-        command: ["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", "1.0"]
-        onExited: {
-            refreshMicState()
-            if (!root._pendingSourceVolumeApply) return
-
-            const queuedVolume = Math.max(0, Math.min(root.hardMaxValue, root._pendingSourceVolume))
-            root._pendingSourceVolumeApply = false
-            wpctlSetSourceVolume.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", String(queuedVolume)]
-            wpctlSetSourceVolume.running = true
-        }
-    }
-
-    Process {
-        id: wpctlGetMicState
-        command: ["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"]
-        stdout: StdioCollector {
-            id: wpctlGetMicStateStdout
-        }
-        onExited: (exitCode, _exitStatus) => {
-            if (exitCode !== 0) return
-            const raw = (wpctlGetMicStateStdout.text?.trim() ?? "")
-            if (!raw.length) return
-            const out = raw.split(/\r?\n/).filter(l => l.trim().length > 0).slice(-1)[0] ?? ""
-            if (!out.length) return
-
-            root._wpctlMicStateKnown = true
-            root._wpctlMicMuted = out.toUpperCase().includes("MUTED")
-
-            const match = out.match(/Volume:\s*([0-9]*\.?[0-9]+)/i)
-            if (match && match[1] !== undefined) {
-                const parsed = Number(match[1])
-                if (Number.isFinite(parsed)) {
-                    root._wpctlMicVolumeKnown = true
-                    root._wpctlMicVolume = Math.max(0, Math.min(root.hardMaxValue, parsed))
-                }
-            }
-        }
+    function _refreshMicState(): void {
+        const hwId = root._hardwareSourceId()
+        const target = hwId > 0 ? String(hwId) : "@DEFAULT_AUDIO_SOURCE@"
+        _wpctlGetMicState.exec(["wpctl", "get-volume", target])
     }
 
     Process {
         id: wpctlSetDefaultDevice
         command: ["wpctl", "set-default", "0"]
+        onExited: {
+            // After switching default sink, immediately nudge volume via wpctl so
+            // USB/device-route sinks (e.g. USB mic used as output) get their volume
+            // state initialised in PipeWire without requiring pavucontrol interaction.
+            if (!wpctlSetSinkVolume.running) {
+                wpctlSetSinkVolume.command = ["wpctl", "set-volume",
+                    "@DEFAULT_AUDIO_SINK@",
+                    String(root.sink?.audio?.volume ?? 0.5)]
+                wpctlSetSinkVolume.running = true
+            }
+        }
     }
 
-    Timer {
-        interval: 2000
-        repeat: true
-        running: true
-        onTriggered: refreshMicState()
+    // Sink volume via wpctl — fallback for devices whose volume control lives at
+    // the PipeWire device-route level and is not reachable through the QML binding.
+    Process {
+        id: wpctlSetSinkVolume
+        command: ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "1.0"]
     }
 
-    Component.onCompleted: refreshMicState()
+    // Relative increment/decrement — does not require reading current volume from QML,
+    // so it works even when Quickshell has not yet tracked the USB sink node.
+    Process {
+        id: wpctlIncrementSinkVolume
+        command: ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "2%+"]
+    }
+
+    Process {
+        id: wpctlDecrementSinkVolume
+        command: ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "2%-"]
+    }
+
+    Process {
+        id: wpctlSetMicMute
+        command: ["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "1"]
+        onExited: root._refreshMicState()
+    }
+
+    Process {
+        id: wpctlSetSourceVolume
+        command: ["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", "1.0"]
+        onExited: root._refreshMicState()
+    }
+
+    Process {
+        id: _wpctlGetMicState
+        command: ["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"]
+        stdout: StdioCollector { id: _micStateCollector }
+        onExited: (exitCode, _exitStatus) => {
+            if (exitCode !== 0) return
+            const out = (_micStateCollector.text?.trim() ?? "")
+            if (!out.length) return
+            root._micMuted = out.toUpperCase().includes("MUTED")
+            const match = out.match(/Volume:\s*([0-9]*\.?[0-9]+)/i)
+            if (match && match[1] !== undefined) {
+                const parsed = Number(match[1])
+                if (Number.isFinite(parsed))
+                    root._micVolume = Math.max(0, Math.min(root.hardMaxValue, parsed))
+            }
+        }
+    }
 
     // Set sink volume safely. When protection is enabled, large jumps are rejected as "Illegal increment".
     // To keep UX consistent with brightness (click anywhere on slider), we ramp in small steps.
+    // wpctl is fired before the QML guard so USB/device-route sinks are always reachable
+    // even when Quickshell has not fully tracked the node yet.
     function setSinkVolume(target: real): void {
-        if (!root.sink?.audio) return;
-
         const maxAllowed = (Config.options?.audio?.protection?.maxAllowed ?? 100) / 100;
         const clamped = Math.max(0, Math.min(Math.min(maxAllowed, root.hardMaxValue), target));
+
+        // Always send to wpctl regardless of QML node availability.
+        if (!wpctlSetSinkVolume.running) {
+            wpctlSetSinkVolume.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", String(clamped)]
+            wpctlSetSinkVolume.running = true
+        }
+
+        if (!root.sink?.audio) return;
 
         const protectionEnabled = (Config.options?.audio?.protection?.enable ?? false);
         if (!protectionEnabled) {
@@ -249,13 +287,19 @@ Singleton {
     }
 
     function incrementVolume() {
+        // Fire wpctl relative increment first — works even when sink?.audio is not yet tracked.
+        if (!wpctlIncrementSinkVolume.running)
+            wpctlIncrementSinkVolume.running = true
         if (!root.sink?.audio) return;
         const currentVolume = root.sink.audio.volume;
         const step = currentVolume < 0.1 ? 0.01 : 0.02;
         root.sink.audio.volume = Math.min(root.hardMaxValue, currentVolume + step);
     }
-    
+
     function decrementVolume() {
+        // Fire wpctl relative decrement first — works even when sink?.audio is not yet tracked.
+        if (!wpctlDecrementSinkVolume.running)
+            wpctlDecrementSinkVolume.running = true
         if (!root.sink?.audio) return;
         const currentVolume = root.sink.audio.volume;
         const step = currentVolume <= 0.1 ? 0.01 : 0.02;
@@ -336,17 +380,58 @@ Singleton {
         }
     }
 
+    // Event catalog: eventId → freedesktop sound name used when the user
+    // hasn't overridden it via sounds.events.<id> in config
+    readonly property var soundEvents: ({
+        notification: "message-new-instant",
+        notificationCritical: "dialog-warning",
+        batteryLow: "dialog-warning",
+        batteryCritical: "suspend-error",
+        batteryFull: "complete",
+        powerPlug: "power-plug",
+        powerUnplug: "power-unplug",
+        pomodoroDone: "alarm-clock-elapsed",
+        timerDone: "alarm-clock-elapsed"
+    })
+
+    // Sound names available in the current theme (feeds settings pickers)
+    property var themeSounds: []
+    onAudioThemeChanged: themeSoundsProc.running = true
+    Process {
+        id: themeSoundsProc
+        command: ["/bin/sh", "-c", `ls /usr/share/sounds/${root.audioTheme}/stereo/ 2>/dev/null | sed 's/\\.[^.]*$//' | sort -u`]
+        stdout: StdioCollector {
+            onStreamFinished: root.themeSounds = text.trim().length > 0 ? text.trim().split("\n") : []
+        }
+    }
+
+    // Play a shell event sound honoring the user's per-event override:
+    // "" = theme default; bare name = that sound from the current theme;
+    // absolute path or file:// = play the file directly
+    function playEvent(eventId) {
+        const override = Config.options?.sounds?.events?.[eventId] ?? "";
+        if (override.startsWith("/") || override.startsWith("file://")) {
+            const volume = Config.options?.sounds?.volume ?? 0.5;
+            const path = override.startsWith("file://") ? override.slice(7) : override;
+            Quickshell.execDetached(["/usr/bin/pw-play", "--volume", volume.toString(), path]);
+            return;
+        }
+        playSystemSound(override.length > 0 ? override : (root.soundEvents[eventId] ?? "bell"));
+    }
+
     function playSystemSound(soundName) {
         const volume = Config.options?.sounds?.volume ?? 0.5;
-        const ogaPath = `/usr/share/sounds/${root.audioTheme}/stereo/${soundName}.oga`;
-        const oggPath = `/usr/share/sounds/${root.audioTheme}/stereo/${soundName}.ogg`;
+        const base = `/usr/share/sounds/${root.audioTheme}/stereo/${soundName}`;
+        const q = s => `'${s.replace(/'/g, `'\\''`)}'`;
+        // pw-play volume range: 0.0 to 1.0. Try .oga then .ogg — firing
+        // both blindly double-played on themes shipping both extensions.
+        Quickshell.execDetached(["/bin/sh", "-c",
+            `pw-play --volume ${volume} ${q(base + ".oga")} 2>/dev/null || pw-play --volume ${volume} ${q(base + ".ogg")}`]);
+    }
 
-        // pw-play volume range: 0.0 to 1.0
-        let command = ["/usr/bin/pw-play", "--volume", volume.toString(), ogaPath];
-        Quickshell.execDetached(command);
-
-        command = ["/usr/bin/pw-play", "--volume", volume.toString(), oggPath];
-        Quickshell.execDetached(command);
+    Component.onCompleted: {
+        _refreshMicState();
+        themeSoundsProc.running = true;
     }
 
     // IPC handlers for external control (keybinds, etc.)
@@ -363,6 +448,10 @@ Singleton {
 
         function mute(): void {
             root.toggleMute();
+        }
+
+        function playEvent(event: string): void {
+            root.playEvent(event);
         }
 
         function micMute(): void {

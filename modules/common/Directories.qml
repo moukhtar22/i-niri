@@ -37,10 +37,11 @@ Singleton {
     property string scriptPath: Quickshell.shellPath("scripts")
     property string scriptsPath: FileUtils.trimFileProtocol(scriptPath)
     property string stateUserPath: `${Directories.statePath}/user`
-    property string wallpapersPath: `${Directories.picturesPath}/Wallpapers`
+    property string wallpapersPath: Config.options?.wallpapers?.directory || `${Directories.picturesPath}/Wallpapers`
     property string screenshotsPath: `${Directories.picturesPath}/Screenshots`
     property string persistentStatesPath: `${Directories.statePath}/states.json`
     property string eventsPath: `${Directories.stateUserPath}/events.json`
+    property string screenTimePath: `${Directories.stateUserPath}/screentime`
     property string generatedMaterialScssPath: `${Directories.stateUserPath}/generated/material_colors.scss`
     property string favicons: `${Directories.cachePath}/media/favicons`
     // User avatar paths
@@ -56,8 +57,8 @@ Singleton {
     property string coverArt: `${Directories.cachePath}/media/coverart`
     property string tempImages: "/tmp/quickshell/media/images"
     property string booruPreviews: `${Directories.cachePath}/media/boorus`
-    property string booruDownloads: Directories.wallpapersPath
-    property string booruDownloadsNsfw: `${Directories.wallpapersPath}/🌶️`
+    property string booruDownloads: Config.options?.sidebar?.booru?.downloadPath?.sfw || Directories.wallpapersPath
+    property string booruDownloadsNsfw: Config.options?.sidebar?.booru?.downloadPath?.nsfw || `${Directories.wallpapersPath}/🌶️`
     property string latexOutput: `${Directories.cachePath}/media/latex`
     property string shellConfig: `${Directories.configPath}/illogical-impulse`
     property string shellConfigName: "config.json"
@@ -70,10 +71,13 @@ Singleton {
     property string notesPath: `${Directories.stateUserPath}/notes.txt`
     property string conflictCachePath: `${Directories.cachePath}/conflict-killer`
     property string notificationsPath: `${Directories.stateUserPath}/notifications.json`
+    property string calendarSyncCachePath: `${Directories.stateUserPath}/calendar-sync-cache.json`
     property string generatedMaterialThemePath: `${Directories.stateUserPath}/generated/colors.json`
     property string generatedPalettePath: `${Directories.stateUserPath}/generated/palette.json`
+    property string generatedAppPalettePath: `${Directories.stateUserPath}/generated/app-palette.json`
     property string generatedTerminalPalettePath: `${Directories.stateUserPath}/generated/terminal.json`
     property string generatedThemeMetaPath: `${Directories.stateUserPath}/generated/theme-meta.json`
+    property string generatedChromiumThemePath: `${Directories.stateUserPath}/generated/chromium.theme`
     property string generatedWallpaperCategoryPath: `${Directories.stateUserPath}/generated/wallpaper/category.txt`
     property string cliphistDecode: FileUtils.trimFileProtocol(`/tmp/quickshell/media/cliphist`)
     property string screenshotTemp: "/tmp/quickshell/media/screenshot"
@@ -117,7 +121,6 @@ Singleton {
         Quickshell.execDetached(["mkdir", "-p", `${shellConfig}`])
         Quickshell.execDetached(["mkdir", "-p", `${stateUserPath}`])
         Quickshell.execDetached(["mkdir", "-p", `${favicons}`])
-        Quickshell.execDetached(["rm", "-rf", `${coverArt}`])
         Quickshell.execDetached(["mkdir", "-p", `${coverArt}`])
         Quickshell.execDetached(["rm", "-rf", `${booruPreviews}`])
         Quickshell.execDetached(["mkdir", "-p", `${booruPreviews}`])
@@ -126,6 +129,7 @@ Singleton {
         Quickshell.execDetached(["rm", "-rf", `${cliphistDecode}`])
         Quickshell.execDetached(["mkdir", "-p", `${cliphistDecode}`])
         Quickshell.execDetached(["mkdir", "-p", `${aiChats}`])
+        Quickshell.execDetached(["mkdir", "-p", `${screenTimePath}`])
         Quickshell.execDetached(["mkdir", "-p", `${userActions}`])
         Quickshell.execDetached(["rm", "-rf", `${tempImages}`])
     }

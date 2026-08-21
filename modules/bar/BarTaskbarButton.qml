@@ -25,7 +25,18 @@ RippleButton {
 
     readonly property var toplevels: appEntry?.toplevels ?? []
     readonly property var activeToplevel: ToplevelManager.activeToplevel
+    readonly property var niriFocusedWindow: CompositorService.isNiri
+        ? (NiriService.windows?.find(window => window.is_focused)
+            ?? NiriService.activeWindow
+            ?? null)
+        : null
+    readonly property int niriFocusedWindowId:
+        Number(root.niriFocusedWindow?.id ?? -1)
     readonly property string activeWindowKey: {
+        if (CompositorService.isNiri)
+            return root.niriFocusedWindowId >= 0
+                ? "niri:" + root.niriFocusedWindowId
+                : ""
         const active = activeToplevel
         if (!active) return ""
         if (active.niriWindowId !== undefined && active.niriWindowId !== null)
@@ -48,15 +59,33 @@ RippleButton {
         return ""
     }
 
+    function _toplevelIsActive(toplevel: var): bool {
+        if (!toplevel)
+            return false
+        if (CompositorService.isNiri) {
+            if (root.niriFocusedWindowId < 0)
+                return false
+            if (Number(toplevel.niriWindowId ?? -1) === root.niriFocusedWindowId)
+                return true
+            const focusedAppId = String(root.niriFocusedWindow?.app_id ?? "").toLowerCase()
+            const toplevelAppId = String(toplevel.appId ?? "").toLowerCase()
+            if (focusedAppId.length === 0 || toplevelAppId !== focusedAppId)
+                return false
+            if (root.toplevels.length <= 1)
+                return true
+            return String(toplevel.title ?? "")
+                === String(root.niriFocusedWindow?.title ?? "")
+        }
+        if (toplevel.activated)
+            return true
+        const activeKey = root.activeWindowKey
+        return activeKey.length > 0 && root._toplevelKey(toplevel) === activeKey
+    }
+
     property bool appIsActive: {
-        const active = activeToplevel
-        if (!active || !active.activated) return false
-        const activeKey = activeWindowKey
         for (let i = 0; i < toplevels.length; i++) {
-            const toplevel = toplevels[i]
-            if (!toplevel) continue
-            if (toplevel.activated) return true
-            if (activeKey.length > 0 && _toplevelKey(toplevel) === activeKey) return true
+            if (root._toplevelIsActive(toplevels[i]))
+                return true
         }
         return false
     }
@@ -68,20 +97,15 @@ RippleButton {
     // Focused window index for smart indicator
     property int focusedWindowIndex: {
         if (!appIsActive || toplevels.length <= 1) return 0
-        const active = activeToplevel
-        if (!active) return 0
-        const activeKey = activeWindowKey
         for (let i = 0; i < toplevels.length; i++) {
-            const toplevel = toplevels[i]
-            if (!toplevel) continue
-            if (toplevel.activated) return i
-            if (activeKey.length > 0 && _toplevelKey(toplevel) === activeKey) return i
+            if (root._toplevelIsActive(toplevels[i]))
+                return i
         }
         return 0
     }
 
     // ─── Layout sizing ──────────────────────────────────────────────
-    readonly property real barSize: vertical ? Appearance.sizes.baseVerticalBarWidth : Appearance.sizes.baseBarHeight
+    property real barSize: vertical ? Appearance.sizes.baseVerticalBarWidth : Appearance.sizes.baseBarHeight
     readonly property real buttonSize: barSize - 4
 
     enabled: !isSeparator
@@ -91,18 +115,21 @@ RippleButton {
     implicitWidth: vertical
         ? (isSeparator ? buttonSize : buttonSize)
         : (isSeparator ? 10 : buttonSize)
+    // Full bar size on the cross axis so the delegate is centred in the row
+    // (using buttonSize here left the content top-aligned and slightly raised).
     implicitHeight: vertical
         ? (isSeparator ? 10 : buttonSize)
-        : (isSeparator ? buttonSize : buttonSize)
+        : barSize
 
-    topInset: 2
-    bottomInset: 2
+    topInset: 4
+    bottomInset: 4
     leftInset: 2
     rightInset: 2
 
     buttonRadius: Appearance.angelEverywhere ? Appearance.angel.roundingSmall
         : Appearance.inirEverywhere ? Appearance.inir.roundingSmall
         : Appearance.rounding.small
+    cookieMorphing: true
 
     colBackground: "transparent"
     colBackgroundHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCard
@@ -114,17 +141,13 @@ RippleButton {
         : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceActive
         : Appearance.colors.colLayer1Active
 
-    // Active app gets a subtle background tint
-    colBackgroundToggled: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
-        : Appearance.inirEverywhere ? Appearance.inir.colLayer2
-        : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
-        : Appearance.colors.colSecondaryContainer
-    colBackgroundToggledHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardActive
-        : Appearance.inirEverywhere ? Appearance.inir.colLayer2Hover
-        : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceActive
-        : Appearance.colors.colSecondaryContainerHover
-    colRippleToggled: Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceActive
-        : Appearance.colors.colSecondaryContainerActive
+    // Focus is shown by the window-indicator dots/line below the icon, so the
+    // active app gets NO filled background box (the dark box read like a shadow
+    // and broke the flat look). Hover still gives subtle feedback.
+    colBackgroundToggled: Appearance.cookieEverywhere
+        ? Appearance.colors.colPrimaryContainer : "transparent"
+    colBackgroundToggledHover: root.colBackgroundHover
+    colRippleToggled: root.colRipple
 
     toggled: appIsActive
 
@@ -163,8 +186,10 @@ RippleButton {
         if (id === "com.github.th_ch.youtube_music") id = "pear-desktop";
         if (id === "spotify" || id === "spotify-launcher") id = "spotify-launcher";
         if (id && id !== "" && id !== "SEPARATOR") {
-            const cmd = "/usr/bin/gtk-launch \"" + id + "\" || \"" + id + "\" &";
-            Quickshell.execDetached(["/usr/bin/bash", "-lc", cmd]);
+            const entry = AppSearch.lookupDesktopEntry(id);
+            if (entry && AppSearch.launchEntry(entry))
+                return true;
+            ShellExec.execCmd(id);
             return true;
         }
         return false;
@@ -232,7 +257,7 @@ RippleButton {
             ...((root.desktopEntry?.actions?.length > 0) ? root.desktopEntry.actions.map(action => ({
                 iconName: action.icon ?? "",
                 text: action.name,
-                action: () => action.execute()
+                action: () => AppSearch.launchDesktopAction(root.desktopEntry, action)
             })).concat({ type: "separator" }) : []),
             // Launch
             {
@@ -405,38 +430,60 @@ RippleButton {
                                 return index === root.focusedWindowIndex;
                             }
 
-                            radius: Appearance.angelEverywhere ? 0 : Appearance.rounding.full
-                            // Horizontal: wider when focused. Vertical: taller when focused.
-                            implicitWidth: root.vertical ? 2 : (isFocused ? 8 : 3)
-                            implicitHeight: root.vertical ? (isFocused ? 8 : 3) : 2
+                            // Unfocused: 3×3 circle. Focused: pill in bar direction.
+                            // Both dims animate → squish morph same as dock dots.
+                            radius: Appearance.zzzEverywhere ? Appearance.zzz.cornerRadius
+                                : Appearance.angelEverywhere ? 0 : Math.min(width, height) / 2
+                            Behavior on radius {
+                                enabled: Appearance.animationsEnabled
+                                NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                            }
+                            implicitWidth: root.vertical ? (isFocused ? 2 : 3) : (isFocused ? 8 : 3)
+                            implicitHeight: root.vertical ? (isFocused ? 8 : 3) : (isFocused ? 2 : 3)
                             color: isFocused
-                                ? (Appearance.angelEverywhere ? Appearance.angel.colPrimary
+                                ? (Appearance.zzzEverywhere ? Appearance.zzz.accent
+                                : Appearance.angelEverywhere ? Appearance.angel.colPrimary
                                 : Appearance.inirEverywhere ? Appearance.inir.colPrimary
                                 : Appearance.colors.colPrimary)
                                 : ColorUtils.transparentize(
-                                    Appearance.angelEverywhere ? Appearance.angel.colTextSecondary
+                                    Appearance.zzzEverywhere ? Appearance.zzz.inkMuted
+                                    : Appearance.angelEverywhere ? Appearance.angel.colTextSecondary
                                     : Appearance.inirEverywhere ? Appearance.inir.colText
                                     : Appearance.colors.colOnLayer0, 0.5)
 
                             Behavior on implicitWidth {
-                                NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
+                                enabled: Appearance.animationsEnabled
+                                NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                             }
                             Behavior on implicitHeight {
-                                NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
+                                enabled: Appearance.animationsEnabled
+                                NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                            }
+                            Behavior on color {
+                                enabled: Appearance.animationsEnabled
+                                ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                             }
                         }
                     }
 
                     // Fallback single dot
                     Rectangle {
-                        visible: !root.appIsActive && root.hasWindows && Config.options?.dock?.showAllWindowDots === false
+                        opacity: (!root.appIsActive && root.hasWindows && Config.options?.dock?.showAllWindowDots === false) ? 1 : 0
+                        visible: opacity > 0
                         width: root.vertical ? 2 : 3
                         height: root.vertical ? 3 : 2
-                        radius: 1
+                        radius: Appearance.zzzEverywhere ? Appearance.zzz.cornerRadius : Math.min(width, height) / 2
+                        Behavior on radius { enabled: Appearance.animationsEnabled; NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animationCurves.zzzOvershoot } }
                         color: ColorUtils.transparentize(
-                            Appearance.angelEverywhere ? Appearance.angel.colTextSecondary
+                            Appearance.zzzEverywhere ? Appearance.zzz.inkMuted
+                            : Appearance.angelEverywhere ? Appearance.angel.colTextSecondary
                             : Appearance.inirEverywhere ? Appearance.inir.colText
                             : Appearance.colors.colOnLayer0, 0.5)
+
+                        Behavior on opacity {
+                            enabled: Appearance.animationsEnabled
+                            animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
+                        }
                     }
                 }
             }

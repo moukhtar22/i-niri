@@ -1,5 +1,6 @@
 import qs
 import qs.services
+import qs.services.deferred
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -65,7 +66,12 @@ RowLayout {
         id: searchInput
         Layout.topMargin: 4
         Layout.bottomMargin: 4
-        implicitHeight: 40
+        // Take whatever horizontal space the parent gives us so the search row
+        // stays balanced when result cards widen the SearchWidget container.
+        // implicitWidth provides the minimum: collapsed when empty, expanded
+        // when typing — Layout.fillWidth lets it grow past that as needed.
+        Layout.fillWidth: true
+        implicitHeight: Math.max(Appearance.sizes.baseBarHeight, contentHeight + Math.round(12 * Appearance.fontSizeScale))
         focus: GlobalStates.overviewOpen
         font.pixelSize: Appearance.font.pixelSize.small
         placeholderText: Translation.tr("Search, calculate or run")
@@ -73,7 +79,7 @@ RowLayout {
 
         Behavior on implicitWidth {
             id: searchWidthBehavior
-            enabled: root.animateWidth
+            enabled: root.animateWidth && Appearance.animationsEnabled
             NumberAnimation {
                 duration: Appearance.animation.elementResize.duration
                 easing.type: Appearance.animation.elementResize.type
@@ -167,6 +173,7 @@ RowLayout {
                 }
             }
             Behavior on color {
+                enabled: Appearance.animationsEnabled
                 animation: ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
             }
         }

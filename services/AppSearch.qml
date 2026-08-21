@@ -20,8 +20,6 @@ Singleton {
         "code": "visual-studio-code",
         "code-oss": "visual-studio-code",
         "vscodium": "vscodium",
-        "windsurf": "visual-studio-code",
-        "cursor": "visual-studio-code",
         "zed": "dev.zed.Zed",
         "Zed": "dev.zed.Zed",
         
@@ -55,8 +53,6 @@ Singleton {
         // Communication
         "discord": "discord",
         "Discord": "discord",
-        "vesktop": "discord",
-        "Vesktop": "discord",
         "WebCord": "webcord",
         "telegram-desktop": "telegram",
         "TelegramDesktop": "telegram",
@@ -127,6 +123,9 @@ Singleton {
         "org.freedesktop.impl.portal.desktop.gtk": "preferences-desktop",
         "polkit-gnome-authentication-agent-1": "dialog-password",
         
+        // Quickshell (NoDisplay desktop entry, excluded from DesktopEntries.applications)
+        "quickshell": "org.quickshell",
+
         // YouTube Music (pear launcher)
         "com.github.th_ch.youtube_music": "youtube-music",
         "youtube-music": "youtube-music",
@@ -290,7 +289,7 @@ Singleton {
             }).filter(item => item.score > root.scoreThreshold)
               .sort((a, b) => b.score - a.score)
 
-            return results.map(item => item.entry)
+            return results.map(item => root._decorateEntry(item.entry))
         }
 
         // Hybrid approach: combine fuzzysort with smart scoring
@@ -322,7 +321,86 @@ Singleton {
             return { entry, score }
         }).sort((a, b) => b.score - a.score)
 
-        return scoredResults.map(item => item.entry)
+        return scoredResults.map(item => root._decorateEntry(item.entry))
+    }
+
+    function _decorateEntry(entry): var {
+        if (!entry) return null
+        return {
+            id: entry.id ?? "",
+            name: entry.name ?? "",
+            icon: entry.icon ?? "",
+            comment: entry.comment ?? "",
+            genericName: entry.genericName ?? "",
+            runInTerminal: entry.runInTerminal ?? false,
+            command: Array.from(entry.command ?? []),
+            originalEntry: entry,
+            execute: () => {
+                root.launchEntry(entry)
+            }
+        }
+    }
+
+    function launchEntry(entry): bool {
+        if (!entry) return false
+
+        const rawEntry = entry.originalEntry ?? entry
+        const desktopId = String(entry.id ?? rawEntry?.id ?? "").trim()
+        const displayName = String(entry.name ?? rawEntry?.name ?? desktopId).trim()
+        const workingDirectory = String(entry.workingDirectory ?? rawEntry?.workingDirectory ?? "").trim()
+
+        // Prefer the parsed desktop command so every shell surface shares the
+        // same launch environment, transient-scope lifetime and Path= handling.
+        const command = Array.from(entry.command ?? rawEntry?.command ?? []).map(arg => String(arg ?? "")).filter(arg => arg.length > 0)
+        if (command.length > 0) {
+            if (entry.runInTerminal ?? rawEntry?.runInTerminal ?? false) {
+                const terminal = String(Config.options?.apps?.terminal ?? "kitty").trim() || "kitty"
+                const quotedCommand = command.map(arg => `'${StringUtils.shellSingleQuoteEscape(arg)}'`).join(" ")
+                if (terminal === "wezterm") {
+                    ShellExec.execCmd(`${terminal} start --always-new-process -- ${quotedCommand}`, workingDirectory)
+                } else {
+                    ShellExec.execCmd(`${terminal} -e ${quotedCommand}`, workingDirectory)
+                }
+                return true
+            }
+
+            ShellExec.execDetachedArgs(command,
+                displayName.length > 0 ? `Launch ${displayName}` : "",
+                workingDirectory)
+            return true
+        }
+
+        // Real desktop entries stay on ShellExec even when they have no usable
+        // command. This avoids falling back to DesktopEntry.execute(), which
+        // would inherit Quickshell's frozen/shell-private environment again.
+        if (desktopId.length > 0) {
+            return ShellExec.launchDesktopEntry(desktopId,
+                displayName.length > 0 ? `Launch ${displayName}` : "")
+        }
+
+        // Non-desktop search providers can still expose their own callback.
+        if (typeof entry.execute === "function") {
+            entry.execute()
+            return true
+        }
+
+        return false
+    }
+
+    function launchDesktopAction(entry, action): bool {
+        if (!entry || !action) return false
+
+        const command = Array.from(action.command ?? []).map(arg => String(arg ?? "")).filter(arg => arg.length > 0)
+        if (command.length > 0) {
+            const actionName = String(action.name ?? entry.name ?? "").trim()
+            const workingDirectory = String(entry.workingDirectory ?? "").trim()
+            ShellExec.execDetachedArgs(command,
+                actionName.length > 0 ? `Launch ${actionName}` : "",
+                workingDirectory)
+            return true
+        }
+
+        return false
     }
 
     function iconExists(iconName) {
@@ -351,7 +429,9 @@ Singleton {
 
         // 1. Quickshell's built-in heuristic (handles simple cases)
         const entry = DesktopEntries.heuristicLookup(appId);
-        if (entry) return entry;
+        if (entry) {
+            return entry;
+        }
 
         // 2. Direct map lookups (case-insensitive, kebab-normalized)
         const lowered = appId.toLowerCase();
@@ -361,7 +441,9 @@ Singleton {
             ?? _desktopIdStemMap[lowered]
             ?? _execBasenameMap[kebab]
             ?? _desktopIdStemMap[kebab];
-        if (direct) return direct;
+        if (direct) {
+            return direct;
+        }
 
         // 3. Aggressive normalization for scoped/prefixed appIds
         //    "@trezor/suite-desktop" → strip @ → split on / → join with - → strip -desktop suffix
@@ -382,7 +464,9 @@ Singleton {
             }
             for (const c of candidates) {
                 const found = _execBasenameMap[c] ?? _desktopIdStemMap[c] ?? _startupClassMap[c];
-                if (found) return found;
+                if (found) {
+                    return found;
+                }
             }
             // Try each segment individually
             for (const seg of segments) {
@@ -390,7 +474,9 @@ Singleton {
                 const found = _execBasenameMap[seg] ?? _desktopIdStemMap[seg]
                     ?? _execBasenameMap[segClean] ?? _desktopIdStemMap[segClean]
                     ?? _startupClassMap[seg] ?? _startupClassMap[segClean];
-                if (found) return found;
+                if (found) {
+                    return found;
+                }
             }
         }
 
@@ -398,7 +484,9 @@ Singleton {
         const noSuffix = kebab.replace(/-(desktop|app|electron|bin)$/, "");
         if (noSuffix !== kebab) {
             const found = _execBasenameMap[noSuffix] ?? _desktopIdStemMap[noSuffix] ?? _startupClassMap[noSuffix];
-            if (found) return found;
+            if (found) {
+                return found;
+            }
         }
 
         // 5. Token overlap scoring as last resort — extract meaningful tokens from the appId
@@ -411,7 +499,7 @@ Singleton {
                 const keyTokens = key.replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/);
                 let overlap = 0;
                 for (const t of tokens) {
-                    if (keyTokens.some(kt => kt === t || kt.includes(t) || t.includes(kt))) overlap++;
+                    if (keyTokens.some(kt => kt === t)) overlap++;
                 }
                 const score = overlap / Math.max(tokens.length, keyTokens.length);
                 if (score > bestScore && score >= 0.5) {
@@ -424,7 +512,7 @@ Singleton {
                 const keyTokens = key.replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/);
                 let overlap = 0;
                 for (const t of tokens) {
-                    if (keyTokens.some(kt => kt === t || kt.includes(t) || t.includes(kt))) overlap++;
+                    if (keyTokens.some(kt => kt === t)) overlap++;
                 }
                 const score = overlap / Math.max(tokens.length, keyTokens.length);
                 if (score > bestScore && score >= 0.5) {
@@ -432,10 +520,73 @@ Singleton {
                     bestEntry = mapEntry;
                 }
             }
-            if (bestEntry) return bestEntry;
+            if (bestEntry) {
+                return bestEntry;
+            }
         }
 
         return null;
+    }
+
+    // Optional per-window identity rules (Config.options.windows.appIdentityRules).
+    // Apps whose windows all report the same app_id (e.g. browser PWA windows)
+    // can be grouped and displayed under a different desktop entry. Each rule:
+    //   { appIdRegex, titleRegex, desktopId }
+    // Both regexes are optional but at least one is required; the first
+    // matching rule wins; malformed rules are silently ignored. Empty rules
+    // leave every window's identity untouched. The configured desktopId is
+    // intentionally not resolved during parsing: desktop entries can load
+    // after the first window event.
+    property var _identityRules: []
+    property var _identityRulesKey: null
+
+    function _parseIdentityRules(): var {
+        const rules = Config.options?.windows?.appIdentityRules ?? []
+        const key = JSON.stringify(rules)
+        if (root._identityRulesKey === key)
+            return root._identityRules
+        const parsed = []
+        for (const rule of rules) {
+            if (!rule || typeof rule !== "object") continue
+            const desktopId = String(rule.desktopId ?? "").trim()
+            if (desktopId.length === 0) continue
+            const wantsAppIdRe = rule.appIdRegex !== undefined && rule.appIdRegex !== null
+                && String(rule.appIdRegex).length > 0
+            const wantsTitleRe = rule.titleRegex !== undefined && rule.titleRegex !== null
+                && String(rule.titleRegex).length > 0
+            if (!wantsAppIdRe && !wantsTitleRe) continue
+            let appIdRe = null
+            let titleRe = null
+            let valid = true
+            if (wantsAppIdRe) {
+                try { appIdRe = new RegExp(String(rule.appIdRegex), "i") } catch (e) { valid = false }
+            }
+            if (wantsTitleRe) {
+                try { titleRe = new RegExp(String(rule.titleRegex), "i") } catch (e) { valid = false }
+            }
+            if (!valid) continue
+            parsed.push({ appIdRe: appIdRe, titleRe: titleRe, desktopId: desktopId })
+        }
+        root._identityRules = parsed
+        root._identityRulesKey = key
+        return parsed
+    }
+
+    // Resolve the display identity of a running window. Accepts foreign-toplevel
+    // handles (appId) and Niri window objects (app_id) alike. Returns the
+    // window's reported app_id unless a configured rule remaps it.
+    function resolveWindowIdentity(toplevel): string {
+        const appId = String(toplevel?.appId ?? toplevel?.app_id ?? "")
+        if (appId.length === 0) return appId
+        const rules = root._parseIdentityRules()
+        if (rules.length === 0) return appId
+        const title = String(toplevel?.title ?? "")
+        for (const rule of rules) {
+            if (rule.appIdRe && !rule.appIdRe.test(appId)) continue
+            if (rule.titleRe && !rule.titleRe.test(title)) continue
+            return rule.desktopId
+        }
+        return appId
     }
 
     function guessIcon(str) {
@@ -445,9 +596,19 @@ Singleton {
         const entry = DesktopEntries.heuristicLookup(str);
         if (entry) return entry.icon;
 
+        // Prefer the desktop entry's declared icon before any manual aliasing.
+        // This keeps app-specific branding (Cursor, Windsurf, Vesktop, etc.)
+        // when the window appId can still be matched back to a real desktop file.
+        const mapMatch = lookupDesktopEntry(str);
+        if (mapMatch?.icon) return mapMatch.icon;
+
         // Normal substitutions
-        if (substitutions[str]) return substitutions[str];
-        if (substitutions[str.toLowerCase()]) return substitutions[str.toLowerCase()];
+        if (substitutions[str]) {
+            return substitutions[str];
+        }
+        if (substitutions[str.toLowerCase()]) {
+            return substitutions[str.toLowerCase()];
+        }
 
         // Regex substitutions
         for (let i = 0; i < regexSubstitutions.length; i++) {
@@ -456,7 +617,9 @@ Singleton {
                 substitution.regex,
                 substitution.replace,
             );
-            if (replacedName != str) return replacedName;
+            if (replacedName != str) {
+                return replacedName;
+            }
         }
 
         // Icon exists -> return as is
@@ -478,10 +641,14 @@ Singleton {
         const undescoreToKebabGuess = getUndescoreToKebabAppName(str);
         if (iconExists(undescoreToKebabGuess)) return undescoreToKebabGuess;
 
-        // Reverse-lookup: use the full lookupDesktopEntry which handles scoped appIds,
-        // token normalization, and aggressive matching for AppImages/Electron apps.
-        const mapMatch = lookupDesktopEntry(str);
-        if (mapMatch?.icon) return mapMatch.icon;
+        // Reverse-domain icon guess: NoDisplay desktop entries (e.g., org.quickshell)
+        // are excluded from DesktopEntries.applications, so lookupDesktopEntry can't
+        // find them. But their icons exist in the theme under the full reverse-domain name.
+        const reverseDomainPrefixes = ["org.", "com.", "io.", "dev."];
+        for (let i = 0; i < reverseDomainPrefixes.length; i++) {
+            const candidate = reverseDomainPrefixes[i] + lowercased;
+            if (iconExists(candidate)) return candidate;
+        }
 
         // Search in desktop entries
         if (_cachedPreppedIcons.length > 0) {
@@ -491,14 +658,18 @@ Singleton {
             }).map(r => r.obj.entry);
             if (iconSearchResults.length > 0) {
                 const guess = iconSearchResults[0].icon
-                if (iconExists(guess)) return guess;
+                if (iconExists(guess)) {
+                    return guess;
+                }
             }
         }
 
         const nameSearchResults = root.fuzzyQuery(str);
         if (nameSearchResults.length > 0) {
             const guess = nameSearchResults[0].icon
-            if (iconExists(guess)) return guess;
+            if (iconExists(guess)) {
+                return guess;
+            }
         }
 
 
@@ -524,47 +695,16 @@ Singleton {
         fallback = fallback ?? "image-missing"
         if (!iconNameOrPath) return Quickshell.iconPath(fallback, "");
         
-        // Handle absolute paths - check for known Electron app patterns
+        // Preserve absolute icon paths; only repair the duplicated Electron
+        // resources segment that some apps expose.
         if (iconNameOrPath.startsWith("/") || iconNameOrPath.startsWith("file://")) {
             const path = iconNameOrPath.startsWith("file://") ? iconNameOrPath.substring(7) : iconNameOrPath;
-            
-            // Known Electron app patterns - return proper icon name
-            if (path.includes("/Windsurf/") || path.includes("/windsurf/")) {
-                return Quickshell.iconPath("visual-studio-code", fallback);
+
+            if (path.includes("/resources/app/resources/")) {
+                return "file://" + path.replace("/resources/app/resources/", "/resources/");
             }
-            if (path.includes("/Code/") || path.includes("/code/") || path.includes("/VSCode/")) {
-                return Quickshell.iconPath("visual-studio-code", fallback);
-            }
-            if (path.includes("/Cursor/") || path.includes("/cursor/")) {
-                return Quickshell.iconPath("visual-studio-code", fallback);
-            }
-            if (path.includes("/Discord/") || path.includes("/discord/")) {
-                return Quickshell.iconPath("discord", fallback);
-            }
-            if (path.includes("/Slack/") || path.includes("/slack/")) {
-                return Quickshell.iconPath("slack", fallback);
-            }
-            if (path.includes("/Obsidian/") || path.includes("/obsidian/")) {
-                return Quickshell.iconPath("obsidian", fallback);
-            }
-            if (path.includes("/Spotify/") || path.includes("/spotify/")) {
-                return Quickshell.iconPath("spotify", fallback);
-            }
-            if (path.includes("/Zed/") || path.includes("/zed/")) {
-                return Quickshell.iconPath("dev.zed.Zed", fallback);
-            }
-            
-            // Check for volatile paths (Downloads, tmp, etc.)
-            if (path.includes("/Descargas/") || path.includes("/Downloads/") || 
-                path.includes("/tmp/") || path.includes("/resources/")) {
-                const fileName = path.split("/").pop();
-                let baseName = fileName.includes(".") ? fileName.split(".").slice(0, -1).join(".") : fileName;
-                if (baseName === "code") return Quickshell.iconPath("visual-studio-code", fallback);
-                return Quickshell.iconPath(baseName, fallback);
-            }
-            
-            // Return as file:// URL for valid paths
-            return iconNameOrPath.startsWith("file://") ? iconNameOrPath : "file://" + iconNameOrPath;
+
+            return iconNameOrPath.startsWith("file://") ? iconNameOrPath : "file://" + path;
         }
         
         // Icon name - resolve via theme

@@ -39,7 +39,7 @@ Item {
     }
 
     Behavior on implicitHeight {
-        enabled: root.completed ?? false
+        enabled: (root.completed ?? false) && Appearance.animationsEnabled
         NumberAnimation {
             duration: collapseAnimation.duration
             easing.type: collapseAnimation.type
@@ -103,10 +103,10 @@ Item {
                     implicitHeight: 22
                     colBackground: headerMouseArea.containsMouse 
                         ? (Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
-                        : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface : Appearance.colors.colLayer2Hover)
+                        : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover : Appearance.colors.colLayer2Hover)
                         : "transparent"
                     colBackgroundHover: Appearance.angelEverywhere ? Appearance.angel.colGlassCardHover
-                        : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface : Appearance.colors.colLayer2Hover
+                        : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceHover : Appearance.colors.colLayer2Hover
                     colRipple: Appearance.angelEverywhere ? Appearance.angel.colGlassCardActive
                         : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceActive : Appearance.colors.colLayer2Active
 
@@ -139,7 +139,7 @@ Item {
             clip: true
 
             Behavior on implicitHeight {
-                enabled: root.completed ?? false
+                enabled: (root.completed ?? false) && Appearance.animationsEnabled
                 NumberAnimation {
                     duration: collapseAnimation.duration
                     easing.type: collapseAnimation.type

@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 
+import qs
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
@@ -96,10 +97,10 @@ Item {
     Process {
         id: addProcess
         stdout: SplitParser {
-            onRead: data => console.log("[Plugins] Added:", data)
+            onRead: data => { if (Quickshell.env("QS_DEBUG") === "1") console.log("[Plugins] Added:", data) }
         }
         stderr: SplitParser {
-            onRead: data => console.log("[Plugins:add]", data)
+            onRead: data => { if (Quickshell.env("QS_DEBUG") === "1") console.log("[Plugins:add]", data) }
         }
         onExited: (code, status) => {
             root.addingInProgress = false
@@ -119,7 +120,7 @@ Item {
         id: rescanTimer
         interval: 30000
         repeat: true
-        running: true
+        running: GlobalStates.sidebarLeftOpen
         onTriggered: root.scanPlugins()
     }
 

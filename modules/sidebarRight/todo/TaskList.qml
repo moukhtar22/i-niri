@@ -12,6 +12,7 @@ Item {
     required property var taskList;
     property string emptyPlaceholderIcon
     property string emptyPlaceholderText
+    property string emptyMascotPose
     property int todoListItemSpacing: 5
     property int todoListItemPadding: 8
     property int listBottomPadding: 80
@@ -51,7 +52,7 @@ Item {
                     clip: true
 
                     Behavior on implicitHeight {
-                        enabled: enableHeightAnimation
+                        enabled: enableHeightAnimation && Appearance.animationsEnabled
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration
                             easing.type: Appearance.animation.elementMoveFast.type
@@ -67,7 +68,7 @@ Item {
 
                     Timer {
                         id: actionTimer
-                        interval: Appearance.animation.elementMoveFast.duration
+                        interval: Appearance.calcEffectiveDuration(Appearance.animation.elementMoveFast.duration)
                         repeat: false
                         onTriggered: {
                             if (todoItem.pendingDelete) {
@@ -157,17 +158,45 @@ Item {
         anchors.fill: parent
 
         Behavior on opacity {
+            enabled: Appearance.animationsEnabled
             animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
         }
 
         MaterialPlaceholderMessage {
             anchors.centerIn: parent
             maximumWidth: Math.min(280, parent.width - 24)
-            shown: taskList.length === 0
+            shown: taskList.length === 0 && !todoMascot.active
             icon: emptyPlaceholderIcon
             text: emptyPlaceholderText
             compact: true
             shape: MaterialShape.Shape.Clover4Leaf
+        }
+
+        ColumnLayout {
+            anchors.centerIn: parent
+            visible: taskList.length === 0 && todoMascot.active && root.emptyMascotPose.length > 0
+            spacing: 6
+            width: Math.min(280, parent.width - 24)
+
+            MascotImage {
+                id: todoMascot
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: 100
+                Layout.preferredHeight: 100
+                surface: "todo"
+                fallbackSurface: "emptyStates"
+                pose: root.emptyMascotPose
+            }
+
+            StyledText {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                text: root.emptyPlaceholderText
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+            }
         }
     }
 }

@@ -1,6 +1,8 @@
 pragma ComponentBehavior: Bound
+import qs
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import QtQuick
 import QtQuick.Controls
@@ -41,15 +43,61 @@ Item {
         function onEventRemoved(id) { root._eventsTrigger++ }
         function onEventUpdated(event) { root._eventsTrigger++ }
     }
-    
-    // Computed properties that react to events changes via trigger
-    readonly property var upcomingEvents: {
-        const _t = root._eventsTrigger // force dependency
-        return Events.getUpcomingEvents(30)
+    property int _externalTrigger: 0
+    Connections {
+        target: CalendarSync
+        function onEventsUpdated() { root._externalTrigger++ }
     }
+    
+    readonly property string _todayKey: Qt.formatDate(DateTime.clock.date, "yyyy-MM-dd")
+
+    // Merged events: local + external, sorted by date
+    readonly property var mergedEvents: {
+        const _t = root._eventsTrigger
+        const _t2 = root._externalTrigger
+        const _d = root._todayKey
+        return _buildMergedEvents()
+    }
+
+    function _buildMergedEvents(): var {
+        const now = new Date()
+        const local = Events.getUpcomingEvents(30).map(e => Object.assign({}, e, {
+            _source: "local"
+        }))
+
+        // Get external events for the next 30 days, skip past ones
+        const startDay = new Date(now)
+        startDay.setHours(0, 0, 0, 0)
+        const externalAll = []
+        for (let i = 0; i < 30; i++) {
+            const d = new Date(startDay)
+            d.setDate(d.getDate() + i)
+            const dayEvents = CalendarSync.getEventsForDate(d) || []
+            for (const e of dayEvents) {
+                const evtTime = new Date(e.startDate || e.dateTime)
+                if (evtTime < now && !(e.allDay && evtTime >= startDay)) continue
+                externalAll.push(Object.assign({}, e, {
+                    _source: "external",
+                    dateTime: e.startDate || e.dateTime,
+                    category: "general",
+                    priority: "normal"
+                }))
+            }
+        }
+
+        const all = local.concat(externalAll)
+        all.sort((a, b) => {
+            const da = new Date(a.dateTime || a.startDate)
+            const db = new Date(b.dateTime || b.startDate)
+            return da - db
+        })
+        return all
+    }
+
     readonly property int upcomingCount: {
-        const _t = root._eventsTrigger // force dependency
-        return Events.getUpcomingEvents(7).length
+        const _t = root._eventsTrigger
+        const _t2 = root._externalTrigger
+        return root.mergedEvents.length
     }
     
     ColumnLayout {
@@ -112,18 +160,23 @@ Item {
                 width: parent.width
                 spacing: 8
                 
-                // Upcoming events
+                // Merged events
                 Repeater {
-                    model: root.upcomingEvents
+                    model: root.mergedEvents
                     
                     delegate: EventCard {
                         required property var modelData
                         Layout.fillWidth: true
                         Layout.margins: 8
                         event: modelData
+                        isExternal: (modelData?._source ?? "local") === "external"
                         
-                        onRemoveClicked: Events.removeEvent(modelData.id)
-                        onEditClicked: (evt) => root.openEventsDialog(evt)
+                        onRemoveClicked: {
+                            if (!isExternal) Events.removeEvent(modelData.id)
+                        }
+                        onEditClicked: (evt) => {
+                            if (!isExternal) root.openEventsDialog(evt)
+                        }
                     }
                 }
                 
@@ -132,29 +185,28 @@ Item {
                     id: emptyState
                     Layout.fillWidth: true
                     Layout.preferredHeight: 200
-                    visible: root.upcomingEvents.length === 0
+                    visible: root.mergedEvents.length === 0
                     
                     ColumnLayout {
                         anchors.centerIn: parent
                         spacing: 12
                         width: parent.width - 32
 
-                        Rectangle {
+                        Item {
                             Layout.alignment: Qt.AlignHCenter
                             Layout.preferredWidth: 48
                             Layout.preferredHeight: 48
-                            radius: 24
-                            color: root.colEmptyBg
 
                             MaterialSymbol {
+                                // Bgless empty state: just the colored, breathing glyph — no grey blob.
                                 anchors.centerIn: parent
                                 text: "event_available"
-                                iconSize: 24
+                                iconSize: 32
                                 fill: 0
                                 color: root.colPrimary
 
                                 SequentialAnimation on opacity {
-                                    running: emptyState.visible && Appearance.animationsEnabled
+                                    running: emptyState.visible && GlobalStates.sidebarRightOpen && Appearance.animationsEnabled
                                     loops: Animation.Infinite
                                     NumberAnimation { to: 0.5; duration: 2000; easing.type: Easing.InOutSine }
                                     NumberAnimation { to: 1.0; duration: 2000; easing.type: Easing.InOutSine }

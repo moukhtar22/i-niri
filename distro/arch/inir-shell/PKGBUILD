@@ -1,12 +1,12 @@
 # Maintainer: snowarch
 
 pkgname=inir-shell
-pkgver=2.21.1
+pkgver=2.29.1
 pkgrel=1
 pkgdesc='iNiR shell payload, launcher, and user service'
 arch=(any)
 url='https://github.com/snowarch/iNiR'
-license=('MIT')
+license=('GPL-3.0-only')
 _default_source_archive="https://github.com/snowarch/iNiR/archive/refs/tags/v${pkgver}.tar.gz"
 _source_archive="${INIR_SOURCE_ARCHIVE:-${_default_source_archive}}"
 depends=(
@@ -38,6 +38,7 @@ depends=(
   slurp
   swayidle
   swaylock
+  wlsunset
   syntax-highlighting
   ttf-jetbrains-mono-nerd
   ttf-material-symbols-variable
@@ -52,7 +53,7 @@ depends=(
   xwayland-satellite
 )
 optdepends=(
-  'awww-bin: animated wallpaper support'
+  'awww: animated wallpaper support'
   'blueman: Bluetooth device management'
   'breeze-icons: fallback icon theme'
   'cava: audio visualizer'
@@ -65,6 +66,7 @@ optdepends=(
   'gowall-bin: wallpaper theme conversion and effects editor'
   'gum: setup TUI helpers'
   'hyprpicker: color picker support'
+  'kde-cli-tools: Dolphin Open With dialog (QT_QPA_PLATFORMTHEME=kde)'
   'imagemagick: image conversion helpers'
   'kconfig: KDE configuration integration'
   'kdialog: KDE dialog integration for scripts'
@@ -78,6 +80,7 @@ optdepends=(
   'nm-connection-editor: default network settings GUI'
   'pavucontrol: advanced audio mixer UI'
   'pacman-contrib: package update checking'
+  'plasma-browser-integration: browser MPRIS sessions and artwork'
   'plasma-integration: Qt platform theme integration'
   'qt6ct: Qt theme configuration'
   'songrec: music recognition support'
@@ -92,6 +95,8 @@ optdepends=(
   'wtype: Wayland text injection helper'
   'ydotool: virtual keyboard and clipboard paste helper'
   'yt-dlp: YouTube media backend'
+  'python-ytmusicapi: YouTube Music browsing (InnerTube engine)'
+  'millennium-bin: Steam theming via Millennium (requires steam)'
 )
 conflicts=('inir-shell-git' 'noctalia-qs' 'noctalia-shell' 'cachyos-niri-noctalia')
 source=(
@@ -126,12 +131,18 @@ package() {
     cp -a "$srcroot/$dir" "$shellroot/"
   done < "$srcroot/sdata/runtime-payload-dirs.txt"
 
+  find "$shellroot" \( -name AGENTS.md -o -name CLAUDE.md -o -name CODEX.md -o -name PI.md -o -name codemap.md -o -name .mcp.json -o -name opencode.json -o -name skills-lock.json \) -delete
+  find "$shellroot" \( -name .agents -o -name .claude -o -name .codex -o -name .factory -o -name .opencode -o -name .codebase-memory -o -name .impeccable -o -name .pi-subagents \) -type d -prune -exec rm -rf {} +
+
   find "$shellroot/scripts" -type f \( -name '*.sh' -o -name '*.fish' -o -name '*.py' \) -exec chmod +x {} +
 
   install -Dm755 "$srcroot/scripts/inir" "$pkgdir/usr/bin/inir"
   install -Dm644 "$srcroot/assets/systemd/inir.service" "$pkgdir/usr/lib/systemd/user/inir.service"
   install -Dm644 "$srcroot/assets/applications/inir.desktop" "$pkgdir/usr/share/applications/inir.desktop"
+  install -Dm644 "$srcroot/assets/applications/inir-settings.desktop" "$pkgdir/usr/share/applications/inir-settings.desktop"
   install -Dm644 "$srcroot/assets/icons/desktop-symbolic.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/inir.svg"
+  install -Dm644 "$srcroot/distro/arch/inir-shell/inir-quickshell-rebuild.hook" \
+    "$pkgdir/usr/share/libalpm/hooks/inir-quickshell-rebuild.hook"
   install -Dm644 "$srcroot/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 "$srcroot/README.md" "$docroot/README.md"
   install -Dm644 "$srcroot/docs/SETUP.md" "$docroot/SETUP.md"

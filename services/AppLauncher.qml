@@ -210,10 +210,39 @@ Singleton {
         if (command.length === 0)
             return
 
+        // If the command is a single word (no args, no path), try desktop entry
+        // lookup first — handles Flatpak apps that aren't in PATH but have
+        // .desktop files with the correct Exec= line.
+        if (!command.includes(" ") && !command.includes("/")) {
+            const entry = DesktopEntries.heuristicLookup(command)
+            if (entry) {
+                AppSearch.launchEntry(entry)
+                return
+            }
+        }
+
         ShellExec.execCmd(command)
     }
 
     function launchNetworkSettings(useEthernet: bool): void {
-        root.launch(useEthernet ? "networkEthernet" : "network")
+        const slot = useEthernet ? "networkEthernet" : "network"
+        const command = root.commandFor(slot)
+        // The configured tool may simply not be installed (default is
+        // nm-connection-editor); a silently failed exec looks like a dead
+        // Details button. Probe and fall back through known tools.
+        const fallbacks = [
+            "nm-connection-editor",
+            "kcmshell6 kcm_networkmanagement",
+            "gnome-control-center network",
+            "kitty -1 fish -c nmtui",
+            "foot -e nmtui"
+        ]
+        const chain = [command].concat(fallbacks.filter(c => c.split(" ")[0] !== command.split(" ")[0]))
+        // No brace grouping: the string runs under fish when available.
+        const sh = chain
+            .filter(c => c.length > 0)
+            .map(c => `command -v ${c.split(" ")[0]} >/dev/null 2>&1 && exec ${c}`)
+            .join(" || ")
+        ShellExec.execCmd(sh)
     }
 }

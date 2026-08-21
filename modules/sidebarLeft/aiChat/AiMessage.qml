@@ -211,7 +211,7 @@ Rectangle {
 
         Loader {
             Layout.fillWidth: true
-            active: root.messageData?.localFilePath && root.messageData?.localFilePath.length > 0
+            active: (root.messageData?.localFilePath?.length ?? 0) > 0
             sourceComponent: AttachedFileIndicator {
                 filePath: root.messageData?.localFilePath
                 canRemove: false
@@ -220,6 +220,8 @@ Rectangle {
 
         ColumnLayout { // Message content
             id: messageContentColumnLayout
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
             spacing: 0
 
             Item {
@@ -229,12 +231,13 @@ Rectangle {
                 visible: implicitHeight > 0
 
                 Behavior on implicitHeight {
+                    enabled: Appearance.animationsEnabled
                     animation: NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.type: Appearance.animation.elementMove.type; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve }
                 }
                 FadeLoader {
                     id: loadingIndicatorLoader
                     anchors.centerIn: parent
-                    shown: (root.messageBlocks.length < 1) && (root.messageData && !root.messageData.done)
+                    shown: (root.messageBlocks.length < 1) && (root.messageData ? !root.messageData.done : false)
                     sourceComponent: MaterialLoadingIndicator {
                         loading: true
                     }
@@ -270,10 +273,10 @@ Rectangle {
                         editing: root.editing
                         renderMarkdown: root.renderMarkdown
                         enableMouseSelection: root.enableMouseSelection
-                        segmentContent: thisBlock.content
+                        segmentContent: thisBlock?.content ?? ""
                         messageData: root.messageData
                         done: root.messageData?.done ?? false
-                        completed: thisBlock.completed ?? false
+                        completed: thisBlock?.completed ?? false
                     } }
                     DelegateChoice { roleValue: "text"; MessageTextBlock {
                         required property int index
@@ -281,10 +284,10 @@ Rectangle {
                         editing: root.editing
                         renderMarkdown: root.renderMarkdown
                         enableMouseSelection: root.enableMouseSelection
-                        segmentContent: thisBlock.content
+                        segmentContent: thisBlock?.content ?? ""
                         messageData: root.messageData
                         done: root.messageData?.done ?? false
-                        forceDisableChunkSplitting: root.messageData?.content.includes("```") ?? true
+                        forceDisableChunkSplitting: (root.messageData?.content?.includes("```")) ?? true
                     } }
                 }
             }

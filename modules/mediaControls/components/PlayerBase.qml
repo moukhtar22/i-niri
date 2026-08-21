@@ -18,6 +18,8 @@ QtObject {
     
     // Required properties
     required property MprisPlayer player
+    property int slideDirection: 1
+    property bool positionUpdatesActive: true
     
     // YtMusic detection
     readonly property bool isYtMusicPlayer: {
@@ -33,9 +35,12 @@ QtObject {
     readonly property string effectiveArtist: isYtMusicPlayer 
         ? YtMusic.currentArtist 
         : (player?.trackArtist ?? "")
-    readonly property string effectiveArtUrl: isYtMusicPlayer 
-        ? YtMusic.currentThumbnail 
-        : (player?.trackArtUrl ?? "")
+    readonly property string effectiveArtUrl: isYtMusicPlayer
+        ? YtMusic.currentThumbnail
+        : MprisController.effectiveArtUrl(player)
+    // Artwork motion is keyed only by real art identity. Metadata-only updates
+    // must not move the cover, or one track change animates twice.
+    readonly property string mediaTransitionKey: (root.effectiveArtUrl ?? "").split("?")[0].split("#")[0]
     readonly property real effectivePosition: isYtMusicPlayer 
         ? YtMusic.currentPosition 
         : (player?.position ?? 0)
@@ -48,15 +53,18 @@ QtObject {
     readonly property bool effectiveCanSeek: isYtMusicPlayer 
         ? YtMusic.canSeek 
         : (player?.canSeek ?? false)
+    readonly property bool effectiveCanGoPrevious: isYtMusicPlayer
+        ? YtMusic.canGoPrevious
+        : MprisController.canGoPreviousForPlayer(root.player)
+    readonly property bool effectiveCanGoNext: isYtMusicPlayer
+        ? YtMusic.canGoNext
+        : MprisController.canGoNextForPlayer(root.player)
     
     // Art download management
     property string artDownloadLocation: Directories.coverArt
-    property string artFileName: effectiveArtUrl ? Qt.md5(effectiveArtUrl) : ""
-    property string artFilePath: artFileName ? `${artDownloadLocation}/${artFileName}` : ""
-    property bool downloaded: false
-    readonly property string displayedArtFilePath: downloaded ? Qt.resolvedUrl(artFilePath) : ""
-    property int _downloadRetryCount: 0
-    readonly property int _maxRetries: 3
+    readonly property bool downloaded: root.displayedArtFilePath !== ""
+    readonly property string resolverDisplaySource: artworkResolver.displaySource
+    property string displayedArtFilePath: ""
     
     // Color extraction
     property var colorQuantizer: ColorQuantizer {
@@ -71,8 +79,8 @@ QtObject {
     )
     
     // Style tokens (Inir fixed colors)
-    readonly property color inirText: Appearance.inir.colText
-    readonly property color inirTextSecondary: Appearance.inir.colTextSecondary
+    readonly property color inirText: ColorUtils.boostInkSaturation(Appearance.inir.colText, Appearance.m3colors.m3primary)
+    readonly property color inirTextSecondary: ColorUtils.boostInkSaturation(Appearance.inir.colTextSecondary, Appearance.m3colors.m3primary)
     readonly property color inirPrimary: Appearance.inir.colPrimary
     readonly property color inirLayer1: Appearance.inir.colLayer1
     readonly property color inirLayer2: Appearance.inir.colLayer2
@@ -87,18 +95,20 @@ QtObject {
     }
     
     function previous(): void {
-        if (isYtMusicPlayer) {
+        root.slideDirection = -1
+        if (isYtMusicPlayer && YtMusic.canGoPrevious) {
             YtMusic.playPrevious()
         } else {
-            player?.previous()
+            MprisController.previousForPlayer(root.player)
         }
     }
     
     function next(): void {
-        if (isYtMusicPlayer) {
+        root.slideDirection = 1
+        if (isYtMusicPlayer && YtMusic.canGoNext) {
             YtMusic.playNext()
         } else {
-            player?.next()
+            MprisController.nextForPlayer(root.player)
         }
     }
     
@@ -110,110 +120,92 @@ QtObject {
         }
     }
     
-    // Art download logic
+    // Art download logic — mirrors BarMediaPlayerItem (the known-good impl)
     function checkAndDownloadArt(): void {
-        if (!effectiveArtUrl) {
-            downloaded = false
-            _downloadRetryCount = 0
-            return
-        }
-        downloaded = false
-        artExistsChecker.running = false
-        artExistsChecker.running = true
+        artworkResolver.refresh()
     }
-    
-    function retryDownload(): void {
-        if (_downloadRetryCount < _maxRetries && effectiveArtUrl) {
-            _downloadRetryCount++
-            retryTimer.start()
+
+    onResolverDisplaySourceChanged: {
+        const src = root.resolverDisplaySource
+        if (src && src.length > 0) {
+            clearArtTimer.stop()
+            root.displayedArtFilePath = src
+        } else {
+            clearArtTimer.restart()
+        }
+    }
+
+    Component.onCompleted: {
+        if (root.resolverDisplaySource && root.resolverDisplaySource.length > 0)
+            root.displayedArtFilePath = root.resolverDisplaySource
+    }
+
+    onPlayerChanged: Qt.callLater(root.checkAndDownloadArt)
+
+    property var playerConnections: Connections {
+        target: root.player
+
+        function onTrackArtUrlChanged(): void {
+            if (!root.isYtMusicPlayer)
+                Qt.callLater(root.checkAndDownloadArt)
+        }
+
+        function onTrackTitleChanged(): void {
+            Qt.callLater(root.checkAndDownloadArt)
+        }
+
+        function onTrackArtistChanged(): void {
+            Qt.callLater(root.checkAndDownloadArt)
+        }
+
+        function onTrackAlbumChanged(): void {
+            Qt.callLater(root.checkAndDownloadArt)
+        }
+    }
+
+    property var ytMusicConnections: Connections {
+        target: YtMusic
+
+        function onCurrentThumbnailChanged(): void {
+            if (root.isYtMusicPlayer)
+                Qt.callLater(root.checkAndDownloadArt)
+        }
+
+        function onCurrentTitleChanged(): void {
+            if (root.isYtMusicPlayer)
+                Qt.callLater(root.checkAndDownloadArt)
+        }
+
+        function onCurrentArtistChanged(): void {
+            if (root.isYtMusicPlayer)
+                Qt.callLater(root.checkAndDownloadArt)
         }
     }
     
     // Internal components
-    property var retryTimer: Timer {
-        interval: 1000 * root._downloadRetryCount
-        repeat: false
+    property var artworkResolver: MediaArtworkResolver {
+        sourceUrl: root.effectiveArtUrl
+        title: root.effectiveTitle
+        artist: root.effectiveArtist
+        album: root.player?.trackAlbum ?? ""
+        cacheDirectory: root.artDownloadLocation
+    }
+
+    property var clearArtTimer: Timer {
+        interval: 1600
         onTriggered: {
-            if (root.effectiveArtUrl && !root.downloaded) {
-                coverArtDownloader.targetFile = root.effectiveArtUrl
-                coverArtDownloader.artFilePath = root.artFilePath
-                coverArtDownloader.running = false
-                coverArtDownloader.running = true
-            }
-        }
-    }
-    
-    property var artExistsChecker: Process {
-        command: ["/usr/bin/test", "-f", root.artFilePath]
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode === 0) {
-                root.downloaded = true
-                root._downloadRetryCount = 0
-            } else {
-                root.downloaded = false
-                coverArtDownloader.targetFile = root.effectiveArtUrl
-                coverArtDownloader.artFilePath = root.artFilePath
-                coverArtDownloader.running = false
-                coverArtDownloader.running = true
-            }
-        }
-    }
-    
-    property var coverArtDownloader: Process {
-        property string targetFile
-        property string artFilePath
-        command: ["/usr/bin/bash", "-c", `
-            target="$1"
-            out="$2"
-            dir="$3"
-            
-            if [ -f "$out" ]; then exit 0; fi
-            mkdir -p "$dir"
-            tmp="$out.tmp"
-            /usr/bin/curl -sSL --connect-timeout 10 --max-time 30 "$target" -o "$tmp" && \
-            [ -s "$tmp" ] && /usr/bin/mv -f "$tmp" "$out" || { rm -f "$tmp"; exit 1; }
-        `, 
-        "_", 
-        targetFile, 
-        artFilePath, 
-        root.artDownloadLocation
-        ]
-        onExited: (exitCode) => {
-            if (exitCode === 0) {
-                root.downloaded = true
-                root._downloadRetryCount = 0
-            } else {
-                root.downloaded = false
-                root.retryDownload()
-            }
+            if (!root.resolverDisplaySource || root.resolverDisplaySource.length === 0)
+                root.displayedArtFilePath = ""
         }
     }
     
     property var positionUpdateTimer: Timer {
-        running: root.player?.playbackState === MprisPlaybackState.Playing
-        interval: 1000
+        running: root.positionUpdatesActive
+            && root.player?.playbackState === MprisPlaybackState.Playing
+        // Four bounded updates per second are enough for a continuous timeline
+        // once PlayerProgress interpolates between samples.
+        interval: 250
         repeat: true
         onTriggered: root.player?.positionChanged()
-    }
-    
-    property var playerConnections: Connections {
-        target: root.player
-        function onTrackArtUrlChanged() {
-            if (!root.isYtMusicPlayer) {
-                root._downloadRetryCount = 0
-                root.checkAndDownloadArt()
-            }
-        }
-    }
-    
-    // Watchers
-    onArtFilePathChanged: {
-        _downloadRetryCount = 0
-        checkAndDownloadArt()
-    }
-    
-    onEffectiveArtUrlChanged: {
-        _downloadRetryCount = 0
-        checkAndDownloadArt()
     }
 }
