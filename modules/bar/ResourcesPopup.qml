@@ -92,7 +92,7 @@ StyledPopup {
                 }
                 ResourceItem {
                     icon: "check_circle"
-                    label: Translation.tr("Available:")
+                    label: Translation.tr("Available") + ":"
                     value: (ResourceUsage.memoryFree / (1024 * 1024)).toFixed(1) + " GB"
                 }
                 ResourceItem {
