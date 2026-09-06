@@ -2340,9 +2340,10 @@ Singleton {
                 //   center      → the centered pivot group (normally workspaces)
                 //   centerRight → right central pill group (scroll, triple-tap fx)
                 //   right       → right edge section (click=right sidebar)
-                // Known ids: leftSidebarButton, activeWindow, taskbar, resources,
-                //   media, workspaces, clock, utilButtons, battery, weather, tray,
-                //   rightSidebarButton.
+                // Known ids: leftSidebarButton, activeWindow, resources, media,
+                //   workspaces, clock, utilButtons, battery, weather, tray,
+                //   rightSidebarButton, timer, shellUpdate and spacer. Legacy
+                //   persisted `taskbar` ids are normalized to the activeWindow slot.
                 property JsonObject layout: JsonObject {
                     property list<string> left: ["leftSidebarButton", "activeWindow"]
                     property list<string> centerLeft: ["resources", "media"]

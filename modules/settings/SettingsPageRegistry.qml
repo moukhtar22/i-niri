@@ -755,6 +755,13 @@ Singleton {
         },
         {
             pageIndex: 2, pageName: root.pages[2].name,
+            section: Translation.tr("Modules"),
+            label: Translation.tr("Taskbar (apps in bar)"),
+            description: Translation.tr("Taskbar replaces the active window title. Pinned apps and running windows appear in the bar, like a traditional taskbar. Uses the same pinned apps as the dock."),
+            keywords: ["taskbar", "apps", "bar", "dock", "running", "pinned"]
+        },
+        {
+            pageIndex: 2, pageName: root.pages[2].name,
             section: Translation.tr("Bar module layout"),
             label: Translation.tr("Bar module layout"),
             description: Translation.tr("Reorder modules in horizontal Stock, Islands, Scenic and Frame bars"),

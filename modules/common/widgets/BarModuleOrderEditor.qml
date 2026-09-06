@@ -226,7 +226,13 @@ ColumnLayout {
         property string moduleId: ""
         property string zone: ""
         property int rowIndex: -1
-        property string visibilityKey: root._visKeys[moduleId] || ""
+        // Taskbar is a mode of the activeWindow slot, not an independent
+        // visibility bit. While that mode is active, hiding `activeWindow`
+        // would only mutate latent state and leave the visible taskbar intact.
+        property string visibilityKey: moduleId === "activeWindow"
+            && (Config.options?.bar?.modules?.taskbar ?? false)
+            ? ""
+            : (root._visKeys[moduleId] || "")
         readonly property bool beingDragged: root.dragInfo && root.dragInfo.id === moduleId && root.dragInfo.zone === zone && root.dragInfo.index === rowIndex
 
         width: parent ? parent.width : implicitWidth

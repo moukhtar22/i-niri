@@ -245,6 +245,8 @@ ContentPage {
     readonly property bool cornerStyleApplies: (Config.options?.bar?.appearanceStyle ?? "classic") === "classic"
     readonly property bool stockHorizontalLayoutActive: !(Config.options?.bar?.vertical ?? false)
         && !["m3", "pill"].includes(Config.options?.bar?.appearanceStyle ?? "classic")
+    readonly property bool taskbarModeSupported: (Config.options?.bar?.vertical ?? false)
+        || root.stockHorizontalLayoutActive
 
     function detectM3LayoutPreset(): string {
         const left = JSON.stringify(Config.options?.bar?.m3?.layouts?.leftLayout ?? [])
@@ -2141,196 +2143,81 @@ ContentPage {
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // MODULES (what to show)
+    // MODULE BEHAVIOR (settings not represented by the layout editor)
     // ═══════════════════════════════════════════════════════════════════
     LazySection {
-        requested: false
+        requested: root.isIiActive && root.activeSection === "modules"
         sourceComponent: Component {
             SettingsCardSection {
                 settingsTaskSection: "modules"
-                expanded: false
-        icon: "widgets"
-        title: Translation.tr("Modules")
+                expanded: true
+                icon: "tune"
+                title: Translation.tr("Modules")
 
-        SettingsGroup {
-            StyledText {
-                Layout.fillWidth: true
-                text: Translation.tr("Toggle which widgets appear in the bar")
-                color: Appearance.colors.colSubtext
-                font.pixelSize: Appearance.font.pixelSize.smaller
-            }
-
-            ConfigRow {
-                uniform: true
-                SettingsSwitch {
-                    buttonIcon: "side_navigation"
-                    text: Translation.tr("Left sidebar button")
-                    checked: Config.options?.bar?.modules?.leftSidebarButton ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.leftSidebarButton", checked)
-                }
-                SettingsSwitch {
-                    buttonIcon: "call_to_action"
-                    text: Translation.tr("Right sidebar button")
-                    checked: Config.options?.bar?.modules?.rightSidebarButton ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.rightSidebarButton", checked)
-                }
-            }
-
-            // Left sidebar button icon. "distro" auto-detects from /etc/os-release;
-            // anything else looks up <name>-symbolic in the icon theme.
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 4
-                visible: Config.options?.bar?.modules?.leftSidebarButton ?? true
-                StyledText {
-                    Layout.fillWidth: true
-                    text: Translation.tr("Left sidebar icon")
-                    color: Appearance.colors.colSubtext
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                }
-                MaterialTextField {
-                    id: topLeftIconField
-                    Layout.fillWidth: true
-                    placeholderText: "distro"
-                    text: Config.options?.bar?.topLeftIcon ?? "distro"
-                    // Persisting per keystroke resolves every prefix as an icon name.
-                    onTextChanged: topLeftIconCommit.restart()
-                    onEditingFinished: {
-                        topLeftIconCommit.stop();
-                        Config.setNestedValue("bar.topLeftIcon", topLeftIconField.text);
+                SettingsGroup {
+                    SettingsSwitch {
+                        visible: root.taskbarModeSupported
+                        buttonIcon: "dock_to_bottom"
+                        text: Translation.tr("Taskbar (apps in bar)")
+                        checked: Config.options?.bar?.modules?.taskbar ?? false
+                        onCheckedChanged: Config.setNestedValue("bar.modules.taskbar", checked)
                     }
 
-                    Timer {
-                        id: topLeftIconCommit
-                        interval: 600
-                        repeat: false
-                        onTriggered: Config.setNestedValue("bar.topLeftIcon", topLeftIconField.text)
+                    SettingsNote {
+                        visible: root.taskbarModeSupported && (Config.options?.bar?.modules?.taskbar ?? false)
+                        icon: "info"
+                        text: Translation.tr("Taskbar replaces the active window title. Pinned apps and running windows appear in the bar, like a traditional taskbar. Uses the same pinned apps as the dock.")
+                    }
+
+                    SettingsSwitch {
+                        visible: (Config.options?.bar?.modules?.activeWindow ?? true)
+                            && (!root.taskbarModeSupported || !(Config.options?.bar?.modules?.taskbar ?? false))
+                        buttonIcon: "subtitles"
+                        text: Translation.tr("Show window title under app name")
+                        checked: Config.options?.bar?.activeWindow?.showTitle ?? true
+                        onCheckedChanged: Config.setNestedValue("bar.activeWindow.showTitle", checked)
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        visible: Config.options?.bar?.modules?.leftSidebarButton ?? true
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Left sidebar icon")
+                            color: Appearance.colors.colSubtext
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                        }
+
+                        MaterialTextField {
+                            id: topLeftIconField
+                            Layout.fillWidth: true
+                            placeholderText: "distro"
+                            text: Config.options?.bar?.topLeftIcon ?? "distro"
+                            onTextChanged: topLeftIconCommit.restart()
+                            onEditingFinished: {
+                                topLeftIconCommit.stop()
+                                Config.setNestedValue("bar.topLeftIcon", topLeftIconField.text)
+                            }
+
+                            Timer {
+                                id: topLeftIconCommit
+                                interval: 600
+                                repeat: false
+                                onTriggered: Config.setNestedValue("bar.topLeftIcon", topLeftIconField.text)
+                            }
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("‘distro’ auto-detects your distribution. Otherwise enter any icon name (looked up as <name>-symbolic).")
+                            color: Appearance.colors.colSubtext
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            wrapMode: Text.WordWrap
+                        }
                     }
                 }
-                StyledText {
-                    Layout.fillWidth: true
-                    text: Translation.tr("‘distro’ auto-detects your distribution. Otherwise enter any icon name (looked up as <name>-symbolic).")
-                    color: Appearance.colors.colSubtext
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    wrapMode: Text.WordWrap
-                }
-            }
-
-            ConfigRow {
-                uniform: true
-                SettingsSwitch {
-                    buttonIcon: "window"
-                    text: Translation.tr("Active window title")
-                    checked: Config.options?.bar?.modules?.activeWindow ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.activeWindow", checked)
-                    enabled: !(Config.options?.bar?.modules?.taskbar ?? false)
-                    opacity: enabled ? 1 : 0.5
-                }
-                SettingsSwitch {
-                    buttonIcon: "dock_to_bottom"
-                    text: Translation.tr("Taskbar (apps in bar)")
-                    checked: Config.options?.bar?.modules?.taskbar ?? false
-                    onCheckedChanged: Config.setNestedValue("bar.modules.taskbar", checked)
-                }
-            }
-
-            SettingsNote {
-                visible: (Config.options?.bar?.modules?.taskbar ?? false)
-                icon: "info"
-                text: Translation.tr("Taskbar replaces the active window title. Pinned apps and running windows appear in the bar, like a traditional taskbar. Uses the same pinned apps as the dock.")
-            }
-
-            // Sub-toggle for the active window indicator: hide the second line (window title)
-            // and only show the app name. Hidden when activeWindow is off or taskbar is on.
-            SettingsSwitch {
-                visible: (Config.options?.bar?.modules?.activeWindow ?? true) && !(Config.options?.bar?.modules?.taskbar ?? false)
-                buttonIcon: "subtitles"
-                text: Translation.tr("Show window title under app name")
-                checked: Config.options?.bar?.activeWindow?.showTitle ?? true
-                onCheckedChanged: Config.setNestedValue("bar.activeWindow.showTitle", checked)
-            }
-
-            ConfigRow {
-                uniform: true
-                SettingsSwitch {
-                    buttonIcon: "shelf_auto_hide"
-                    text: Translation.tr("System tray")
-                    checked: Config.options?.bar?.modules?.sysTray ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.sysTray", checked)
-                }
-                Item { Layout.fillWidth: true }
-            }
-
-            ConfigRow {
-                uniform: true
-                SettingsSwitch {
-                    buttonIcon: "memory"
-                    text: Translation.tr("Resources")
-                    checked: Config.options?.bar?.modules?.resources ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.resources", checked)
-                }
-                SettingsSwitch {
-                    buttonIcon: "music_note"
-                    text: Translation.tr("Media")
-                    checked: Config.options?.bar?.modules?.media ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.media", checked)
-                }
-            }
-
-            ConfigRow {
-                uniform: true
-                SettingsSwitch {
-                    buttonIcon: "workspaces"
-                    text: Translation.tr("Workspaces")
-                    checked: Config.options?.bar?.modules?.workspaces ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.workspaces", checked)
-                }
-                SettingsSwitch {
-                    buttonIcon: "schedule"
-                    text: Translation.tr("Clock")
-                    checked: Config.options?.bar?.modules?.clock ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.clock", checked)
-                }
-            }
-
-            ConfigRow {
-                uniform: true
-                SettingsSwitch {
-                    buttonIcon: "build"
-                    text: Translation.tr("Utility buttons")
-                    checked: Config.options?.bar?.modules?.utilButtons ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.utilButtons", checked)
-                }
-                SettingsSwitch {
-                    buttonIcon: "battery_full"
-                    text: Translation.tr("Battery")
-                    checked: Config.options?.bar?.modules?.battery ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.battery", checked)
-                }
-            }
-
-            ConfigRow {
-                uniform: true
-                SettingsSwitch {
-                    buttonIcon: "cloud"
-                    text: Translation.tr("Weather")
-                    checked: Config.options?.bar?.modules?.weather ?? false
-                    onCheckedChanged: Config.setNestedValue("bar.modules.weather", checked)
-                    enabled: Config.options?.bar?.weather?.enable ?? false
-                    opacity: enabled ? 1 : 0.5
-                }
-                Item { Layout.fillWidth: true }
-            }
-
-            SettingsDivider {}
-
-            StyledText {
-                Layout.fillWidth: true
-                text: Translation.tr("Weather configuration is in Services → Weather")
-                color: Appearance.colors.colSubtext
-                font.pixelSize: Appearance.font.pixelSize.smaller
-            }
-        }
             }
         }
     }
