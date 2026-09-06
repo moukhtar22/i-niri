@@ -34,11 +34,13 @@ Item {
     property real padding: islandStyle && !bare ? 12
         : Appearance.regaliaEverywhere && !bare ? Appearance.regalia.tilePadding : 8
     readonly property bool cardStyleEverywhere: (Config.options?.dock?.cardStyle ?? false) && (Config.options?.sidebar?.cardStyle ?? false) && (Config.options?.bar?.cornerStyle === 3)
-    // Islands bar appearance: each group is its own floating surface
-    readonly property bool islandStyle: !vertical && (Config.options?.bar?.appearanceStyle ?? "classic") === "islands"
+    // Islands bar appearance: each group is its own floating surface.
+    // Works in both horizontal and vertical bar modes.
+    readonly property bool islandStyle: (Config.options?.bar?.appearanceStyle ?? "classic") === "islands"
     // Bare: no surface of its own — for groups that live INSIDE another island
     // (e.g. the weather chip in an edge island) so cards never nest.
     property bool bare: false
+    property bool clipContent: false
     readonly property bool zzzPlate: false
     implicitWidth: vertical ? Appearance.sizes.baseVerticalBarWidth : (gridLayout.implicitWidth + padding * 2)
     implicitHeight: vertical ? (gridLayout.implicitHeight + padding * 2) : Appearance.sizes.baseBarHeight
@@ -54,17 +56,20 @@ Item {
     readonly property real _spectrumX: {
         const geometryDependency = root.x + root.y + root.width + root.height
             + (root.parent?.x ?? 0) + (root.parent?.width ?? 0)
-        if (!root.spectrumDomain || !(root.spectrumDomain.width > 0))
+        if (!root.spectrumDomain || !(root._spectrumSpan > 0))
             return 0
-        return root.mapToItem(root.spectrumDomain, 0, 0).x
+        const position = root.mapToItem(root.spectrumDomain, 0, 0)
+        return root.vertical ? position.y : position.x
     }
+    readonly property real _spectrumSpan: root.vertical
+        ? (root.spectrumDomain?.height ?? 0) : (root.spectrumDomain?.width ?? 0)
     readonly property real _spectrumStartRatio: !root.spectrumDomain
         ? 0
-        : Math.max(0, Math.min(1, root._spectrumX / root.spectrumDomain.width))
+        : Math.max(0, Math.min(1, root._spectrumX / Math.max(1, root._spectrumSpan)))
     readonly property real _spectrumEndRatio: !root.spectrumDomain
         ? 1
         : Math.max(root._spectrumStartRatio,
-            Math.min(1, (root._spectrumX + root.width) / root.spectrumDomain.width))
+            Math.min(1, (root._spectrumX + (root.vertical ? root.height : root.width)) / Math.max(1, root._spectrumSpan)))
 
     // El fondo de cada grupo de la barra ahora sale del molde compartido
     // (PanelSurface) en vez de dibujarse a mano. Misma pinta que antes, pero
@@ -92,7 +97,7 @@ Item {
     // islands bar is an explicit opt-in to that dialect, so the zzz "groups
     // stay transparent" doctrine (which left the centre groups naked over the
     // wallpaper) does not apply here.
-    IslandPanel {
+    BarIslandSurface {
         id: islandSurface
         readonly property int inset: Config.options?.bar?.islands?.inset ?? 4
         anchors {
@@ -106,19 +111,15 @@ Item {
         glassEnabled: true
         nativeBlurActive: root.nativeBlurActive
         screen: root.screen
-        glassScreenX: {
-            const geometryDependency = root.x + root.width + islandSurface.x
-            return islandSurface.mapToItem(null, 0, 0).x
-        }
-        glassScreenY: {
-            const geometryDependency = root.y + root.height + islandSurface.y
-            return islandSurface.mapToItem(null, 0, 0).y
-        }
-        glassScreenWidth: root.screen?.width ?? 1920
-        glassScreenHeight: root.screen?.height ?? 1080
+        compactShadow: !root.vertical
 
-        CavaSpectrum {
-            anchors.fill: parent
+        AudioVisualizerLayer {
+            anchors.centerIn: parent
+            width: root.vertical && root.spectrumType !== "organic"
+                ? islandSurface.height : islandSurface.width
+            height: root.vertical && root.spectrumType !== "organic"
+                ? islandSurface.width : islandSurface.height
+            rotation: root.vertical && root.spectrumType !== "organic" ? 90 : 0
             active: root.spectrumEnabled && islandSurface.visible
             threadedRendering: true
             points: active ? root.spectrumPoints : []
@@ -139,6 +140,14 @@ Item {
             edgeSoftness: root.spectrumEdgeSoftness
             frequencyProfile: root.spectrumFrequencyProfile
             accentStrength: root.spectrumAccentStrength
+            organicSensitivity: 0.62
+            organicPulse: 0.72
+            organicMotionSpeed: 0.9
+            organicIdleMotion: 0.18
+            organicGlow: 0.38
+            organicOpacity: root.spectrumOpacity
+            organicEdgeAura: true
+            organicBaseRadius: 0.42
             topLeftRadius: islandSurface.radius
             topRightRadius: islandSurface.radius
             bottomLeftRadius: islandSurface.radius
@@ -146,17 +155,22 @@ Item {
         }
     }
 
-    GridLayout {
-        id: gridLayout
-        columns: root.vertical ? 1 : -1
-        anchors {
-            verticalCenter: root.vertical ? undefined : parent.verticalCenter
-            horizontalCenter: parent.horizontalCenter
-            top: root.vertical ? parent.top : undefined
-            bottom: root.vertical ? parent.bottom : undefined
-            margins: root.padding
+    Item {
+        anchors.fill: parent
+        clip: root.clipContent
+
+        GridLayout {
+            id: gridLayout
+            columns: root.vertical ? 1 : -1
+            anchors {
+                verticalCenter: root.vertical ? undefined : parent.verticalCenter
+                horizontalCenter: parent.horizontalCenter
+                top: root.vertical ? parent.top : undefined
+                bottom: root.vertical ? parent.bottom : undefined
+                margins: root.padding
+            }
+            columnSpacing: 4
+            rowSpacing: 12
         }
-        columnSpacing: 4
-        rowSpacing: 12
     }
 }

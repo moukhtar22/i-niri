@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -25,6 +26,7 @@ Loader {
     property bool closeOnOutsideClick: false
     property var anchorRect: null
     property var popupAdjustment: null
+    property bool scaleContent: Appearance.motion.popupReveal.enableScale
     signal focusCleared()
 
     property real visualMargin: 8
@@ -47,12 +49,29 @@ Loader {
         else root.active = false;
     }
 
+    function requestOpen(): void {
+        if (GlobalStates.activeContextMenu && GlobalStates.activeContextMenu !== root)
+            GlobalStates.activeContextMenu.active = false
+        root.active = true
+    }
+
     function updateAnchor(): void {
         item?.anchor.updateAnchor();
     }
 
     active: false
     visible: active
+
+    onActiveChanged: {
+        if (active) {
+            GlobalStates.activeContextMenu = root
+            GlobalStates.activeContextMenuCount++
+        } else {
+            if (GlobalStates.activeContextMenu === root)
+                GlobalStates.activeContextMenu = null
+            GlobalStates.activeContextMenuCount--
+        }
+    }
 
     sourceComponent: PopupWindow {
         id: popupWindow
@@ -239,7 +258,7 @@ Loader {
             }
             opacity: Appearance.motion.popupReveal.enableFade ? (shown ? 1 : 0) : 1
             scale: shown ? 1
-                : (Appearance.motion.popupReveal.enableScale
+                : (root.scaleContent
                     ? Appearance.motion.popupReveal.closedScale
                     : 1)
             transformOrigin: popupWindow.isHorizontalPopup
@@ -265,7 +284,7 @@ Loader {
             }
 
             Behavior on scale {
-                enabled: Appearance.animationsEnabled
+                enabled: Appearance.animationsEnabled && root.scaleContent
                 animation: NumberAnimation {
                     duration: popupWindow.closing
                         ? Appearance.animation.elementMoveExit.duration

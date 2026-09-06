@@ -12,7 +12,21 @@ ContentPage {
     settingsPageName: Translation.tr("Advanced")
 
     property bool cavaControlsReady: false
+    property string activeSection: "color"
     Component.onCompleted: Qt.callLater(() => root.cavaControlsReady = true)
+
+    SettingsTaskNavigator {
+        icon: "construction"
+        title: Translation.tr("Advanced")
+        description: Translation.tr("Advanced controls are split between color-generation internals and runtime resource instrumentation.")
+        summary: Translation.tr("Color generation · resources")
+        currentValue: root.activeSection
+        onSelected: value => root.activeSection = value
+        options: [
+            { displayName: Translation.tr("Color"), icon: "colors", value: "color" },
+            { displayName: Translation.tr("Resources"), icon: "memory_alt", value: "resources" }
+        ]
+    }
 
     function setCavaValue(path, value, regenerateStandalone): void {
         if (!root.cavaControlsReady)
@@ -33,6 +47,7 @@ ContentPage {
             "appearance.cava.framerate": 60,
             "appearance.cava.stereo": true,
             "appearance.cava.waveOpacity": 30,
+            "appearance.cava.blockedApps": [],
         })
         colorRegenTimer.restart()
     }
@@ -44,6 +59,8 @@ ContentPage {
     }
 
     SettingsCardSection {
+        settingsTaskSection: "color"
+        visible: root.activeSection === "color"
         expanded: true
         icon: "colors"
         title: Translation.tr("Color generation")
@@ -107,6 +124,24 @@ ContentPage {
                 }
                 StyledToolTip {
                     text: Translation.tr("Generate and apply a Spicetify theme from wallpaper colors")
+                }
+            }
+
+            ContentSubsection {
+                visible: Config.options?.appearance?.wallpaperTheming?.enableSpicetify ?? false
+                title: Translation.tr("Spotify theme")
+                tooltip: Translation.tr("Choose the Spicetify layout while keeping iNiR wallpaper colors")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options?.appearance?.wallpaperTheming?.spicetifyTheme ?? "Inir"
+                    onSelected: newValue => {
+                        Config.setNestedValue("appearance.wallpaperTheming.spicetifyTheme", newValue)
+                        colorRegenTimer.restart()
+                    }
+                    options: [
+                        { displayName: Translation.tr("Sleek"), value: "Inir" },
+                        { displayName: Translation.tr("Text (TUI)"), value: "InirTUI" }
+                    ]
                 }
             }
             SettingsSwitch {
@@ -190,7 +225,7 @@ ContentPage {
                     colorRegenTimer.restart();
                 }
                 StyledToolTip {
-                    text: Translation.tr("Generate aether.nvim theme plugin for Neovim/LazyVim from wallpaper colors (writes to ~/.config/nvim/lua/plugins/neovim.lua)")
+                    text: Translation.tr("Generate inir.nvim theme plugin for Neovim/LazyVim from wallpaper colors (writes to ~/.config/nvim/lua/plugins/neovim.lua)")
                 }
             }
             SettingsSwitch {
@@ -412,7 +447,9 @@ ContentPage {
     }
 
     SettingsCardSection {
-        expanded: false
+        settingsTaskSection: "resources"
+        visible: root.activeSection === "resources"
+        expanded: true
         icon: "memory_alt"
         title: Translation.tr("Resource Monitor")
 

@@ -15,6 +15,25 @@ ContentPage {
     settingsPageName: Translation.tr("Background")
 
     property bool isIiActive: Config.options?.panelFamily !== "waffle"
+    property string activeSection: "source"
+    readonly property bool screensTaskActive: root.isIiActive && root.activeSection === "screens"
+
+    SettingsTaskNavigator {
+        visible: root.isIiActive
+        icon: "texture"
+        title: Translation.tr("Wallpaper")
+        description: Translation.tr("Choose the source and rotation first, then tune motion, screen behavior or visual effects without scrolling through unrelated controls.")
+        summary: Translation.tr("Source · motion · screens · effects · notifications")
+        currentValue: root.activeSection
+        onSelected: value => root.activeSection = value
+        options: [
+            { displayName: Translation.tr("Source"), icon: "wallpaper", value: "source" },
+            { displayName: Translation.tr("Motion"), icon: "transition_fade", value: "motion" },
+            { displayName: Translation.tr("Screens"), icon: "devices", value: "screens" },
+            { displayName: Translation.tr("Effects"), icon: "auto_awesome", value: "effects" },
+            { displayName: Translation.tr("Notifications"), icon: "notifications", value: "notifications" }
+        ]
+    }
     readonly property var iiParallax: Config.options?.background?.parallax ?? {}
     readonly property string iiParallaxPreset: ParallaxMath.detectPreset(
         iiParallax.zoom ?? iiParallax.workspaceZoom ?? 1.0,
@@ -58,8 +77,9 @@ ContentPage {
     }
 
     SettingsCardSection {
-        visible: root.isIiActive
-        expanded: false
+        settingsTaskSection: "motion"
+        visible: root.isIiActive && root.activeSection === "motion"
+        expanded: true
         icon: "sync_alt"
         title: Translation.tr("Parallax")
 
@@ -209,8 +229,9 @@ ContentPage {
     }
 
     SettingsCardSection {
-        visible: root.isIiActive
-        expanded: false
+        settingsTaskSection: "screens"
+        visible: root.isIiActive && root.activeSection === "screens"
+        expanded: true
         icon: "fullscreen"
         title: Translation.tr("Fullscreen behavior")
 
@@ -236,8 +257,9 @@ ContentPage {
     }
 
     SettingsCardSection {
-        visible: root.isIiActive
-        expanded: false
+        settingsTaskSection: "screens"
+        visible: root.isIiActive && root.activeSection === "screens"
+        expanded: true
         icon: "devices"
         title: Translation.tr("Multi-monitor")
 
@@ -310,7 +332,7 @@ ContentPage {
                         height: parent.height - 28
 
                         Repeater {
-                            model: Quickshell.screens
+                            model: root.screensTaskActive ? Quickshell.screens : []
 
                             Item {
                                 id: bgMonDelegate
@@ -332,8 +354,8 @@ ContentPage {
                                     return wpPath
                                 }
 
-                                onWpPathChanged: if (WallpaperListener.isVideoPath(wpPath)) Wallpapers.ensureVideoFirstFrame(wpPath)
-                                onBackdropWpPathChanged: if (WallpaperListener.isVideoPath(backdropWpPath)) Wallpapers.ensureVideoFirstFrame(backdropWpPath)
+                                onWpPathChanged: if (root.screensTaskActive && WallpaperListener.isVideoPath(wpPath)) Wallpapers.ensureVideoFirstFrame(wpPath)
+                                onBackdropWpPathChanged: if (root.screensTaskActive && WallpaperListener.isVideoPath(backdropWpPath)) Wallpapers.ensureVideoFirstFrame(backdropWpPath)
 
                                 Layout.preferredWidth: cardWidth + backdropOffset + 4
                                 Layout.preferredHeight: parent.height - 8
@@ -384,7 +406,7 @@ ContentPage {
                                         anchors.fill: parent
                                         anchors.margins: parent.border.width
                                         fillMode: Image.PreserveAspectCrop
-                                        source: (!WallpaperListener.isVideoPath(bgMonDelegate.backdropWpPath) && !WallpaperListener.isGifPath(bgMonDelegate.backdropWpPath)) ? (bgMonDelegate.backdropWpPath || "") : ""
+                                        source: root.screensTaskActive && !WallpaperListener.isVideoPath(bgMonDelegate.backdropWpPath) && !WallpaperListener.isGifPath(bgMonDelegate.backdropWpPath) ? (bgMonDelegate.backdropWpPath || "") : ""
                                         sourceSize.width: 200
                                         sourceSize.height: 200
                                         cache: true
@@ -395,6 +417,7 @@ ContentPage {
                                         anchors.margins: parent.border.width
                                         fillMode: Image.PreserveAspectCrop
                                         source: {
+                                            if (!root.screensTaskActive) return ""
                                             if (!WallpaperListener.isGifPath(bgMonDelegate.backdropWpPath)) return ""
                                             const p = bgMonDelegate.backdropWpPath
                                             return p.startsWith("file://") ? p : "file://" + p
@@ -409,11 +432,15 @@ ContentPage {
                                         anchors.margins: parent.border.width
                                         fillMode: Image.PreserveAspectCrop
                                         source: {
+                                            if (!root.screensTaskActive) return ""
                                             const ff = Wallpapers.videoFirstFrames[bgMonDelegate.backdropWpPath]
                                             return ff ? (ff.startsWith("file://") ? ff : "file://" + ff) : ""
                                         }
                                         cache: true
-                                        Component.onCompleted: Wallpapers.ensureVideoFirstFrame(bgMonDelegate.backdropWpPath)
+                                        Component.onCompleted: {
+                                            if (root.screensTaskActive && WallpaperListener.isVideoPath(bgMonDelegate.backdropWpPath))
+                                                Wallpapers.ensureVideoFirstFrame(bgMonDelegate.backdropWpPath)
+                                        }
                                     }
 
                                     // Dim overlay for back position
@@ -531,7 +558,7 @@ ContentPage {
                                         anchors.fill: parent
                                         anchors.margins: bgMonCard.border.width
                                         fillMode: Image.PreserveAspectCrop
-                                        source: (!WallpaperListener.isVideoPath(bgMonDelegate.wpPath) && !WallpaperListener.isGifPath(bgMonDelegate.wpPath)) ? (bgMonDelegate.wpPath || "") : ""
+                                        source: root.screensTaskActive && !WallpaperListener.isVideoPath(bgMonDelegate.wpPath) && !WallpaperListener.isGifPath(bgMonDelegate.wpPath) ? (bgMonDelegate.wpPath || "") : ""
                                         sourceSize.width: 240
                                         sourceSize.height: 240
                                         cache: true
@@ -542,6 +569,7 @@ ContentPage {
                                         anchors.margins: bgMonCard.border.width
                                         fillMode: Image.PreserveAspectCrop
                                         source: {
+                                            if (!root.screensTaskActive) return ""
                                             if (!WallpaperListener.isGifPath(bgMonDelegate.wpPath)) return ""
                                             const p = bgMonDelegate.wpPath
                                             return p.startsWith("file://") ? p : "file://" + p
@@ -556,11 +584,15 @@ ContentPage {
                                         anchors.margins: bgMonCard.border.width
                                         fillMode: Image.PreserveAspectCrop
                                         source: {
+                                            if (!root.screensTaskActive) return ""
                                             const ff = Wallpapers.videoFirstFrames[bgMonDelegate.wpPath]
                                             return ff ? (ff.startsWith("file://") ? ff : "file://" + ff) : ""
                                         }
                                         cache: true
-                                        Component.onCompleted: Wallpapers.ensureVideoFirstFrame(bgMonDelegate.wpPath)
+                                        Component.onCompleted: {
+                                            if (root.screensTaskActive && WallpaperListener.isVideoPath(bgMonDelegate.wpPath))
+                                                Wallpapers.ensureVideoFirstFrame(bgMonDelegate.wpPath)
+                                        }
                                     }
 
                                     // Dim overlay when in back position
@@ -697,7 +729,7 @@ ContentPage {
                     readonly property bool isVideo: WallpaperListener.isVideoPath(_activePath)
                     readonly property bool isGif: WallpaperListener.isGifPath(_activePath)
 
-                    on_ActivePathChanged: if (isVideo) Wallpapers.ensureVideoFirstFrame(_activePath)
+                    on_ActivePathChanged: if (root.screensTaskActive && isVideo) Wallpapers.ensureVideoFirstFrame(_activePath)
 
                     ColumnLayout {
                         id: bgMonPreviewCol
@@ -715,7 +747,7 @@ ContentPage {
                                 visible: !bgMonPreviewCard.isGif && !bgMonPreviewCard.isVideo
                                 anchors.fill: parent
                                 fillMode: Image.PreserveAspectCrop
-                                source: visible ? bgMonPreviewCard.wpUrl : ""
+                                source: root.screensTaskActive && visible ? bgMonPreviewCard.wpUrl : ""
                                 sourceSize.width: 600
                                 sourceSize.height: 340
                                 cache: false
@@ -726,7 +758,7 @@ ContentPage {
                                 visible: bgMonPreviewCard.isGif
                                 anchors.fill: parent
                                 fillMode: Image.PreserveAspectCrop
-                                source: visible ? bgMonPreviewCard.wpUrl : ""
+                                source: root.screensTaskActive && visible ? bgMonPreviewCard.wpUrl : ""
                                 asynchronous: true
                                 cache: false
                                 playing: false
@@ -738,11 +770,15 @@ ContentPage {
                                 anchors.fill: parent
                                 fillMode: Image.PreserveAspectCrop
                                 source: {
+                                    if (!root.screensTaskActive) return ""
                                     const ff = Wallpapers.videoFirstFrames[bgMonPreviewCard._activePath]
                                     return ff ? (ff.startsWith("file://") ? ff : "file://" + ff) : ""
                                 }
                                 cache: false
-                                Component.onCompleted: Wallpapers.ensureVideoFirstFrame(bgMonPreviewCard._activePath)
+                                Component.onCompleted: {
+                                    if (root.screensTaskActive && bgMonPreviewCard.isVideo)
+                                        Wallpapers.ensureVideoFirstFrame(bgMonPreviewCard._activePath)
+                                }
                             }
 
                             // Bottom gradient overlay with monitor info
@@ -1066,15 +1102,30 @@ ContentPage {
     }
 
     SettingsCardSection {
-        expanded: false
+        settingsTaskSection: "source"
+        visible: !root.isIiActive || root.activeSection === "source"
+        expanded: true
         icon: "wallpaper"
-        title: Translation.tr("Wallpaper backend (awww)")
+        title: Translation.tr("Wallpaper renderer")
 
         SettingsGroup {
+            ConfigSelectionArray {
+                currentValue: Config.options?.background?.backend?.provider ?? "awww"
+                options: [
+                    { displayName: Translation.tr("Standard"), icon: "image", value: "awww" },
+                    { displayName: Translation.tr("Interactive web"), icon: "language", value: "web" }
+                ]
+                onSelected: newValue => Config.setNestedValue("background.backend.provider", newValue)
+            }
+
             StyledText {
                 Layout.fillWidth: true
+                visible: (Config.options?.background?.backend?.provider ?? "awww") === "awww"
                 text: AwwwBackend.available
-                    ? Translation.tr("awww is active. Static wallpapers are rendered externally with awww-native transitions, while GIF/video and backdrop layers use the internal fallback renderer automatically.")
+                    ? (AwwwBackend.isInternalShaderTransitionType(
+                            Config.options?.background?.transition?.type ?? "crossfade")
+                        ? Translation.tr("awww remains the static wallpaper renderer. The selected shader runs briefly in-shell during each change, then hands the final image back to awww.")
+                        : Translation.tr("awww is active. Static wallpapers are rendered externally with awww-native transitions, while GIF/video and backdrop layers use the internal fallback renderer automatically."))
                     : Translation.tr("awww is the default backend, but the `awww` / `awww-daemon` binaries were not found in PATH. Install them to enable hardware-accelerated wallpaper rendering and transitions. The internal renderer is used as fallback until then.")
                 color: !AwwwBackend.available
                     ? Appearance.colors.colError
@@ -1085,7 +1136,7 @@ ContentPage {
             }
 
             ConfigSpinBox {
-                visible: AwwwBackend.available
+                visible: (Config.options?.background?.backend?.provider ?? "awww") === "awww" && AwwwBackend.available
                 icon: "speed"
                 text: Translation.tr("awww transition FPS")
                 value: Config.options?.background?.backend?.awww?.transitionFps ?? 60
@@ -1096,7 +1147,7 @@ ContentPage {
             }
 
             ConfigRow {
-                visible: AwwwBackend.available
+                visible: (Config.options?.background?.backend?.provider ?? "awww") === "awww" && AwwwBackend.available
                 uniform: true
 
                 ConfigSpinBox {
@@ -1119,11 +1170,57 @@ ContentPage {
                     onValueChanged: Config.setNestedValue("background.backend.awww.spatialStep", value)
                 }
             }
+
+            StyledText {
+                visible: (Config.options?.background?.backend?.provider ?? "awww") === "web" && !WebWallpaper.available
+                Layout.fillWidth: true
+                text: WebWallpaper.lastError.length > 0
+                    ? Translation.tr("Interactive web wallpapers need Qt 6 WebEngine, LayerShellQt and the Qt QML runner. The standard wallpaper stays available until the web renderer is ready.") + "\n" + WebWallpaper.lastError
+                    : Translation.tr("Checking interactive web wallpaper support…")
+                color: Appearance.colors.colError
+                font.pixelSize: Appearance.font.pixelSize.small
+                wrapMode: Text.WordWrap
+            }
+
+            ContentSubsection {
+                visible: (Config.options?.background?.backend?.provider ?? "awww") === "web"
+                title: Translation.tr("Web wallpaper")
+                tooltip: Translation.tr("Load a local HTML file or a web URL with JavaScript, WebGL and browser media support")
+
+                MaterialTextField {
+                    Layout.fillWidth: true
+                    placeholderText: "/path/to/index.html  ·  https://example.com"
+                    text: Config.options?.background?.backend?.web?.source ?? ""
+                    onEditingFinished: Config.setNestedValue("background.backend.web.source", text.trim())
+                }
+            }
+
+            SettingsSwitch {
+                visible: (Config.options?.background?.backend?.provider ?? "awww") === "web"
+                buttonIcon: "sports_esports"
+                text: Translation.tr("Interactive mode")
+                checked: Config.options?.background?.backend?.web?.interactive ?? false
+                onCheckedChanged: Config.setNestedValue("background.backend.web.interactive", checked)
+                StyledToolTip {
+                    text: Translation.tr("When enabled, the web wallpaper moves to the desktop input layer so games and interactive pages can receive pointer and keyboard input")
+                }
+            }
+
+            StyledText {
+                visible: (Config.options?.background?.backend?.provider ?? "awww") === "web"
+                Layout.fillWidth: true
+                text: Translation.tr("Passive mode stays behind desktop widgets. Interactive mode takes over the desktop surface while the bar and dock remain above it. The normal wallpaper remains available as a fallback for lock screen, overview and theme colors.")
+                color: Appearance.colors.colSubtext
+                font.pixelSize: Appearance.font.pixelSize.small
+                wrapMode: Text.WordWrap
+            }
         }
     }
 
     SettingsCardSection {
-        expanded: false
+        settingsTaskSection: "source"
+        visible: !root.isIiActive || root.activeSection === "source"
+        expanded: true
         icon: "folder"
         title: Translation.tr("Wallpapers folder")
 
@@ -1143,7 +1240,9 @@ ContentPage {
     }
 
     SettingsCardSection {
-        expanded: false
+        settingsTaskSection: "source"
+        visible: !root.isIiActive || root.activeSection === "source"
+        expanded: true
         icon: "shuffle"
         title: Translation.tr("Shuffle wallpapers")
 
@@ -1199,8 +1298,9 @@ ContentPage {
     }
 
     SettingsCardSection {
-        visible: root.isIiActive
-        expanded: false
+        settingsTaskSection: "motion"
+        visible: root.isIiActive && root.activeSection === "motion"
+        expanded: true
         icon: "transition_fade"
         title: Translation.tr("Wallpaper transitions")
 
@@ -1226,6 +1326,29 @@ ContentPage {
                     Layout.bottomMargin: 2
                     text: {
                         const raw = Config.options?.background?.transition?.type ?? "crossfade"
+                        if (AwwwBackend.isInternalShaderTransitionType(raw)) {
+                            switch (raw) {
+                            case "circleSelect": return Translation.tr("Circular reveal centered on the wallpaper.")
+                            case "circlePit":    return Translation.tr("Circular pit reveal with a deeper radial edge.")
+                            case "magic":        return Translation.tr("Swirling procedural reveal from the shader catalogue.")
+                            case "Doom":         return Translation.tr("Aggressive vertical melt inspired by classic game transitions.")
+                            case "Peel":         return Translation.tr("Peels the outgoing wallpaper away to expose the next one.")
+                            case "transition":   return Translation.tr("Shader-based smooth blend between both wallpapers.")
+                            case "pixelate":     return Translation.tr("Pixelates the outgoing image while resolving the next wallpaper.")
+                            case "stripes":      return Translation.tr("Reveals the next wallpaper through animated stripes.")
+                            case "crt":          return Translation.tr("CRT-style distortion and scan transition.")
+                            case "dissolve":     return Translation.tr("Noise-driven dissolve between the two wallpapers.")
+                            case "glitch":       return Translation.tr("Digital glitch displacement between both wallpapers.")
+                            case "ripple":       return Translation.tr("Radial ripple distortion carries the old image into the new one.")
+                            case "shatter":      return Translation.tr("Fragments the outgoing wallpaper into a shatter transition.")
+                            case "inirMelt":     return Translation.tr("iNiR Melt breaks the outgoing wallpaper into staggered vertical streams with a restrained luminous edge.")
+                            case "inirVeil":     return Translation.tr("Chromatic Veil sweeps diagonally across the screen with a narrow controlled RGB fringe.")
+                            case "inirFracture": return Translation.tr("Glass Fracture shifts large screen fragments outward before resolving cleanly into the next wallpaper.")
+                            case "inirInk":      return Translation.tr("Sumi Wash reveals the next wallpaper through an irregular ink-like front with a muted monochrome edge.")
+                            case "inirPrism":    return Translation.tr("Prism Slices resolves the next wallpaper through staggered refractive strips with restrained chromatic edges.")
+                            case "shaderRandom": return Translation.tr("Chooses a different internal shader for each wallpaper change.")
+                            }
+                        }
                         const t = AwwwBackend.normalizedAwwwTransitionType(raw, Config.options?.background?.transition?.direction ?? "right")
                         switch (t) {
                         case "none":   return Translation.tr("Instant switch — no visible transition.")
@@ -1252,10 +1375,13 @@ ContentPage {
                 }
 
                 ConfigSelectionArray {
-                    currentValue: AwwwBackend.normalizedAwwwTransitionType(
-                        Config.options?.background?.transition?.type ?? "crossfade",
-                        Config.options?.background?.transition?.direction ?? "right"
-                    )
+                    currentValue: {
+                        const raw = Config.options?.background?.transition?.type ?? "crossfade"
+                        return AwwwBackend.isInternalShaderTransitionType(raw)
+                            ? raw
+                            : AwwwBackend.normalizedAwwwTransitionType(
+                                raw, Config.options?.background?.transition?.direction ?? "right")
+                    }
                     onSelected: newValue => {
                         Config.setNestedValue("background.transition.type", newValue);
                     }
@@ -1273,7 +1399,26 @@ ContentPage {
                         { displayName: Translation.tr("Center"), icon: "center_focus_strong", value: "center" },
                         { displayName: Translation.tr("Any"), icon: "shuffle", value: "any" },
                         { displayName: Translation.tr("Outer"), icon: "blur_circular", value: "outer" },
-                        { displayName: Translation.tr("Random"), icon: "casino", value: "random" }
+                        { displayName: Translation.tr("Random"), icon: "casino", value: "random" },
+                        { displayName: Translation.tr("Circle shader"), icon: "circle", value: "circleSelect" },
+                        { displayName: Translation.tr("Circle pit"), icon: "blur_circular", value: "circlePit" },
+                        { displayName: Translation.tr("Magic"), icon: "auto_awesome", value: "magic" },
+                        { displayName: Translation.tr("Doom"), icon: "whatshot", value: "Doom" },
+                        { displayName: Translation.tr("Peel"), icon: "layers", value: "Peel" },
+                        { displayName: Translation.tr("Shader fade"), icon: "gradient", value: "transition" },
+                        { displayName: Translation.tr("Pixelate"), icon: "grain", value: "pixelate" },
+                        { displayName: Translation.tr("Stripes"), icon: "texture_minus", value: "stripes" },
+                        { displayName: Translation.tr("CRT"), icon: "tv", value: "crt" },
+                        { displayName: Translation.tr("Dissolve"), icon: "blur_on", value: "dissolve" },
+                        { displayName: Translation.tr("Glitch"), icon: "bug_report", value: "glitch" },
+                        { displayName: Translation.tr("Ripple"), icon: "water", value: "ripple" },
+                        { displayName: Translation.tr("Shatter"), icon: "broken_image", value: "shatter" },
+                        { displayName: Translation.tr("iNiR Melt"), icon: "waterfall_chart", value: "inirMelt" },
+                        { displayName: Translation.tr("Chromatic Veil"), icon: "gradient", value: "inirVeil" },
+                        { displayName: Translation.tr("Glass Fracture"), icon: "deployed_code", value: "inirFracture" },
+                        { displayName: Translation.tr("Sumi Wash"), icon: "ink_highlighter", value: "inirInk" },
+                        { displayName: Translation.tr("Prism Slices"), icon: "view_column_2", value: "inirPrism" },
+                        { displayName: Translation.tr("Random shader"), icon: "shuffle", value: "shaderRandom" }
                     ]
                 }
             }
@@ -1282,8 +1427,11 @@ ContentPage {
                 visible: {
                     if (!(Config.options?.background?.transition?.enable ?? true))
                         return false
+                    const raw = Config.options?.background?.transition?.type ?? "crossfade"
+                    if (AwwwBackend.isInternalShaderTransitionType(raw))
+                        return false
                     const t = AwwwBackend.normalizedAwwwTransitionType(
-                        Config.options?.background?.transition?.type ?? "crossfade",
+                        raw,
                         Config.options?.background?.transition?.direction ?? "right"
                     )
                     return ["wipe", "wave"].indexOf(t) >= 0
@@ -1318,8 +1466,11 @@ ContentPage {
                 visible: {
                     if (!(Config.options?.background?.transition?.enable ?? true))
                         return false
+                    const raw = Config.options?.background?.transition?.type ?? "crossfade"
+                    if (AwwwBackend.isInternalShaderTransitionType(raw))
+                        return true
                     const t = AwwwBackend.normalizedAwwwTransitionType(
-                        Config.options?.background?.transition?.type ?? "crossfade",
+                        raw,
                         Config.options?.background?.transition?.direction ?? "right"
                     )
                     return t !== "simple" && t !== "none"
@@ -1334,15 +1485,16 @@ ContentPage {
                     Config.setNestedValue("background.transition.duration", value);
                 }
                 StyledToolTip {
-                    text: Translation.tr("How long the transition takes in milliseconds. Ignored for 'Simple' and 'None' modes.")
+                    text: Translation.tr("How long the transition takes in milliseconds. Ignored for 'Simple' and 'None' modes; shader transitions use this duration directly.")
                 }
             }
         }
     }
 
     SettingsCardSection {
-        visible: root.isIiActive
-        expanded: false
+        settingsTaskSection: "screens"
+        visible: root.isIiActive && root.activeSection === "screens"
+        expanded: true
         icon: "aspect_ratio"
         title: Translation.tr("Wallpaper scaling")
 
@@ -1486,7 +1638,7 @@ ContentPage {
                             readonly property bool isVideo: WallpaperListener.isVideoPath(wpPath)
                             readonly property string previewPath: isVideo
                                 ? Wallpapers.getVideoFirstFramePath(wpPath) : wpPath
-                            source: previewPath
+                            source: root.screensTaskActive && previewPath
                                 ? (previewPath.startsWith("file://") ? previewPath : "file://" + previewPath)
                                 : ""
                             sourceSize.width: 1200
@@ -1495,11 +1647,11 @@ ContentPage {
                             visible: status === Image.Ready
 
                             Component.onCompleted: {
-                                if (isVideo)
+                                if (root.screensTaskActive && isVideo)
                                     Wallpapers.ensureVideoFirstFrame(wpPath)
                             }
                             onWpPathChanged: {
-                                if (isVideo)
+                                if (root.screensTaskActive && isVideo)
                                     Wallpapers.ensureVideoFirstFrame(wpPath)
                             }
 
@@ -1708,8 +1860,9 @@ ContentPage {
     }
 
     SettingsCardSection {
-        visible: root.isIiActive
-        expanded: false
+        settingsTaskSection: "effects"
+        visible: root.isIiActive && root.activeSection === "effects"
+        expanded: true
         icon: "wallpaper"
         title: Translation.tr("Wallpaper effects")
 
@@ -2196,7 +2349,9 @@ ContentPage {
     // Desktop widget settings moved to DesktopWidgetsConfig.qml (settingsPageIndex: 14)
 
     SettingsCardSection {
-        expanded: false
+        settingsTaskSection: "notifications"
+        visible: !root.isIiActive || root.activeSection === "notifications"
+        expanded: true
         icon: "notifications"
         title: Translation.tr("Notifications")
 

@@ -5,6 +5,95 @@ All notable changes to iNiR will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Fresh-install presets** now combine curated desktop compositions, five coherent visual styles and three explicit graphics budgets. Low-end tiers preserve each style's default material policy instead of leaving glass-heavy themes stuck with blur disabled.
+
+### Changed
+
+- **Installed runtime** now uses consistent file selection across installation, updates and packages, keeping development tools out while preserving optional mascot packs.
+- **Runtime localization** now covers current literal UI strings in the canonical catalog, validates source coverage separately from locale parity, and keeps source discovery from acting as deletion authority.
+- **Media From bar** now opens from the actual M3 or Pill bar surface instead of falling back to the shared bottom overlay; Stock, Islands, Scenic, Frame and vertical bars keep their existing anchored path.
+
+### Fixed
+
+- **Embedded Settings search** now resolves the loaded page host through the overlay window instead of referencing a component-local QML id from the parent scope.
+- **Update recovery** now detects rewritten upstream history, preserves a recovery ref before realigning proven clean published checkouts, refuses local commits or dirty trees, and reports failures back to the in-shell updater immediately.
+- **Doctor allocator cleanup** now removes the retired Quickshell malloc policy from environment.d, the current maintenance process and the systemd user manager while preserving custom allocator values.
+
+## [2.30.0] - 2026-09-03
+
+This release brings the **wallpaper transition pipeline** to a stable base, expands **desktop tools** and **media controls**, and closes a long list of setup, runtime and Settings issues across ii and Waffle xd
+
+2.30.0 is not meant to be the final shape of any of this. It is the base I am choosing to build on for the next stage of iNiR. There will be bugs, regressions and things that need to be reworked as development continues, but this release is where I am starting that next stage.
+
+### Added
+
+- **Multilingual OCR** now includes Japanese and Chinese modes, Japanese dictionary lookup, optional Anki export and downloadable study resources.
+- **Desktop widgets** now include calendar, pixel clock, timer and to-do tools with persistent state and matching Settings controls.
+- **Wallpaper shader transitions** add a larger internal transition set, random shader selection and shared controls in ii and Waffle.
+- **Organic audio rendering** is now available in the Visualizer and Media Player with configurable response, range, glow, idle motion and presentation controls.
+- **Dashboard and sidebar organizers** can open expanded calendar, agenda and to-do views.
+- **Niri monitor arrangement** is available directly from Monitor Settings and persists the output layout.
+- **App-level filters** can exclude applications from notifications and visualizer audio sources.
+
+### Changed
+
+- **Orbit** navigation, workspace motion, shelf density and preview refresh were refined, with bounded preview memory and cleaner presentation lifetimes.
+- **Wallpaper ownership** is now explicit. Internal shader transitions stay inside the QML renderer while AWWW remains synchronized underneath, removing the visible handoff between renderers.
+- **Wallpaper preview, apply and cancel** now share one state machine, coalesce rapid navigation and avoid repainting an already presented preview.
+- **Wallpaper fill and backdrop rendering** keep the final crop and quality more consistently across low resolution and mixed aspect ratio images.
+- **Visualizer and Media Player** now share the same Cava normalization, palette and Organic rendering path while keeping independent quick controls.
+- **Setup and Doctor** use more distro-appropriate dependency paths on Arch, Fedora and Debian, with repository-first providers and cleaner fallbacks. Nix packaging and runtime tool resolution were updated too.
+- **Niri launcher integration** is portable across repo-link and login sessions, and the generated IPC registry matches the current command surface.
+- **Session startup** now gives Niri ownership of compositor environment state, waits for the real runtime and handles suspend locking more safely.
+- **Settings** now opens in Advanced mode by default and app filtering is available consistently in ii and Waffle.
+- **Mascot defaults** and optional pack guidance were aligned so fresh installs stay opt-in and existing configurations are not rewritten unexpectedly.
+- **YT Music** runtime authentication and dependency handling were hardened across supported distributions.
+- **M3 dock and bar layout** behavior was refined so context menus, workspace placement and module ordering remain usable under tight width and custom ordering.
+- **Organizer expansion controls** now live in the calendar, events and to-do widget headers instead of changing the sidebar navigation rail.
+- **Release and Arch package metadata** are aligned on version 2.30.0, and obsolete allocator tuning was removed from the runtime.
+
+### Fixed
+
+- **Wallpaper shader previews** no longer flash the currently applied wallpaper between frames, and rapid preview changes no longer expose AWWW underneath the transition.
+- **Wallpaper transition geometry** no longer shows provisional resize, recenter or crop states before the final image geometry is ready.
+- **Preview and screenshot capture** no longer replace the user clipboard or pollute cliphist, while normal Niri screenshot notifications keep their icon.
+- **Fedora and Debian dependency repair** no longer treats Arch package names, command IDs or Flatpak IDs as native packages, and Fedora prefers packaged AWWW providers before source builds.
+- **SDDM setup** no longer overrides the distro greeter backend or input method.
+- **Nix installs** now resolve preview tools from the service environment and keep Niri and optional mascot packaging consistent.
+- **Overview desktop app drag** works again and Dashboard layout no longer regresses while moving items.
+- **Visualizer wave and bars controls** keep their sensitivity, smoothing, color and bar settings after the Organic work.
+- **Pixel Clock, setup output and Niri night light** behavior was cleaned up without changing user configuration.
+- **Taskbar application state** no longer enters a recursive binding loop.
+- **Bar auto-hide, tray interactions and constrained layouts** are more stable, and workspace modules can move through the full supported ordering range.
+- **Material text fields and system widgets** render more cleanly, CPU and GPU temperatures are separated, stale notification image handles fall back safely, and idle Custom Image shape tooltips stay hidden.
+- **Crosshair chrome and masked user services** now handle their edge cases without clipping outside the rounded frame or breaking setup/runtime repair.
+- **Repo-link installs** keep launcher and service files synchronized with the live checkout instead of leaving stale runtime copies.
+- **Managed Python dependency documentation** now matches the runtime sources used by the project.
+
+## [2.29.3] - 2026-08-25
+
+A polish release for Pill controls and surfaces, settings navigation, TUI app themes, and several runtime fixes including privileged graphical apps and audio feedback stability.
+
+### Added
+- **TUI app themes**: Discord/Vesktop gains an iNiR TUI flavor on top of System24, and Spotify gains an `InirTUI` Spicetify flavor based on the upstream `text` theme. Settings can switch Spotify between Sleek and TUI while preserving wallpaper-driven iNiR colors; Text receives semantic iNiR accent/border/header/highlight roles and readable playback-control contrast without forking its layout.
+- **Pill controls and app mixer**: battery display can use icon, percentage or both; Now Playing gets a wide hover-row capsule with wheel volume control instead of relying on the tiny side bud; monitor-aware sizing plus roomier calendar/weather, launcher, tray, workspace and shared search controls improve 1080p+ usability; Super+Space can open either iNiR Overview or the Pill launcher; a Ricelin settings index links directly into iNiR settings pages; and Mixer uses Ricelin-style vertical output/app faders with resolved desktop-entry names/icons, wheel volume, mute controls, a horizontally scrollable app rail, and a separate System view.
+- **Floating Pill**: Pill can remain visible and hover-expand above normal windows without reserving the top edge. Fullscreen still hides and unmaps the overlay to preserve game performance.
+
+### Changed
+- **Pill and Ricelin settings**: Pill setup is now grouped by interaction, readability, surfaces, hover row, clock/glyphs and advanced geometry with a live shape preview; Pill and every Ricelin Island surface now consume one body-opacity/glass material with shared blur, radius, shadow and sheen, including nested PanelSurface consumers.
+- **Pill sizing**: Scale now honors values below the monitor readability presets, and the previously working compact width, height, icon and spacing ranges are available again without changing the current defaults.
+- **Settings navigation**: dense multi-purpose pages use task-oriented sections, and search activates the owning section before focusing a result across standalone and overlay hosts.
+
+### Fixed
+- **Audio and media feedback**: right-sidebar volume writes are coalesced to prevent freezes and Pill media wheel feedback follows the effective player stream without jumping to zero; explicit track changes still show the media OSD while automatic changes can stay suppressed during games or fullscreen sessions.
+- **Privileged graphical apps**: GParted and Ventoy retain the Wayland/XWayland session environment after Polkit authentication; Ventoy uses its Qt frontend instead of forcing an inaccessible root X11 connection.
+- **Pill notifications**: blank or whitespace-only notification actions are ignored instead of rendering empty action buttons, and the unread indicator remains anchored to the capsule.
+- **Text fields**: shared fields no longer expose native Material outline fragments beneath custom global-style surfaces.
+
 ## [2.29.2] - 2026-08-24
 
 A focused polish release for Regalia, wallpapers, startup reliability, bar behavior, and recent runtime regressions.

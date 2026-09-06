@@ -114,6 +114,20 @@ Scope {
         root.reportRuntime()
     })
 
+    // If this output transitions into a covering fullscreen window while its
+    // semantic sidebar is already open, dismiss that sidebar. Do this here,
+    // per output, instead of restoring GameMode's old global transient-surface
+    // sweep: an explicit sidebar open while already fullscreen must remain
+    // possible, and fullscreen on another monitor must not close this one.
+    onFullscreenCoveredChanged: {
+        if (!root.fullscreenCovered || !root.roleOpen)
+            return
+        if (root.featureRole)
+            GlobalStates.closeSidebarLeft()
+        else if (root.systemRole)
+            GlobalStates.closeSidebarRight()
+    }
+
     onPresentationOpenChanged: {
         if (root.presentationOpen) {
             contentUnloadTimer.stop()
@@ -584,8 +598,8 @@ Scope {
         color: "transparent"
         // A closed transparent Overlay surface still prevents direct scanout.
         // Keep it mapped for normal warm opens, but release it while fullscreen
-        // owns this output or manual GameMode explicitly requests a quiet shell.
-        // Explicit fullscreen opens and their exit animation remain usable.
+        // owns this output. Manual GameMode only disables expensive rendering;
+        // explicit opens and their exit animation remain usable.
         visible: root._nativeHostMapped && !GlobalStates.screenLocked
             && (!root.fullscreenCovered || root.presentationOpen
                 || sidebarContentLoader.animating)
@@ -643,7 +657,13 @@ Scope {
             interval: 240
             repeat: false
             onTriggered: {
-                if (root.edgeRevealTransient && !sidebarPanelHover.hovered)
+                if (!root.edgeRevealTransient)
+                    return
+                if (GlobalStates.activeContextMenuCount > 0) {
+                    edgeRevealCloseTimer.restart()
+                    return
+                }
+                if (!sidebarPanelHover.hovered)
                     root.setRoleOpen(false)
             }
         }
@@ -992,10 +1012,14 @@ Scope {
             Keys.onPressed: event => {
                 if (event.key !== Qt.Key_Escape)
                     return
-                if (ShellEditSession.active)
+                if (ShellEditSession.active) {
                     ShellEditSession.handleEscape()
-                else
-                    sidebarRoot.hide()
+                } else {
+                    const roleItem = sidebarContentLoader.item?.roleContentItem
+                    const handledByContent = roleItem && typeof roleItem.handleEscape === "function"
+                        ? roleItem.handleEscape() : false
+                    if (!handledByContent) sidebarRoot.hide()
+                }
                 event.accepted = true
             }
 

@@ -314,6 +314,25 @@ Item {
                                 font.weight: Font.Medium
                                 color: upcomingArea._colText
                             }
+                            RippleButton {
+                                implicitWidth: 28
+                                implicitHeight: 28
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colLayer2Hover
+                                colRipple: Appearance.colors.colLayer2Active
+                                onClicked: {
+                                    const eventsIdx = root.sections.findIndex(s => s.id === "events")
+                                    if (eventsIdx !== -1) root.activeSection = eventsIdx
+                                }
+                                contentItem: MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: "open_in_full"
+                                    iconSize: 15
+                                    color: upcomingArea._colPrimary
+                                }
+                                StyledToolTip { text: Translation.tr("Open all events") }
+                            }
                         }
 
                         // Event list or empty hint
@@ -747,6 +766,18 @@ Item {
         visible: bg.angelEverywhere && !Appearance.gameModeMinimal
     }
 
+    IslandPanel {
+        anchors.fill: bg
+        visible: bg.islandStyle
+        radius: bg.radius
+        glassEnabled: true
+        screen: root.panelScreen ?? root.QsWindow?.window?.screen ?? null
+        glassScreenX: root.screenWidth - bg.width - Appearance.sizes.hyprlandGapsOut
+        glassScreenY: Appearance.sizes.hyprlandGapsOut
+        glassScreenWidth: root.screenWidth
+        glassScreenHeight: root.screenHeight
+    }
+
     ZzzPlate {
         anchors.fill: bg
         visible: bg.zzzEverywhere && !Appearance.gameModeMinimal
@@ -859,19 +890,6 @@ Item {
             maskSource: Rectangle {
                 width: bg.width; height: bg.height; radius: bg.radius
             }
-        }
-
-        // Ricelin island face. Angel alone keeps the outer stepped shadow.
-        IslandPanel {
-            anchors.fill: parent
-            visible: bg.islandStyle && !bg.gameModeMinimal
-            radius: bg.radius
-            shadow: false
-            glassEnabled: true
-            glassScreenX: root.screenWidth - bg.width - Appearance.sizes.hyprlandGapsOut
-            glassScreenY: Appearance.sizes.hyprlandGapsOut
-            glassScreenWidth: root.screenWidth ?? 1920
-            glassScreenHeight: root.screenHeight ?? 1080
         }
 
         // Aurora blurred wallpaper
@@ -1811,7 +1829,7 @@ Item {
             const wins = NiriService.windows || []
             for (let i = 0; i < wins.length; i++) {
                 const w = wins[i]
-                if (w.title === "illogical-impulse Settings" && w.app_id === "org.quickshell") {
+                if (w.title === "Settings — iNiR" && w.app_id === "org.quickshell") {
                     GlobalStates.sidebarRightOpen = false
                     Qt.callLater(() => NiriService.focusWindow(w.id))
                     return

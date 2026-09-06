@@ -68,6 +68,13 @@ Scope {
                 property bool superShow: false
                 property bool mustShow: hoverRegion.containsMouse || superShow
                     || ShellEditSession.active
+                // Same transparent render headroom as the horizontal bar, on
+                // the desktop-facing side. The explicit exclusiveZone below is
+                // deliberately unchanged so Organic never relayouts windows.
+                readonly property real organicAuraAllowance:
+                    (Config.options?.bar?.visualizer?.enable ?? false)
+                        && (Config.options?.bar?.visualizer?.type ?? "bars") === "organic"
+                    ? Math.ceil(Appearance.sizes.verticalBarWidth * 1.75) : 0
                 exclusionMode: ExclusionMode.Ignore
                 exclusiveZone:
                     (GlobalStates.coverflowSelectorOpen || (Config?.options.bar.autoHide.enable && (!mustShow || !Config?.options.bar.autoHide.pushWindows))) ? 0 :
@@ -78,13 +85,15 @@ Scope {
                 // would draw the bar over fullscreen content (GameMode only
                 // detects games, not videos).
                 implicitWidth: Appearance.sizes.verticalBarWidth + Appearance.rounding.screenRounding
+                    + barRoot.organicAuraAllowance
+                Item { id: emptyMask; width: 0; height: 0 }
                 mask: Region {
                     item: hoverMaskRegion
                 }
                 color: "transparent"
 
                 BackgroundEffect.blurRegion: Region {
-                    item: barContent.nativeBlurActive ? barContent.backgroundItem : null
+                    item: barContent.nativeBlurActive ? barContent.backgroundItem : emptyMask
                     radius: barContent.backgroundItem.radius
                 }
 
@@ -187,6 +196,7 @@ Scope {
                         }
                         width: Appearance.rounding.screenRounding
                         active: showBarBackground && (Config.options?.bar?.cornerStyle ?? 0) === 0 && !Appearance.zzzEverywhere
+                            && !(Config.options?.bar?.appearanceStyle === "islands")
 
                         states: State {
                             name: "right"

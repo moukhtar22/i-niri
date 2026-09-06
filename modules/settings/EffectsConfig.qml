@@ -8,6 +8,21 @@ ContentPage {
     id: root
     settingsPageIndex: 25
     settingsPageName: Translation.tr("Effects")
+    property string activeSection: "glass"
+
+    SettingsTaskNavigator {
+        icon: "blur_on"
+        title: Translation.tr("Effects")
+        description: Translation.tr("Choose the rendering policy first, then override only the areas that need different behavior.")
+        summary: Translation.tr("Glass · per-area policy · motion")
+        currentValue: root.activeSection
+        onSelected: value => root.activeSection = value
+        options: [
+            { displayName: Translation.tr("Glass"), icon: "blur_on", value: "glass" },
+            { displayName: Translation.tr("Areas"), icon: "tune", value: "areas" },
+            { displayName: Translation.tr("Motion"), icon: "animation", value: "motion" }
+        ]
+    }
 
     readonly property var backendOptions: [
         { displayName: Translation.tr("Style default"), value: "auto" },
@@ -24,6 +39,8 @@ ContentPage {
     ]
 
     SettingsCardSection {
+        settingsTaskSection: "glass"
+        visible: root.activeSection === "glass"
         expanded: true
         icon: "blur_on"
         title: Translation.tr("Blur and glass")
@@ -31,10 +48,21 @@ ContentPage {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Appearance.sizes.spacingMedium
-                MaterialSymbol { text: "auto_awesome"; iconSize: Appearance.font.pixelSize.larger }
-                StyledText { Layout.fillWidth: true; text: Translation.tr("Default blur backend") }
+                MaterialSymbol {
+                    text: "auto_awesome"
+                    iconSize: Appearance.font.pixelSize.larger
+                    color: Appearance.colors.colPrimary
+                }
+                StyledText {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    text: Translation.tr("Default blur backend")
+                    wrapMode: Text.Wrap
+                }
                 StyledComboBox {
-                    Layout.preferredWidth: 210
+                    // Keep the selector readable at the Settings minimum width
+                    // while letting it breathe in the normal window size.
+                    Layout.preferredWidth: Math.min(210, Math.max(140, root.width * 0.38))
                     model: root.backendOptions
                     textRole: "displayName"
                     currentIndex: Math.max(0, root.backendOptions.findIndex(o => o.value === (Config.options?.performance?.blurBackend ?? "auto")))
@@ -52,6 +80,8 @@ ContentPage {
     }
 
     SettingsCardSection {
+        settingsTaskSection: "areas"
+        visible: root.activeSection === "areas"
         expanded: true
         icon: "tune"
         title: Translation.tr("Per-area overrides")
@@ -62,10 +92,19 @@ ContentPage {
                     required property var modelData
                     Layout.fillWidth: true
                     spacing: Appearance.sizes.spacingMedium
-                    MaterialSymbol { text: modelData.icon; iconSize: Appearance.font.pixelSize.larger }
-                    StyledText { Layout.fillWidth: true; text: modelData.label }
+                    MaterialSymbol {
+                        text: modelData.icon
+                        iconSize: Appearance.font.pixelSize.larger
+                        color: Appearance.colors.colPrimary
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        text: modelData.label
+                        wrapMode: Text.Wrap
+                    }
                     StyledComboBox {
-                        Layout.preferredWidth: 210
+                        Layout.preferredWidth: Math.min(210, Math.max(140, root.width * 0.38))
                         readonly property var options: [{ displayName: Translation.tr("Inherit"), value: "inherit" }].concat(root.backendOptions)
                         model: options
                         textRole: "displayName"
@@ -78,6 +117,8 @@ ContentPage {
     }
 
     SettingsCardSection {
+        settingsTaskSection: "motion"
+        visible: root.activeSection === "motion"
         expanded: true
         icon: "animation"
         title: Translation.tr("Motion and power")

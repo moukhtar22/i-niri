@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Dialogs
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -12,6 +13,132 @@ ContentPage {
     settingsPageName: Translation.tr("Bar")
 
     property bool isIiActive: Config.options?.panelFamily !== "waffle"
+    property string activeSection: "modules"
+    property int _taskLoadingCount: 0
+
+    function activateSettingsSearchSection(section: string): bool {
+        const parts = String(section || "").toLowerCase().split(/[·›]/)
+        const label = parts[parts.length - 1].trim()
+        const sections = {
+            "appearance & layout": "appearance",
+            "sizing & surface": "appearance",
+            "m3 bar": "m3",
+            "islands options": "islands",
+            "audio spectrum": "spectrum",
+            "behavior & clock": "behavior",
+            "modules": "modules",
+            "bar module layout": "modules",
+            "resources": "modules",
+            "media": "modules",
+            "workspaces": "modules",
+            "system tray": "modules",
+            "utility buttons": "modules",
+            "notifications": "modules"
+        }
+        const target = sections[label] ?? ""
+        if (!target)
+            return false
+        root.activeSection = target
+        return true
+    }
+
+    component LazySection: Loader {
+        id: sectionLoader
+        property bool requested: false
+        property bool resident: false
+        property bool _countedLoading: false
+
+        Layout.fillWidth: true
+        asynchronous: true
+        active: resident
+        visible: requested && status !== Loader.Null
+        enabled: requested && status === Loader.Ready && opacity > 0.99
+        opacity: requested && status === Loader.Ready ? 1 : 0
+        Layout.preferredHeight: requested && status === Loader.Ready && item ? item.implicitHeight : 0
+
+        transform: Translate {
+            y: sectionLoader.requested && sectionLoader.status === Loader.Ready ? 0 : 4
+            Behavior on y {
+                enabled: Appearance.animationsEnabled
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveEnter.duration
+                    easing.type: Appearance.animation.elementMoveEnter.type
+                    easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+                }
+            }
+        }
+
+        Behavior on opacity {
+            enabled: Appearance.animationsEnabled
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveEnter.duration
+                easing.type: Appearance.animation.elementMoveEnter.type
+                easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+            }
+        }
+
+        function syncLoadingState(): void {
+            const shouldCount = requested && status === Loader.Loading
+            if (shouldCount === _countedLoading)
+                return
+            root._taskLoadingCount = Math.max(0, root._taskLoadingCount + (shouldCount ? 1 : -1))
+            _countedLoading = shouldCount
+        }
+
+        onRequestedChanged: {
+            if (requested) {
+                unloadDelay.stop()
+                resident = true
+            } else if (status === Loader.Ready) {
+                unloadDelay.restart()
+            } else {
+                unloadDelay.stop()
+                resident = false
+            }
+            syncLoadingState()
+        }
+        onStatusChanged: syncLoadingState()
+        Component.onCompleted: {
+            if (requested)
+                resident = true
+            syncLoadingState()
+        }
+        Component.onDestruction: {
+            if (_countedLoading)
+                root._taskLoadingCount = Math.max(0, root._taskLoadingCount - 1)
+        }
+
+        Timer {
+            id: unloadDelay
+            interval: 600
+            repeat: false
+            onTriggered: parent.resident = false
+        }
+    }
+
+    SettingsTaskNavigator {
+        icon: "toolbar"
+        title: Translation.tr("Bar")
+        description: Translation.tr("Position and sizing, the bar surface styles, and the widgets and modules that live in the bar.")
+        summary: Translation.tr("Shape · M3 · Islands · Spectrum · Behavior · Modules")
+        currentValue: root.activeSection
+        onSelected: value => root.activeSection = value
+        options: [
+            { displayName: Translation.tr("Shape & position"), icon: "style", value: "appearance" },
+            { displayName: Translation.tr("M3 bar"), icon: "category", value: "m3",
+              dimmed: (Config.options?.bar?.appearanceStyle ?? "classic") !== "m3" },
+            { displayName: Translation.tr("Islands"), icon: "linear_scale", value: "islands",
+              dimmed: (Config.options?.bar?.appearanceStyle ?? "classic") !== "islands" },
+            { displayName: Translation.tr("Audio spectrum"), icon: "graphic_eq", value: "spectrum" },
+            { displayName: Translation.tr("Behavior & clock"), icon: "visibility", value: "behavior" },
+            { displayName: Translation.tr("Modules"), icon: "widgets", value: "modules" }
+        ]
+    }
+
+    SettingsTaskLoadingState {
+        loading: root._taskLoadingCount > 0
+        text: Translation.tr("Loading section…")
+    }
     property bool m3ControlsReady: false
     property bool spectrumControlsReady: false
     Component.onCompleted: Qt.callLater(() => {
@@ -116,6 +243,10 @@ ContentPage {
     // Corner style only shapes the classic bar surface; the other appearances draw
     // their own (islands capsules, scenic scrim, frame outline, pill).
     readonly property bool cornerStyleApplies: (Config.options?.bar?.appearanceStyle ?? "classic") === "classic"
+    readonly property bool stockHorizontalLayoutActive: !(Config.options?.bar?.vertical ?? false)
+        && !["m3", "pill"].includes(Config.options?.bar?.appearanceStyle ?? "classic")
+    readonly property bool taskbarModeSupported: (Config.options?.bar?.vertical ?? false)
+        || root.stockHorizontalLayoutActive
 
     function detectM3LayoutPreset(): string {
         const left = JSON.stringify(Config.options?.bar?.m3?.layouts?.leftLayout ?? [])
@@ -214,7 +345,8 @@ ContentPage {
     }
 
     readonly property var m3Widgets: [
-        { id: "leftSidebarButton", name: Translation.tr("Left Sidebar Button"), icon: "left_panel_open" },
+        { id: "leftSidebarButton", name: Translation.tr("Left Sidebar Button"), icon: "left_panel_open",
+            description: Translation.tr("Opens the sidebar assigned to the left edge.") },
         { id: "workspaces", name: Translation.tr("Workspaces"), icon: "steppers" },
         { id: "weatherBar", name: Translation.tr("Weather"), icon: "flare" },
         { id: "media", name: Translation.tr("Media"), icon: "music_note" },
@@ -232,11 +364,16 @@ ContentPage {
         { id: "visualizer", name: Translation.tr("Visualizer"), icon: "graphic_eq" },
         { id: "hyprlandXkbIndicator", name: Translation.tr("Keyboard Layout"), icon: "keyboard" },
         { id: "divisor", name: Translation.tr("Divider"), icon: "horizontal_distribute" },
-        { id: "notificationUnreadCount", name: Translation.tr("Unread Notifications"), icon: "notifications" }
+        { id: "notificationUnreadCount", name: Translation.tr("Unread Notifications"), icon: "notifications",
+            description: Translation.tr("Shows unread notifications and opens the right sidebar when clicked.") }
     ]
 
     function m3WidgetName(id): string {
         return root.m3Widgets.find(widget => widget.id === id)?.name ?? id
+    }
+
+    function m3WidgetDescription(id): string {
+        return root.m3Widgets.find(widget => widget.id === id)?.description ?? ""
     }
 
     function m3WidgetHint(id): string {
@@ -286,12 +423,70 @@ ContentPage {
     // APPEARANCE & LAYOUT
     // ═══════════════════════════════════════════════════════════════════
     SettingsCardSection {
-        visible: root.isIiActive
+        settingsTaskSection: "appearance"
+        visible: root.isIiActive && root.activeSection === "appearance"
         expanded: true
         icon: "dashboard"
         title: Translation.tr("Appearance & Layout")
 
         SettingsGroup {
+            ContentSubsection {
+                title: Translation.tr("Bar appearance")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options?.bar?.appearanceStyle ?? "classic"
+                    onSelected: newValue => {
+                        Config.setNestedValue("bar.appearanceStyle", newValue);
+                    }
+                    options: [
+                        { displayName: Translation.tr("Classic"), icon: "toolbar", value: "classic" },
+                        { displayName: Translation.tr("Islands"), icon: "linear_scale", value: "islands" },
+                        { displayName: Translation.tr("Scenic"), icon: "gradient", value: "scenic" },
+                        { displayName: Translation.tr("Frame"), icon: "crop_free", value: "frame" },
+                        { displayName: Translation.tr("M3"), icon: "category", value: "m3" },
+                        { displayName: Translation.tr("Pill"), icon: "blur_on", value: "pill" }
+                    ]
+                }
+
+                SettingsNote {
+                    icon: "toolbar"
+                    text: Translation.tr("Decides the bar surface style. Islands works in horizontal and vertical bars; the rest are horizontal only.")
+                }
+
+                RippleButton {
+                    visible: (Config.options?.bar?.appearanceStyle ?? "classic") === "pill"
+                    Layout.fillWidth: true
+                    implicitHeight: 40
+                    buttonRadius: Appearance.rounding.small
+                    colBackground: Appearance.colors.colLayer1
+                    colBackgroundHover: Appearance.colors.colLayer1Hover
+                    onClicked: GlobalStates.openSettingsPage(21)
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
+                        spacing: 8
+                        MaterialSymbol {
+                            text: "tune"
+                            iconSize: 18
+                            color: Appearance.colors.colPrimary
+                        }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Open Ricelin Pill settings")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.weight: Font.Medium
+                        }
+                        MaterialSymbol {
+                            text: "chevron_right"
+                            iconSize: 18
+                            color: Appearance.colors.colSubtext
+                        }
+                    }
+                }
+            }
+
             ConfigRow {
                 uniform: true
 
@@ -343,28 +538,51 @@ ContentPage {
                     }
                 }
             }
+        }
+    }
 
-            ContentSubsection {
-                title: Translation.tr("Bar appearance")
+    LazySection {
+        requested: root.isIiActive && root.activeSection === "m3"
+        sourceComponent: Component {
+            SettingsCardSection {
+                settingsTaskSection: "m3"
+                expanded: true
+        icon: "category"
+        title: Translation.tr("M3 Bar")
 
-                ConfigSelectionArray {
-                    currentValue: Config.options?.bar?.appearanceStyle ?? "classic"
-                    onSelected: newValue => {
-                        Config.setNestedValue("bar.appearanceStyle", newValue);
+        SettingsGroup {
+
+            SettingsNote {
+                visible: (Config.options?.bar?.appearanceStyle ?? "classic") !== "m3"
+                icon: "info"
+                text: Translation.tr("These options configure the M3 bar and take effect when M3 is the active bar appearance.")
+            }
+
+            RippleButton {
+                visible: (Config.options?.bar?.appearanceStyle ?? "classic") !== "m3"
+                Layout.fillWidth: true
+                implicitHeight: 40
+                buttonRadius: Appearance.rounding.small
+                colBackground: Appearance.colors.colLayer1
+                colBackgroundHover: Appearance.colors.colLayer1Hover
+                onClicked: Config.setNestedValue("bar.appearanceStyle", "m3")
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 10
+                    anchors.rightMargin: 10
+                    spacing: 8
+                    MaterialSymbol {
+                        text: "category"
+                        iconSize: 18
+                        color: Appearance.colors.colPrimary
                     }
-                    options: [
-                        { displayName: Translation.tr("Classic"), icon: "toolbar", value: "classic" },
-                        { displayName: Translation.tr("Islands"), icon: "linear_scale", value: "islands" },
-                        { displayName: Translation.tr("Scenic"), icon: "gradient", value: "scenic" },
-                        { displayName: Translation.tr("Frame"), icon: "crop_free", value: "frame" },
-                        { displayName: Translation.tr("M3"), icon: "category", value: "m3" },
-                        { displayName: Translation.tr("Pill"), icon: "blur_on", value: "pill" }
-                    ]
-                }
-
-                SettingsNote {
-                    icon: "toolbar"
-                    text: Translation.tr("Redraws the bar surface. Horizontal bar only.")
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Switch the bar to M3 appearance")
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.weight: Font.Medium
+                    }
                 }
             }
 
@@ -407,6 +625,7 @@ ContentPage {
                     layout: Config.options?.bar?.m3?.layouts?.leftLayout ?? []
                     availableWidgets: root.availableM3Widgets()
                     getWidgetName: root.m3WidgetName
+                    getWidgetDescription: root.m3WidgetDescription
                     onUpdate: list => root.updateM3CustomLayout("left", list)
                 }
 
@@ -415,6 +634,7 @@ ContentPage {
                     layout: Config.options?.bar?.m3?.layouts?.middleLayout ?? []
                     availableWidgets: root.availableM3Widgets()
                     getWidgetName: root.m3WidgetName
+                    getWidgetDescription: root.m3WidgetDescription
                     onUpdate: list => root.updateM3CustomLayout("middle", list)
                 }
 
@@ -423,7 +643,13 @@ ContentPage {
                     layout: Config.options?.bar?.m3?.layouts?.rightLayout ?? []
                     availableWidgets: root.availableM3Widgets()
                     getWidgetName: root.m3WidgetName
+                    getWidgetDescription: root.m3WidgetDescription
                     onUpdate: list => root.updateM3CustomLayout("right", list)
+                }
+
+                SettingsNote {
+                    icon: "drag_indicator"
+                    text: Translation.tr("Drag widgets within Left, Center or Right to reorder them. Use + to add a widget; click a widget chip to remove it.")
                 }
 
                 SettingsNote {
@@ -1011,315 +1237,54 @@ ContentPage {
                         }
                     }
                 }
+            }
+        }
+            }
+        }
+    }
 
+    LazySection {
+        requested: root.isIiActive && root.activeSection === "islands"
+        sourceComponent: Component {
+            SettingsCardSection {
+                settingsTaskSection: "islands"
+                expanded: true
+        icon: "linear_scale"
+        title: Translation.tr("Islands options")
+
+        SettingsGroup {
+
+            SettingsNote {
+                visible: (Config.options?.bar?.appearanceStyle ?? "classic") !== "islands"
+                icon: "info"
+                text: Translation.tr("Islands is not the active bar appearance. Switch to it to see these geometry changes live.")
             }
 
-            ContentSubsection {
-                visible: (Config.options?.bar?.appearanceStyle ?? "classic") === "pill"
-                title: Translation.tr("Pill options")
+            RippleButton {
+                visible: (Config.options?.bar?.appearanceStyle ?? "classic") !== "islands"
+                Layout.fillWidth: true
+                implicitHeight: 40
+                buttonRadius: Appearance.rounding.small
+                colBackground: Appearance.colors.colLayer1
+                colBackgroundHover: Appearance.colors.colLayer1Hover
+                onClicked: Config.setNestedValue("bar.appearanceStyle", "islands")
 
-                SettingsSwitch {
-                    buttonIcon: "expand_content"
-                    text: Translation.tr("Bar mode")
-                    checked: Config.options?.bar?.pill?.barMode ?? false
-                    onCheckedChanged: Config.setNestedValue("bar.pill.barMode", checked)
-                    StyledToolTip {
-                        text: Translation.tr("Keep the pill expanded as a persistent bar: workspaces, clock and every trigger stay visible without hovering.")
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 10
+                    anchors.rightMargin: 10
+                    spacing: 8
+                    MaterialSymbol {
+                        text: "linear_scale"
+                        iconSize: 18
+                        color: Appearance.colors.colPrimary
                     }
-                }
-
-                ConfigRow {
-                    uniform: true
-                    SettingsSwitch {
-                        buttonIcon: "notifications"
-                        text: Translation.tr("Pill toasts")
-                        checked: Config.options?.bar?.pill?.toasts ?? true
-                        onCheckedChanged: Config.setNestedValue("bar.pill.toasts", checked)
-                        StyledToolTip {
-                            text: Translation.tr("Notifications take over the resting pill. Off shows iNiR's regular notification popups instead.")
-                        }
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Switch the bar to Islands appearance")
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.weight: Font.Medium
                     }
-                    SettingsSwitch {
-                        buttonIcon: "page_info"
-                        text: Translation.tr("Pill OSD")
-                        checked: Config.options?.bar?.pill?.osd ?? true
-                        onCheckedChanged: Config.setNestedValue("bar.pill.osd", checked)
-                        StyledToolTip {
-                            text: Translation.tr("Volume, brightness and mic changes flash on the pill. Off shows iNiR's regular on-screen display instead.")
-                        }
-                    }
-                }
-
-                SettingsSwitch {
-                    buttonIcon: "unfold_less"
-                    text: Translation.tr("Compact notifications and OSD")
-                    enabled: (Config.options?.bar?.pill?.toasts ?? true)
-                        || (Config.options?.bar?.pill?.osd ?? true)
-                    checked: Config.options?.bar?.pill?.compactAnnounces ?? false
-                    onCheckedChanged: Config.setNestedValue("bar.pill.compactAnnounces", checked)
-                    StyledToolTip {
-                        text: Translation.tr("Keep transient notifications and OSD feedback inside the resting pill instead of expanding into a larger card.")
-                    }
-                }
-
-                ConfigRow {
-                    uniform: true
-                    ConfigSpinBox {
-                        icon: "pinch"
-                        text: Translation.tr("Icon size (px)")
-                        value: Config.options?.bar?.pill?.iconSize ?? 17
-                        from: 14
-                        to: 26
-                        stepSize: 1
-                        onValueChanged: Config.setNestedValue("bar.pill.iconSize", value)
-                        StyledToolTip {
-                            text: Translation.tr("Size of the hover-row icons. Click targets grow with them.")
-                        }
-                    }
-                    ConfigSpinBox {
-                        icon: "space_bar"
-                        text: Translation.tr("Icon spacing (px)")
-                        value: Config.options?.bar?.pill?.iconSpacing ?? 12
-                        from: 6
-                        to: 24
-                        stepSize: 2
-                        onValueChanged: Config.setNestedValue("bar.pill.iconSpacing", value)
-                    }
-                }
-
-                ConfigSpinBox {
-                    icon: "format_letter_spacing"
-                    text: Translation.tr("Group spacing (px)")
-                    value: Config.options?.bar?.pill?.rowSpacing ?? 20
-                    from: 10
-                    to: 36
-                    stepSize: 2
-                    onValueChanged: Config.setNestedValue("bar.pill.rowSpacing", value)
-                    StyledToolTip {
-                        text: Translation.tr("Air between the row's groups: workspaces, clock and the status icons.")
-                    }
-                }
-
-                ConfigRow {
-                    uniform: true
-                    ConfigSpinBox {
-                        icon: "zoom_in"
-                        text: Translation.tr("Scale (%)")
-                        value: Math.round((Config.options?.bar?.pill?.scale ?? 1) * 100)
-                        from: 60
-                        to: 160
-                        stepSize: 5
-                        onValueChanged: Config.setNestedValue("bar.pill.scale", value / 100)
-                        StyledToolTip {
-                            text: Translation.tr("Size multiplier for the whole pill and its surfaces.")
-                        }
-                    }
-                    ConfigSpinBox {
-                        icon: "opacity"
-                        text: Translation.tr("Body opacity (%)")
-                        value: Math.round((Config.options?.bar?.pill?.opacity ?? 1) * 100)
-                        from: 20
-                        to: 100
-                        stepSize: 5
-                        onValueChanged: Config.setNestedValue("bar.pill.opacity", value / 100)
-                        StyledToolTip {
-                            text: Translation.tr("Fill opacity of the pill body. Content stays fully opaque.")
-                        }
-                    }
-                }
-
-                ConfigRow {
-                    uniform: true
-                    ConfigSpinBox {
-                        icon: "vertical_align_top"
-                        text: Translation.tr("Top gap (px)")
-                        value: Math.round((Config.options?.bar?.pill?.topGap ?? 1) * 8)
-                        from: 0
-                        to: 32
-                        stepSize: 2
-                        onValueChanged: Config.setNestedValue("bar.pill.topGap", value / 8)
-                        StyledToolTip {
-                            text: Translation.tr("Air between the screen edge and the pill.")
-                        }
-                    }
-                    ConfigSpinBox {
-                        icon: "expand"
-                        text: Translation.tr("Window gap (%)")
-                        value: Math.round((Config.options?.bar?.pill?.appGap ?? 1) * 100)
-                        from: 0
-                        to: 200
-                        stepSize: 10
-                        onValueChanged: Config.setNestedValue("bar.pill.appGap", value / 100)
-                        StyledToolTip {
-                            text: Translation.tr("How much reserved space the pill keeps between itself and tiled windows.")
-                        }
-                    }
-                }
-
-                ConfigRow {
-                    uniform: true
-                    SettingsSwitch {
-                        buttonIcon: "translate"
-                        text: Translation.tr("Kanji glyphs")
-                        checked: Config.options?.bar?.pill?.showGlyphs ?? true
-                        onCheckedChanged: Config.setNestedValue("bar.pill.showGlyphs", checked)
-                        StyledToolTip {
-                            text: Translation.tr("Label the pill faces with kanji instead of plain icons.")
-                        }
-                    }
-                    Item { Layout.fillWidth: true }
-                }
-
-                ConfigRow {
-                    uniform: true
-                    SettingsSwitch {
-                        buttonIcon: "schedule"
-                        text: Translation.tr("Clock seconds")
-                        checked: Config.options?.bar?.pill?.clockSeconds ?? false
-                        onCheckedChanged: Config.setNestedValue("bar.pill.clockSeconds", checked)
-                    }
-                    SettingsSwitch {
-                        buttonIcon: "update"
-                        text: Translation.tr("12-hour time")
-                        checked: Config.options?.bar?.pill?.time12h ?? false
-                        onCheckedChanged: Config.setNestedValue("bar.pill.time12h", checked)
-                    }
-                }
-
-                ConfigRow {
-                    uniform: true
-                    SettingsSwitch {
-                        buttonIcon: "monitor_heart"
-                        text: Translation.tr("System monitor")
-                        checked: Config.options?.bar?.pill?.surfaces?.sysmon ?? true
-                        onCheckedChanged: Config.setNestedValue("bar.pill.surfaces.sysmon", checked)
-                        StyledToolTip {
-                            text: Translation.tr("Show the system vitals surface and its hover icon.")
-                        }
-                    }
-                    SettingsSwitch {
-                        buttonIcon: "content_paste"
-                        text: Translation.tr("Clipboard")
-                        checked: Config.options?.bar?.pill?.surfaces?.clipboard ?? true
-                        onCheckedChanged: Config.setNestedValue("bar.pill.surfaces.clipboard", checked)
-                        StyledToolTip {
-                            text: Translation.tr("Show the clipboard history surface and its hover icon.")
-                        }
-                    }
-                }
-
-                ConfigRow {
-                    uniform: true
-                    SettingsSwitch {
-                        buttonIcon: "today"
-                        text: Translation.tr("Today glance")
-                        checked: Config.options?.bar?.pill?.surfaces?.glance ?? true
-                        onCheckedChanged: Config.setNestedValue("bar.pill.surfaces.glance", checked)
-                        StyledToolTip {
-                            text: Translation.tr("Show the day-at-a-glance surface: weather, agenda and pending tasks in one look.")
-                        }
-                    }
-                    SettingsSwitch {
-                        buttonIcon: "apps"
-                        text: Translation.tr("App launcher")
-                        checked: Config.options?.bar?.pill?.surfaces?.launcher ?? true
-                        onCheckedChanged: Config.setNestedValue("bar.pill.surfaces.launcher", checked)
-                        StyledToolTip {
-                            text: Translation.tr("Show the fuzzy app launcher surface with inline calculator.")
-                        }
-                    }
-                }
-
-                ConfigRow {
-                    uniform: true
-                    SettingsSwitch {
-                        buttonIcon: "screen_record"
-                        text: Translation.tr("Screen recorder")
-                        checked: Config.options?.bar?.pill?.surfaces?.recorder ?? false
-                        onCheckedChanged: Config.setNestedValue("bar.pill.surfaces.recorder", checked)
-                        StyledToolTip {
-                            text: Translation.tr("Show the screen recorder icon. The surface stays reachable via 'inir pill open recorder' either way.")
-                        }
-                    }
-                }
-            }
-
-            ContentSubsection {
-                id: pillHoverRowSection
-                visible: (Config.options?.bar?.appearanceStyle ?? "classic") === "pill"
-                title: Translation.tr("Pill hover row")
-
-                readonly property var moduleDescriptors: [
-                    { key: "workspaces", icon: "workspaces", label: Translation.tr("Workspaces"), tip: Translation.tr("Workspace dots on the left of the expanded row.") },
-                    { key: "weather", icon: "partly_cloudy_day", label: Translation.tr("Weather"), tip: Translation.tr("Current condition and temperature. Opens the calendar surface.") },
-                    { key: "tray", icon: "shelf_position", label: Translation.tr("System tray"), tip: Translation.tr("Tray icons of running apps.") },
-                    { key: "wifi", icon: "wifi", label: Translation.tr("Wi-Fi"), tip: Translation.tr("Signal glyph. Opens the link surface on the network list.") },
-                    { key: "battery", icon: "battery_5_bar", label: Translation.tr("Battery"), tip: Translation.tr("Charge percentage. Opens the battery surface.") },
-                    { key: "inbox", icon: "inbox", label: Translation.tr("Inbox"), tip: Translation.tr("Notification inbox with unread dot. Opens the link surface.") },
-                    { key: "mixer", icon: "tune", label: Translation.tr("Mixer"), tip: Translation.tr("Opens the volume/brightness fader surface.") },
-                    { key: "sidebars", icon: "view_sidebar", label: Translation.tr("Sidebar shortcuts"), tip: Translation.tr("The two icons that open iNiR's left and right sidebars.") },
-                    { key: "power", icon: "power_settings_new", label: Translation.tr("Power"), tip: Translation.tr("Opens the session surface. Still reachable via 'inir pill open power'.") }
-                ]
-
-                Repeater {
-                    model: pillHoverRowSection.moduleDescriptors
-
-                    SettingsSwitch {
-                        required property var modelData
-                        buttonIcon: modelData.icon
-                        text: modelData.label
-                        checked: Config.options?.bar?.pill?.modules?.[modelData.key] ?? true
-                        onCheckedChanged: Config.setNestedValue("bar.pill.modules." + modelData.key, checked)
-                        StyledToolTip {
-                            text: modelData.tip
-                        }
-                    }
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: Translation.tr("Surface icons (launcher, clipboard, glance, …) follow their surface toggles above.")
-                    color: Appearance.colors.colSubtext
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    wrapMode: Text.WordWrap
-                }
-            }
-
-            ContentSubsection {
-                visible: (Config.options?.bar?.appearanceStyle ?? "classic") === "pill"
-                title: Translation.tr("Soul bead")
-
-                SettingsSwitch {
-                    buttonIcon: "motion_photos_on"
-                    text: Translation.tr("Show the soul bead")
-                    checked: Config.options?.bar?.pill?.soul?.enable ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.pill.soul.enable", checked)
-                    StyledToolTip {
-                        text: Translation.tr("The little companion that glides between hover targets. Surface cursors stay either way.")
-                    }
-                }
-
-                ConfigSelectionArray {
-                    Layout.fillWidth: true
-                    currentValue: Config.options?.bar?.pill?.soul?.style ?? "orb"
-                    onSelected: (newValue) => {
-                        Config.setNestedValue("bar.pill.soul.style", newValue)
-                    }
-                    options: [
-                        { displayName: Translation.tr("Orb"), icon: "blur_circular", value: "orb" },
-                        { displayName: Translation.tr("Ember"), icon: "circle", value: "ember" },
-                        { displayName: Translation.tr("Ring"), icon: "radio_button_unchecked", value: "ring" }
-                    ]
-                }
-
-                ConfigSpinBox {
-                    icon: "zoom_in"
-                    text: Translation.tr("Bead size (%)")
-                    value: Math.round((Config.options?.bar?.pill?.soul?.size ?? 1) * 100)
-                    from: 60
-                    to: 160
-                    stepSize: 10
-                    onValueChanged: Config.setNestedValue("bar.pill.soul.size", value / 100)
                 }
             }
 
@@ -1357,12 +1322,25 @@ ContentPage {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: Translation.tr("Island corner radius, opacity, shadow and top sheen are shared with every island surface: Settings › Ricelin › Island skin.")
+                    text: Translation.tr("Island body opacity, glass, blur, radius, shadow and top edge are shared with every Ricelin surface: Settings › Ricelin › Island surfaces.")
                     color: Appearance.colors.colSubtext
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     wrapMode: Text.WordWrap
                 }
             }
+        }
+            }
+        }
+    }
+
+    SettingsCardSection {
+        settingsTaskSection: "appearance"
+        visible: root.isIiActive && root.activeSection === "appearance"
+        expanded: true
+        icon: "straighten"
+        title: Translation.tr("Sizing & surface")
+
+        SettingsGroup {
 
             // Corner style conflict notes
             SettingsNote {
@@ -1394,6 +1372,7 @@ ContentPage {
             }
 
             ConfigSpinBox {
+                visible: root.barAppearance !== "islands"
                 icon: "rounded_corner"
                 text: Translation.tr("Custom bar rounding (px)")
                 value: Config.options?.bar?.customRounding ?? -1
@@ -1447,8 +1426,19 @@ ContentPage {
                 text: Translation.tr("Opacity has no effect while ‘Show background’ is off.")
             }
 
-            SettingsDivider {}
+        }
+    }
 
+    LazySection {
+        requested: root.isIiActive && root.activeSection === "spectrum"
+        sourceComponent: Component {
+            SettingsCardSection {
+                settingsTaskSection: "spectrum"
+                expanded: false
+        icon: "graphic_eq"
+        title: Translation.tr("Audio spectrum")
+
+        SettingsGroup {
             ContentSubsection {
                 title: Translation.tr("Audio spectrum")
 
@@ -1484,6 +1474,7 @@ ContentPage {
                     options: [
                         { displayName: Translation.tr("Bars"), icon: "equalizer", value: "bars" },
                         { displayName: Translation.tr("Wave"), icon: "waves", value: "wave" },
+                        { displayName: Translation.tr("Organic"), icon: "bubble_chart", value: "organic" },
                     ]
                 }
 
@@ -1772,8 +1763,21 @@ ContentPage {
                     text: Translation.tr("The spectrum needs a visible bar surface, so it is hidden while the background is off.")
                 }
             }
+        }
+            }
+        }
+    }
 
-            SettingsDivider {}
+    LazySection {
+        requested: root.isIiActive && root.activeSection === "behavior"
+        sourceComponent: Component {
+            SettingsCardSection {
+                settingsTaskSection: "behavior"
+                expanded: true
+        icon: "visibility"
+        title: Translation.tr("Behavior & clock")
+
+        SettingsGroup {
 
             ConfigRow {
                 uniform: true
@@ -2134,194 +2138,86 @@ ContentPage {
                 text: Translation.tr("Vignette will hide along with the bar when auto-hide is active.")
             }
         }
+            }
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // MODULES (what to show)
+    // MODULE BEHAVIOR (settings not represented by the layout editor)
     // ═══════════════════════════════════════════════════════════════════
-    SettingsCardSection {
-        visible: root.isIiActive
-        expanded: false
-        icon: "widgets"
-        title: Translation.tr("Modules")
+    LazySection {
+        requested: root.isIiActive && root.activeSection === "modules"
+        sourceComponent: Component {
+            SettingsCardSection {
+                settingsTaskSection: "modules"
+                expanded: true
+                icon: "tune"
+                title: Translation.tr("Modules")
 
-        SettingsGroup {
-            StyledText {
-                Layout.fillWidth: true
-                text: Translation.tr("Toggle which widgets appear in the bar")
-                color: Appearance.colors.colSubtext
-                font.pixelSize: Appearance.font.pixelSize.smaller
-            }
-
-            ConfigRow {
-                uniform: true
-                SettingsSwitch {
-                    buttonIcon: "side_navigation"
-                    text: Translation.tr("Left sidebar button")
-                    checked: Config.options?.bar?.modules?.leftSidebarButton ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.leftSidebarButton", checked)
-                }
-                SettingsSwitch {
-                    buttonIcon: "call_to_action"
-                    text: Translation.tr("Right sidebar button")
-                    checked: Config.options?.bar?.modules?.rightSidebarButton ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.rightSidebarButton", checked)
-                }
-            }
-
-            // Left sidebar button icon. "distro" auto-detects from /etc/os-release;
-            // anything else looks up <name>-symbolic in the icon theme.
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 4
-                visible: Config.options?.bar?.modules?.leftSidebarButton ?? true
-                StyledText {
-                    Layout.fillWidth: true
-                    text: Translation.tr("Left sidebar icon")
-                    color: Appearance.colors.colSubtext
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                }
-                MaterialTextField {
-                    id: topLeftIconField
-                    Layout.fillWidth: true
-                    placeholderText: "distro"
-                    text: Config.options?.bar?.topLeftIcon ?? "distro"
-                    // Persisting per keystroke resolves every prefix as an icon name.
-                    onTextChanged: topLeftIconCommit.restart()
-                    onEditingFinished: {
-                        topLeftIconCommit.stop();
-                        Config.setNestedValue("bar.topLeftIcon", topLeftIconField.text);
+                SettingsGroup {
+                    SettingsSwitch {
+                        visible: root.taskbarModeSupported
+                        buttonIcon: "dock_to_bottom"
+                        text: Translation.tr("Taskbar (apps in bar)")
+                        checked: Config.options?.bar?.modules?.taskbar ?? false
+                        onCheckedChanged: Config.setNestedValue("bar.modules.taskbar", checked)
                     }
 
-                    Timer {
-                        id: topLeftIconCommit
-                        interval: 600
-                        repeat: false
-                        onTriggered: Config.setNestedValue("bar.topLeftIcon", topLeftIconField.text)
+                    SettingsNote {
+                        visible: root.taskbarModeSupported && (Config.options?.bar?.modules?.taskbar ?? false)
+                        icon: "info"
+                        text: Translation.tr("Taskbar replaces the active window title. Pinned apps and running windows appear in the bar, like a traditional taskbar. Uses the same pinned apps as the dock.")
+                    }
+
+                    SettingsSwitch {
+                        visible: (Config.options?.bar?.modules?.activeWindow ?? true)
+                            && (!root.taskbarModeSupported || !(Config.options?.bar?.modules?.taskbar ?? false))
+                        buttonIcon: "subtitles"
+                        text: Translation.tr("Show window title under app name")
+                        checked: Config.options?.bar?.activeWindow?.showTitle ?? true
+                        onCheckedChanged: Config.setNestedValue("bar.activeWindow.showTitle", checked)
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        visible: Config.options?.bar?.modules?.leftSidebarButton ?? true
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Left sidebar icon")
+                            color: Appearance.colors.colSubtext
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                        }
+
+                        MaterialTextField {
+                            id: topLeftIconField
+                            Layout.fillWidth: true
+                            placeholderText: "distro"
+                            text: Config.options?.bar?.topLeftIcon ?? "distro"
+                            onTextChanged: topLeftIconCommit.restart()
+                            onEditingFinished: {
+                                topLeftIconCommit.stop()
+                                Config.setNestedValue("bar.topLeftIcon", topLeftIconField.text)
+                            }
+
+                            Timer {
+                                id: topLeftIconCommit
+                                interval: 600
+                                repeat: false
+                                onTriggered: Config.setNestedValue("bar.topLeftIcon", topLeftIconField.text)
+                            }
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("‘distro’ auto-detects your distribution. Otherwise enter any icon name (looked up as <name>-symbolic).")
+                            color: Appearance.colors.colSubtext
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            wrapMode: Text.WordWrap
+                        }
                     }
                 }
-                StyledText {
-                    Layout.fillWidth: true
-                    text: Translation.tr("‘distro’ auto-detects your distribution. Otherwise enter any icon name (looked up as <name>-symbolic).")
-                    color: Appearance.colors.colSubtext
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    wrapMode: Text.WordWrap
-                }
-            }
-
-            ConfigRow {
-                uniform: true
-                SettingsSwitch {
-                    buttonIcon: "window"
-                    text: Translation.tr("Active window title")
-                    checked: Config.options?.bar?.modules?.activeWindow ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.activeWindow", checked)
-                    enabled: !(Config.options?.bar?.modules?.taskbar ?? false)
-                    opacity: enabled ? 1 : 0.5
-                }
-                SettingsSwitch {
-                    buttonIcon: "dock_to_bottom"
-                    text: Translation.tr("Taskbar (apps in bar)")
-                    checked: Config.options?.bar?.modules?.taskbar ?? false
-                    onCheckedChanged: Config.setNestedValue("bar.modules.taskbar", checked)
-                }
-            }
-
-            SettingsNote {
-                visible: (Config.options?.bar?.modules?.taskbar ?? false)
-                icon: "info"
-                text: Translation.tr("Taskbar replaces the active window title. Pinned apps and running windows appear in the bar, like a traditional taskbar. Uses the same pinned apps as the dock.")
-            }
-
-            // Sub-toggle for the active window indicator: hide the second line (window title)
-            // and only show the app name. Hidden when activeWindow is off or taskbar is on.
-            SettingsSwitch {
-                visible: (Config.options?.bar?.modules?.activeWindow ?? true) && !(Config.options?.bar?.modules?.taskbar ?? false)
-                buttonIcon: "subtitles"
-                text: Translation.tr("Show window title under app name")
-                checked: Config.options?.bar?.activeWindow?.showTitle ?? true
-                onCheckedChanged: Config.setNestedValue("bar.activeWindow.showTitle", checked)
-            }
-
-            ConfigRow {
-                uniform: true
-                SettingsSwitch {
-                    buttonIcon: "shelf_auto_hide"
-                    text: Translation.tr("System tray")
-                    checked: Config.options?.bar?.modules?.sysTray ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.sysTray", checked)
-                }
-                Item { Layout.fillWidth: true }
-            }
-
-            ConfigRow {
-                uniform: true
-                SettingsSwitch {
-                    buttonIcon: "memory"
-                    text: Translation.tr("Resources")
-                    checked: Config.options?.bar?.modules?.resources ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.resources", checked)
-                }
-                SettingsSwitch {
-                    buttonIcon: "music_note"
-                    text: Translation.tr("Media")
-                    checked: Config.options?.bar?.modules?.media ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.media", checked)
-                }
-            }
-
-            ConfigRow {
-                uniform: true
-                SettingsSwitch {
-                    buttonIcon: "workspaces"
-                    text: Translation.tr("Workspaces")
-                    checked: Config.options?.bar?.modules?.workspaces ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.workspaces", checked)
-                }
-                SettingsSwitch {
-                    buttonIcon: "schedule"
-                    text: Translation.tr("Clock")
-                    checked: Config.options?.bar?.modules?.clock ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.clock", checked)
-                }
-            }
-
-            ConfigRow {
-                uniform: true
-                SettingsSwitch {
-                    buttonIcon: "build"
-                    text: Translation.tr("Utility buttons")
-                    checked: Config.options?.bar?.modules?.utilButtons ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.utilButtons", checked)
-                }
-                SettingsSwitch {
-                    buttonIcon: "battery_full"
-                    text: Translation.tr("Battery")
-                    checked: Config.options?.bar?.modules?.battery ?? true
-                    onCheckedChanged: Config.setNestedValue("bar.modules.battery", checked)
-                }
-            }
-
-            ConfigRow {
-                uniform: true
-                SettingsSwitch {
-                    buttonIcon: "cloud"
-                    text: Translation.tr("Weather")
-                    checked: Config.options?.bar?.modules?.weather ?? false
-                    onCheckedChanged: Config.setNestedValue("bar.modules.weather", checked)
-                    enabled: Config.options?.bar?.weather?.enable ?? false
-                    opacity: enabled ? 1 : 0.5
-                }
-                Item { Layout.fillWidth: true }
-            }
-
-            SettingsDivider {}
-
-            StyledText {
-                Layout.fillWidth: true
-                text: Translation.tr("Weather configuration is in Services → Weather")
-                color: Appearance.colors.colSubtext
-                font.pixelSize: Appearance.font.pixelSize.smaller
             }
         }
     }
@@ -2329,14 +2225,27 @@ ContentPage {
     // ═══════════════════════════════════════════════════════════════════
     // MODULE LAYOUT (reorder / relocate)
     // ═══════════════════════════════════════════════════════════════════
-    SettingsCardSection {
-        visible: root.isIiActive
-        expanded: false
+    LazySection {
+        requested: root.isIiActive && root.activeSection === "modules"
+        sourceComponent: Component {
+            SettingsCardSection {
+                settingsTaskSection: "modules"
+                expanded: true
         icon: "reorder"
         title: Translation.tr("Bar module layout")
 
         SettingsGroup {
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: !root.stockHorizontalLayoutActive
+                materialIcon: "info"
+                text: (Config.options?.bar?.vertical ?? false)
+                    ? Translation.tr("The vertical bar has its own fixed adaptive composition. Switch to a horizontal bar to reorder these modules.")
+                    : Translation.tr("This editor belongs to the horizontal Stock, Islands, Scenic and Frame bars. M3 and Pill use their own layout systems.")
+            }
+
             ConfigSpinBox {
+                visible: root.stockHorizontalLayoutActive
                 icon: "space_bar"
                 text: Translation.tr("Flexible spacer width")
                 value: Config.options?.bar?.layout?.spacerWidth ?? 0
@@ -2350,6 +2259,7 @@ ContentPage {
             }
 
             ConfigSelectionArray {
+                visible: root.stockHorizontalLayoutActive
                 currentValue: Config.options?.bar?.layout?.spacerMode ?? "auto"
                 onSelected: (newValue) => Config.setNestedValue("bar.layout.spacerMode", newValue)
                 options: [
@@ -2357,18 +2267,28 @@ ContentPage {
                     { displayName: Translation.tr("Always elastic"), icon: "width_full", value: "fill" },
                     { displayName: Translation.tr("Fixed width"), icon: "width_normal", value: "fixed" }
                 ]
+                StyledToolTip {
+                    text: Translation.tr("Elastic modes use available space in the left or right edge zones. Center zones stay content-sized, so spacers there use their configured width instead of stretching the bar.")
+                }
             }
 
-            BarModuleOrderEditor {}
+            BarModuleOrderEditor {
+                visible: root.stockHorizontalLayoutActive
+            }
+        }
+            }
         }
     }
 
     // ═══════════════════════════════════════════════════════════════════
     // RESOURCES
     // ═══════════════════════════════════════════════════════════════════
-    SettingsCardSection {
-        visible: root.isIiActive && !(Config.options?.settingsUi?.easyMode ?? false)
-        expanded: false
+    LazySection {
+        requested: root.isIiActive && !(Config.options?.settingsUi?.easyMode ?? false) && root.activeSection === "modules"
+        sourceComponent: Component {
+            SettingsCardSection {
+                settingsTaskSection: "modules"
+                expanded: false
         icon: "browse_activity"
         title: Translation.tr("Resources")
 
@@ -2520,14 +2440,19 @@ ContentPage {
                 }
             }
         }
+            }
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════
     // MEDIA
     // ═══════════════════════════════════════════════════════════════════
-    SettingsCardSection {
-        visible: root.isIiActive
-        expanded: false
+    LazySection {
+        requested: root.isIiActive && root.activeSection === "modules"
+        sourceComponent: Component {
+            SettingsCardSection {
+                settingsTaskSection: "modules"
+                expanded: false
         icon: "music_note"
         title: Translation.tr("Media")
 
@@ -2550,8 +2475,10 @@ ContentPage {
             SettingsNote {
                 icon: "info"
                 text: Config.options?.media?.popupMode === "bar"
-                    ? Translation.tr("Classic style popup anchored to bar widget")
-                    : Translation.tr("Modern overlay at screen bottom")
+                    ? Translation.tr("Open the media player from the active bar surface. Stock, Islands, M3, vertical and Pill layouts keep the player attached to where you clicked.")
+                    : Translation.tr("Open the shared media player as the screen-bottom overlay from every bar layout.")
+            }
+        }
             }
         }
     }
@@ -2559,9 +2486,12 @@ ContentPage {
     // ═══════════════════════════════════════════════════════════════════
     // WORKSPACES
     // ═══════════════════════════════════════════════════════════════════
-    SettingsCardSection {
-        visible: root.isIiActive && !(Config.options?.settingsUi?.easyMode ?? false)
-        expanded: false
+    LazySection {
+        requested: root.isIiActive && !(Config.options?.settingsUi?.easyMode ?? false) && root.activeSection === "modules"
+        sourceComponent: Component {
+            SettingsCardSection {
+                settingsTaskSection: "modules"
+                expanded: false
         icon: "workspaces"
         title: Translation.tr("Workspaces")
 
@@ -2787,14 +2717,19 @@ ContentPage {
                 text: Translation.tr("Enable 'Always show numbers' to use number styles")
             }
         }
+            }
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════
     // SYSTEM TRAY
     // ═══════════════════════════════════════════════════════════════════
-    SettingsCardSection {
-        visible: root.isIiActive
-        expanded: false
+    LazySection {
+        requested: root.isIiActive && root.activeSection === "modules"
+        sourceComponent: Component {
+            SettingsCardSection {
+                settingsTaskSection: "modules"
+                expanded: false
         icon: "shelf_auto_hide"
         title: Translation.tr("System Tray")
 
@@ -2836,14 +2771,19 @@ ContentPage {
                 text: Translation.tr("System tray is disabled in Modules section above")
             }
         }
+            }
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════
     // UTILITY BUTTONS
     // ═══════════════════════════════════════════════════════════════════
-    SettingsCardSection {
-        visible: root.isIiActive
-        expanded: false
+    LazySection {
+        requested: root.isIiActive && root.activeSection === "modules"
+        sourceComponent: Component {
+            SettingsCardSection {
+                settingsTaskSection: "modules"
+                expanded: false
         icon: "build"
         title: Translation.tr("Utility Buttons")
 
@@ -2975,14 +2915,19 @@ ContentPage {
                 }
             }
         }
+            }
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════
     // NOTIFICATIONS
     // ═══════════════════════════════════════════════════════════════════
-    SettingsCardSection {
-        visible: root.isIiActive
-        expanded: false
+    LazySection {
+        requested: root.isIiActive && root.activeSection === "modules"
+        sourceComponent: Component {
+            SettingsCardSection {
+                settingsTaskSection: "modules"
+                expanded: false
         icon: "notifications"
         title: Translation.tr("Notifications")
 
@@ -2995,6 +2940,8 @@ ContentPage {
                 StyledToolTip {
                     text: Translation.tr("Show number instead of just a dot")
                 }
+            }
+        }
             }
         }
     }

@@ -46,6 +46,7 @@ WSettingsPage {
             "appearance.cava.framerate": 60,
             "appearance.cava.stereo": true,
             "appearance.cava.waveOpacity": 30,
+            "appearance.cava.blockedApps": [],
         })
         cavaConfigDebounce.restart()
     }
@@ -779,7 +780,26 @@ WSettingsPage {
             icon: "music-note-2"
             description: Translation.tr("Generate and apply Spicetify theme from wallpaper colors")
             checked: Config.options?.appearance?.wallpaperTheming?.enableSpicetify ?? false
-            onCheckedChanged: Config.setNestedValue("appearance.wallpaperTheming.enableSpicetify", checked)
+            onCheckedChanged: {
+                Config.setNestedValue("appearance.wallpaperTheming.enableSpicetify", checked)
+                Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--noswitch"])
+            }
+        }
+
+        WSettingsDropdown {
+            visible: Config.options?.appearance?.wallpaperTheming?.enableSpicetify ?? false
+            label: Translation.tr("Spotify theme")
+            icon: "terminal"
+            description: Translation.tr("Choose the Spicetify layout while keeping iNiR wallpaper colors")
+            currentValue: Config.options?.appearance?.wallpaperTheming?.spicetifyTheme ?? "Inir"
+            options: [
+                { value: "Inir", displayName: Translation.tr("Sleek") },
+                { value: "InirTUI", displayName: Translation.tr("Text (TUI)") }
+            ]
+            onSelected: newValue => {
+                Config.setNestedValue("appearance.wallpaperTheming.spicetifyTheme", newValue)
+                Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--noswitch"])
+            }
         }
 
         WSettingsSwitch {
@@ -833,7 +853,7 @@ WSettingsPage {
         WSettingsSwitch {
             label: Translation.tr("Neovim / LazyVim")
             icon: "terminal"
-            description: Translation.tr("Generate aether.nvim theme plugin for Neovim/LazyVim from wallpaper colors (writes to ~/.config/nvim/lua/plugins/neovim.lua)")
+            description: Translation.tr("Generate inir.nvim theme plugin for Neovim/LazyVim from wallpaper colors (writes to ~/.config/nvim/lua/plugins/neovim.lua)")
             checked: Config.options?.appearance?.wallpaperTheming?.enableNeovim ?? false
             onCheckedChanged: Config.setNestedValue("appearance.wallpaperTheming.enableNeovim", checked)
         }
@@ -964,6 +984,25 @@ WSettingsPage {
             value: Config.options?.appearance?.cava?.waveOpacity ?? 30
             onValueChanged: root.setCavaValue(
                 "appearance.cava.waveOpacity", value, false)
+        }
+
+        WSettingsTextField {
+            label: Translation.tr("Blocked visualizer apps")
+            icon: "music-note-2"
+            description: Translation.tr("Comma-separated playback apps to exclude from visualizers. Empty keeps automatic active-player selection.")
+            placeholderText: Translation.tr("Spotify, ncspot, ytmusic")
+            text: (Config.options?.appearance?.cava?.blockedApps ?? []).join(", ")
+            onEditingFinished: newText => {
+                const seen = ({})
+                const apps = newText.split(",").map(value => value.trim()).filter(value => {
+                    const key = value.toLowerCase()
+                    if (key.length === 0 || seen[key]) return false
+                    seen[key] = true
+                    return true
+                })
+                Config.setNestedValue("appearance.cava.blockedApps", apps)
+                Config.flushWrites()
+            }
         }
 
         WSettingsButton {
